@@ -1569,6 +1569,41 @@ function initApp() {
     if (sidebarCloseBtn) sidebarCloseBtn.addEventListener("click", closeMobileSidebar);
     if (sidebarOverlay) sidebarOverlay.addEventListener("click", closeMobileSidebar);
 
+    // Sidebar Collapse / Expand Toggle
+    const appContainer = document.querySelector(".app-container");
+    const btnToggleSidebarCollapse = document.getElementById("btn-toggle-sidebar-collapse");
+    const btnFloatingOpenSidebar = document.getElementById("btn-floating-open-sidebar");
+
+    function setSidebarCollapsed(collapsed) {
+        if (!appContainer) return;
+        if (collapsed) {
+            appContainer.classList.add("sidebar-collapsed");
+            try { localStorage.setItem("fabrictag_sidebar_collapsed", "1"); } catch(e) {}
+        } else {
+            appContainer.classList.remove("sidebar-collapsed");
+            try { localStorage.setItem("fabrictag_sidebar_collapsed", "0"); } catch(e) {}
+        }
+    }
+
+    if (btnToggleSidebarCollapse) {
+        btnToggleSidebarCollapse.addEventListener("click", () => {
+            setSidebarCollapsed(true);
+        });
+    }
+
+    if (btnFloatingOpenSidebar) {
+        btnFloatingOpenSidebar.addEventListener("click", () => {
+            setSidebarCollapsed(false);
+        });
+    }
+
+    // Restore saved sidebar collapsed state
+    try {
+        if (localStorage.getItem("fabrictag_sidebar_collapsed") === "1") {
+            setSidebarCollapsed(true);
+        }
+    } catch(e) {}
+
     // Tab Switching
     navButtons.forEach(button => {
         button.addEventListener("click", () => {
