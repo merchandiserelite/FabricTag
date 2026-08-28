@@ -1397,18 +1397,19 @@ body {
    ========================================================= */
 .designer-studio-grid {
     display: grid;
-    grid-template-columns: 1.15fr 1fr;
+    grid-template-columns: 1fr 1.2fr;
     gap: 1.5rem;
     align-items: flex-start;
+    position: relative;
 }
 
-@media (max-width: 992px) {
+@media (max-width: 1024px) {
     .designer-studio-grid {
         grid-template-columns: 1fr;
     }
 }
 
-/* Preview Pane */
+/* Preview Pane - Sticky Pinned View */
 .designer-preview-pane {
     background: #f8fafc;
     border: 1px solid var(--border-color);
@@ -1416,6 +1417,10 @@ body {
     padding: 1.25rem;
     display: flex;
     flex-direction: column;
+    position: sticky;
+    top: 1rem;
+    z-index: 30;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
 .preview-header-bar {
@@ -1449,7 +1454,7 @@ body {
     background-image: radial-gradient(#94a3b8 1px, transparent 1px);
     background-size: 12px 12px;
     border-radius: var(--radius-md);
-    padding: 30px 15px;
+    padding: 25px 15px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -1477,11 +1482,32 @@ body {
     text-align: center;
 }
 
-/* Controls Pane */
+/* Controls Pane with Sleek Custom Scrollbar */
 .designer-controls-pane {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.designer-controls-pane::-webkit-scrollbar {
+    width: 6px;
+}
+
+.designer-controls-pane::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+.designer-controls-pane::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.designer-controls-pane::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 
 .control-group-box {
