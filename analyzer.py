@@ -92,7 +92,7 @@ def analyze_swatch_card(image_bytes: bytes, mime_type: str, api_key: str) -> dic
     try:
         client = genai.Client(api_key=api_key)
         
-        models_to_try = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash']
+        models_to_try = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-2.5-flash']
         response = None
         last_error = None
         

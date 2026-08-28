@@ -1115,6 +1115,9 @@ function initApp() {
         if (statusText) {
             statusText.textContent = hasApiKeyConfigured ? dict.api_active : dict.api_offline;
         }
+        if (statusDot) {
+            statusDot.className = hasApiKeyConfigured ? "status-dot green" : "status-dot red";
+        }
 
         loadLogosList();
         renderDesignerPreview();
@@ -2649,188 +2652,80 @@ function initApp() {
         btnSavePrintPrefs.addEventListener("click", saveVisualDesignToAPI);
     }
     
-    btnSaveSettings.addEventListener("click", () => {
-        const key = settingsApiKey.value.trim();
-        if (!key) {
-            alert("Lütfen geçerli bir API anahtarı girin!");
-            return;
-        }
-        
-        fetch("/api/settings", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ api_key: key })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                showToast("API anahtarı kaydedildi!", 1000);
-                settingsApiKey.value = "";
-                loadSettings();
-    loadLicenseStatus();
-    // ==========================================
-    // LİSANS YÖNETİMİ & 20 KAYIT FREE TIER
-    // ==========================================
-    const modalLicenseOverlay = document.getElementById("modal-license-overlay");
-    const btnOpenLicenseModal = document.getElementById("btn-open-license-modal");
-    const btnCloseLicenseModal = document.getElementById("btn-close-license-modal");
-    const btnCancelLicense = document.getElementById("btn-cancel-license");
-    const licenseHwInput = document.getElementById("license-hardware-id-input");
-    const btnCopyHwAction = document.getElementById("btn-copy-hw-action");
-    const btnCopyHardwareId = document.getElementById("btn-copy-hardware-id");
-    const licenseKeyInput = document.getElementById("license-key-input");
-    const btnSubmitLicenseActivate = document.getElementById("btn-submit-license-activate");
-    const licenseActivationAlert = document.getElementById("license-activation-alert");
-    const licenseBadgeStatus = document.getElementById("license-badge-status");
-    const licenseBadgeText = document.getElementById("license-badge-text");
-    const modalLicenseStatusBox = document.getElementById("modal-license-status-box");
-    const modalLicenseStatusTitle = document.getElementById("modal-license-status-title");
-    const modalLicenseStatusBadge = document.getElementById("modal-license-status-badge");
-
-    let currentLicenseStatus = null;
-
-    function openLicenseModal() {
-        if (modalLicenseOverlay) modalLicenseOverlay.classList.add("active");
-        if (licenseKeyInput) licenseKeyInput.value = "";
-        if (licenseActivationAlert) licenseActivationAlert.style.display = "none";
-        loadLicenseStatus();
-    }
-
-    function closeLicenseModal() {
-        if (modalLicenseOverlay) modalLicenseOverlay.classList.remove("active");
-    }
-
-    if (btnOpenLicenseModal) btnOpenLicenseModal.addEventListener("click", openLicenseModal);
-    if (btnCloseLicenseModal) btnCloseLicenseModal.addEventListener("click", closeLicenseModal);
-    if (btnCancelLicense) btnCancelLicense.addEventListener("click", closeLicenseModal);
-
-    function copyHardwareIdToClipboard() {
-        if (licenseHwInput && licenseHwInput.value) {
-            navigator.clipboard.writeText(licenseHwInput.value).then(() => {
-                showToast("Donanim Kimligi kopyalandi!", 1200);
-            }).catch(() => {
-                licenseHwInput.select();
-                document.execCommand("copy");
-                showToast("Donanim Kimligi kopyalandi!", 1200);
-            });
-        }
-    }
-
-    if (btnCopyHwAction) btnCopyHwAction.addEventListener("click", copyHardwareIdToClipboard);
-    if (btnCopyHardwareId) btnCopyHardwareId.addEventListener("click", copyHardwareIdToClipboard);
-
-    function loadLicenseStatus() {
-        fetch("/api/license/status")
-            .then(res => res.json())
-            .then(data => {
-                currentLicenseStatus = data;
-                if (licenseHwInput && data.hardware_id) {
-                    licenseHwInput.value = data.hardware_id;
-                }
-
-                if (data.is_licensed) {
-                    if (licenseBadgeStatus) {
-                        licenseBadgeStatus.className = "sidebar-license-badge licensed";
-                        licenseBadgeStatus.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span id="license-badge-text">' + (data.license_info?.type || "Lisansli Surum") + '</span>';
-                    }
-                    if (modalLicenseStatusTitle) modalLicenseStatusTitle.textContent = "Durum: Lisansli Ticari Surum (" + (data.license_info?.company || "COMMERCIAL") + ")";
-                    if (modalLicenseStatusBadge) {
-                        modalLicenseStatusBadge.className = "badge badge-success";
-                        modalLicenseStatusBadge.style.background = "#dcfce7";
-                        modalLicenseStatusBadge.style.color = "#166534";
-                        modalLicenseStatusBadge.textContent = "Sinirsiz Kullanim";
-                    }
-                } else {
-                    const remaining = data.remaining_free_records !== undefined ? data.remaining_free_records : 20;
-                    const used = data.records_count || 0;
-                    if (licenseBadgeStatus) {
-                        licenseBadgeStatus.className = "sidebar-license-badge free";
-                        licenseBadgeStatus.innerHTML = '<i class="fa-solid fa-gift"></i> <span id="license-badge-text">Ucretsiz: ' + remaining + '/20 Kalan</span>';
-                    }
-                    if (modalLicenseStatusTitle) modalLicenseStatusTitle.textContent = "Durum: Ucretsiz Deneme (" + used + "/20 Kullanildi)";
-                    if (modalLicenseStatusBadge) {
-                        modalLicenseStatusBadge.className = "badge badge-warning";
-                        modalLicenseStatusBadge.style.background = remaining === 0 ? "#fee2e2" : "#fef3c7";
-                        modalLicenseStatusBadge.style.color = remaining === 0 ? "#991b1b" : "#92400e";
-                        modalLicenseStatusBadge.textContent = remaining === 0 ? "Limit Doldu (Kilitli)" : remaining + " Hak Kaldi";
-                    }
-                }
-            })
-            .catch(err => console.error("Error loading license status:", err));
-    }
-
-    if (btnSubmitLicenseActivate) {
-        btnSubmitLicenseActivate.addEventListener("click", () => {
-            const key = licenseKeyInput ? licenseKeyInput.value.trim() : "";
+    if (btnSaveSettings) {
+        btnSaveSettings.addEventListener("click", () => {
+            const key = settingsApiKey ? settingsApiKey.value.trim() : "";
             if (!key) {
-                alert("Lutfen gecerli bir lisans anahtari girin!");
+                alert("Lütfen geçerli bir API anahtarı girin!");
                 return;
             }
-
-            btnSubmitLicenseActivate.disabled = true;
-            btnSubmitLicenseActivate.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Dogrulaniyor...';
-
-            fetch("/api/license/activate", {
+            
+            btnSaveSettings.disabled = true;
+            btnSaveSettings.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Kaydediliyor...';
+            
+            fetch("/api/settings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ license_key: key })
+                body: JSON.stringify({ api_key: key })
             })
             .then(res => res.json())
-            .then(res => {
-                if (res.success) {
-                    if (licenseActivationAlert) {
-                        licenseActivationAlert.style.display = "block";
-                        licenseActivationAlert.style.background = "#dcfce7";
-                        licenseActivationAlert.style.color = "#166534";
-                        licenseActivationAlert.style.border = "1px solid #bbf7d0";
-                        licenseActivationAlert.textContent = res.message;
-                    }
-                    showToast("Tebrikler! FabricTag sinirsiz lisansiniz aktive edildi.", 2000);
-                    loadLicenseStatus();
-                    setTimeout(() => {
-                        closeLicenseModal();
-                    }, 1500);
-                } else {
-                    if (licenseActivationAlert) {
-                        licenseActivationAlert.style.display = "block";
-                        licenseActivationAlert.style.background = "#fee2e2";
-                        licenseActivationAlert.style.color = "#991b1b";
-                        licenseActivationAlert.style.border = "1px solid #fecaca";
-                        licenseActivationAlert.textContent = res.message;
-                    }
+            .then(data => {
+                if (data.success) {
+                    showToast("API anahtarı başarıyla kaydedildi!", 1500);
+                    if (settingsApiKey) settingsApiKey.value = "";
+                    loadSettings();
                 }
             })
             .catch(err => alert("Hata: " + err))
             .finally(() => {
-                btnSubmitLicenseActivate.disabled = false;
-                btnSubmitLicenseActivate.innerHTML = '<i class="fa-solid fa-shield-check"></i> <span data-i18n="btn_activate_now">' + (i18n[currentLang]?.btn_activate_now || "Lisansi Aktive Et") + '</span>';
+                btnSaveSettings.disabled = false;
+                btnSaveSettings.innerHTML = '<span data-i18n="btn_save">' + (i18n[currentLang]?.btn_save || "Kaydet") + '</span>';
             });
         });
     }
 
-    // ==========================================
-    // KULLANICI REHBERI (USER GUIDE) MODALI
-    // ==========================================
-    const modalUserGuideOverlay = document.getElementById("modal-user-guide-overlay");
-    const btnOpenUserGuide = document.getElementById("btn-open-user-guide");
-    const btnCloseUserGuide = document.getElementById("btn-close-user-guide");
-    const btnCloseGuideFooter = document.getElementById("btn-close-guide-footer");
+    // Test API Key Button
+    const btnTestApiKey = document.getElementById("btn-test-api-key");
+    if (btnTestApiKey) {
+        btnTestApiKey.addEventListener("click", () => {
+            const typedKey = settingsApiKey ? settingsApiKey.value.trim() : "";
+            btnTestApiKey.disabled = true;
+            btnTestApiKey.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Test Ediliyor...';
 
-    function openUserGuide() {
-        if (modalUserGuideOverlay) modalUserGuideOverlay.classList.add("active");
-    }
-
-    function closeUserGuide() {
-        if (modalUserGuideOverlay) modalUserGuideOverlay.classList.remove("active");
-    }
-
-    if (btnOpenUserGuide) btnOpenUserGuide.addEventListener("click", openUserGuide);
-    if (btnCloseUserGuide) btnCloseUserGuide.addEventListener("click", closeUserGuide);
-    if (btnCloseGuideFooter) btnCloseGuideFooter.addEventListener("click", closeUserGuide);
-
-            }
+            fetch("/api/test-key", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ api_key: typedKey })
+            })
+            .then(res => res.json())
+            .then(res => {
+                if (res.valid) {
+                    if (apiKeySavedText) {
+                        apiKeySavedText.textContent = res.message;
+                        apiKeySavedText.className = "help-text success";
+                    }
+                    showToast("Google Gemini API Bağlantısı Başarılı!", 2000);
+                    loadSettings();
+                } else {
+                    if (apiKeySavedText) {
+                        apiKeySavedText.textContent = res.message;
+                        apiKeySavedText.className = "help-text error";
+                    }
+                    showToast("Bağlantı Başarısız: " + res.message, 3000);
+                }
+            })
+            .catch(err => {
+                if (apiKeySavedText) {
+                    apiKeySavedText.textContent = "Test hatası: " + err;
+                    apiKeySavedText.className = "help-text error";
+                }
+            })
+            .finally(() => {
+                btnTestApiKey.disabled = false;
+                btnTestApiKey.innerHTML = '<i class="fa-solid fa-bolt"></i> Test Et';
+            });
         });
-    });
+    }
 
     // ==========================================
     // CANLI KAMERA & SERİ ÇEKİM ENTEGRASYONU

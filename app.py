@@ -397,6 +397,28 @@ def update_settings(req: SettingsRequest):
     save_settings(new_settings)
     return {"success": True}
 
+class TestKeyRequest(BaseModel):
+    api_key: Optional[str] = None
+
+@app.post("/api/test-key")
+def test_gemini_key(req: TestKeyRequest):
+    key = req.api_key.strip() if (req.api_key and req.api_key.strip()) else load_settings().get("api_key", "").strip()
+    if not key:
+        return {"valid": False, "message": "API anahtarı bulunamadı. Lütfen anahtarınızı girin."}
+    
+    try:
+        from google import genai
+        client = genai.Client(api_key=key)
+        response = client.models.generate_content(
+            model='gemini-3.6-flash',
+            contents='Hi',
+        )
+        return {"valid": True, "message": "Google Gemini API bağlantısı başarılı ve aktif!"}
+    except Exception as e:
+        err_msg = str(e)
+        logger.error(f"Gemini API key test failed: {err_msg}")
+        return {"valid": False, "message": f"Bağlantı hatası: {err_msg}"}
+
 # Logo Management Endpoints
 @app.get("/api/logos")
 def list_logos():

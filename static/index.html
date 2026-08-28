@@ -136,7 +136,7 @@
 
             <div class="api-status-indicator" id="api-status-bar">
                 <span class="status-dot red" id="status-dot"></span>
-                <span class="status-text" id="status-text" data-i18n="api_offline">Gemini API Bagli Degil</span>
+                <span class="status-text" id="status-text">Gemini API Bagli Degil</span>
             </div>
         </aside>
 
@@ -977,12 +977,20 @@
                     
                     <div class="settings-form">
                         <div class="form-group">
-                            <label for="settings-api-key" data-i18n="lbl_api_key">Gemini API Key (Anahtari)</label>
-                            <div class="input-with-button">
-                                <input type="password" id="settings-api-key" placeholder="AIzaSy...">
-                                <button class="btn btn-primary" id="btn-save-settings" data-i18n="btn_save">Kaydet</button>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <label for="settings-api-key" data-i18n="lbl_api_key" style="margin: 0; font-weight: 700;">Gemini API Key (Anahtari)</label>
+                                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="btn btn-secondary" style="font-size: 0.75rem; padding: 4px 10px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                                    <i class="fa-solid fa-arrow-up-right-from-square"></i> <span data-i18n="guide_step1_btn">Ucretsiz Google API Anahtari Al</span>
+                                </a>
                             </div>
-                            <span class="help-text" id="api-key-saved-text"></span>
+                            <div class="input-with-button" style="display: flex; gap: 8px;">
+                                <input type="text" id="settings-api-key" placeholder="AIzaSy..." class="text-input" style="font-family: monospace; flex-grow: 1;">
+                                <button class="btn btn-primary" id="btn-save-settings" data-i18n="btn_save" style="padding: 10px 18px;">Kaydet</button>
+                                <button type="button" class="btn btn-secondary" id="btn-test-api-key" style="padding: 10px 18px; font-weight: 600;">
+                                    <i class="fa-solid fa-bolt"></i> Test Et
+                                </button>
+                            </div>
+                            <span class="help-text" id="api-key-saved-text" style="display: block; margin-top: 6px;"></span>
                         </div>
                     </div>
                 </div>
