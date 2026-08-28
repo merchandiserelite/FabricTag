@@ -407,10 +407,14 @@
                         <div>
                             <h2><i class="fa-solid fa-palette"></i> <span data-i18n="studio_title">Canli Gorsel Etiket Tasarim Studyosu</span></h2>
                             <p class="settings-desc" data-i18n="studio_desc">Etiket uzerindeki verilerin konumunu, boyutunu, hizalamasini ve logoyu canli taslak uzerinden duzenleyin. <strong>Mavi kesikli cizgiler</strong> etiket sinirini temsil eder.</p>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-secondary" id="btn-reset-default-design" type="button" style="padding: 10px 18px; font-weight: 600; font-size: 0.9rem;" title="Orijinal FabricTag etiket tasarımına geri dön">
+                                <i class="fa-solid fa-rotate-left"></i> <span data-i18n="btn_reset_default">Varsayılana Sıfırla</span>
+                            </button>
+                            <button class="btn btn-success" id="btn-save-visual-design" type="button" style="padding: 10px 22px; font-weight: 700; font-size: 0.95rem;">
+                                <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btn_save_design">Tasarim Ayarlarini Kaydet</span>
+                            </button>
                         </div>
-                        <button class="btn btn-success" id="btn-save-visual-design" style="padding: 10px 22px; font-weight: 700; font-size: 0.95rem;">
-                            <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btn_save_design">Tasarim Ayarlarini Kaydet</span>
-                        </button>
                     </div>
 
                     <div class="designer-studio-grid">
@@ -636,16 +640,16 @@
                                         </div>
                                     </div>
 
-                                    <!-- B. Kalite Bilgisi (Kalite Kodu + Kalite Adı) -->
-                                    <div class="modular-element-card" data-element-id="quality_row">
+                                    <!-- B. Kalite Adı (Quality Name) -->
+                                    <div class="modular-element-card" data-element-id="quality_name">
                                         <div class="modular-card-header">
                                             <div class="modular-card-left">
                                                 <i class="fa-solid fa-grip-vertical modular-handle"></i>
-                                                <span class="modular-card-title"><i class="fa-solid fa-tag"></i> Kalite Bilgisi (Kod + Isim)</span>
+                                                <span class="modular-card-title"><i class="fa-solid fa-tag"></i> Kalite Adi</span>
                                             </div>
                                             <div class="modular-order-actions">
                                                 <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
-                                                    <input type="checkbox" id="des-show-quality-row" checked>
+                                                    <input type="checkbox" id="des-show-quality-name" checked>
                                                     <span class="slider-round"></span>
                                                 </label>
                                                 <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
@@ -656,51 +660,31 @@
                                             <div class="modular-controls-row">
                                                 <div style="display: flex; align-items: center; gap: 4px;">
                                                     <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
-                                                    <input type="text" id="des-prefix-quality" placeholder="Bos / Orn: KALITE:" class="prefix-input-sm">
+                                                    <input type="text" id="des-prefix-quality-name" placeholder="Bos / Orn: KALITE:" class="prefix-input-sm">
                                                 </div>
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <select id="des-align-quality" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                    <select id="des-align-quality-name" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
                                                         <option value="left">Sol</option>
                                                         <option value="center" selected>Orta</option>
                                                         <option value="right">Sag</option>
                                                     </select>
-                                                    <strong id="val-font-quality" style="font-size: 0.75rem; color: #4f46e5;">8.0pt</strong>
+                                                    <strong id="val-font-quality-name" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
                                                 </div>
                                             </div>
-                                            <input type="range" id="des-font-quality" min="5" max="14" step="0.5" value="8.0" class="range-slider">
-
-                                            <!-- Kalite Satırı Zemin Stili -->
-                                            <div class="modular-controls-row" style="margin-top: 6px; border-top: 1px dashed #f1f5f9; padding-top: 6px;">
-                                                <label style="font-size: 0.75rem; color: #475569; font-weight: 600;">Kalite Zemin Formati:</label>
-                                                <select id="des-quality-style" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem; width: 130px;">
-                                                    <option value="plain" selected>Zeminsiz / Sade Metin</option>
-                                                    <option value="filled">Dolu Renkli Zemin</option>
-                                                    <option value="outline">Ince Cerceveli</option>
-                                                </select>
-                                            </div>
-                                            <div class="modular-controls-row" id="row-quality-colors" style="display: none;">
-                                                <div style="display: flex; align-items: center; gap: 4px;">
-                                                    <span style="font-size: 0.72rem; color: #64748b;">Zemin:</span>
-                                                    <input type="color" id="des-quality-bg-color" value="#000000" class="color-input-styled" style="width: 24px; height: 24px;">
-                                                </div>
-                                                <div style="display: flex; align-items: center; gap: 4px;">
-                                                    <span style="font-size: 0.72rem; color: #64748b;">Yazi:</span>
-                                                    <input type="color" id="des-quality-text-color" value="#ffffff" class="color-input-styled" style="width: 24px; height: 24px;">
-                                                </div>
-                                            </div>
+                                            <input type="range" id="des-font-quality-name" min="5" max="14" step="0.5" value="7.5" class="range-slider">
                                         </div>
                                     </div>
 
-                                    <!-- C. Desen / Varyant Kodu (Vurgu Çubuğu) -->
-                                    <div class="modular-element-card" data-element-id="design_bar">
+                                    <!-- C. Kalite & Varyant Kodu (Vurgu Çubuğu) -->
+                                    <div class="modular-element-card" data-element-id="code_bar">
                                         <div class="modular-card-header">
                                             <div class="modular-card-left">
                                                 <i class="fa-solid fa-grip-vertical modular-handle"></i>
-                                                <span class="modular-card-title"><i class="fa-solid fa-barcode"></i> Desen / Varyant Kodu (Vurgu Cubugu)</span>
+                                                <span class="modular-card-title"><i class="fa-solid fa-barcode"></i> Kalite & Varyant Kodu Barı (Siyah Zemin)</span>
                                             </div>
                                             <div class="modular-order-actions">
                                                 <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
-                                                    <input type="checkbox" id="des-show-design-bar" checked>
+                                                    <input type="checkbox" id="des-show-quality-code" checked>
                                                     <span class="slider-round"></span>
                                                 </label>
                                                 <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
@@ -711,38 +695,18 @@
                                             <div class="modular-controls-row">
                                                 <div style="display: flex; align-items: center; gap: 4px;">
                                                     <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
-                                                    <input type="text" id="des-prefix-design" placeholder="Bos / Orn: DESEN:" class="prefix-input-sm">
+                                                    <input type="text" id="des-prefix-quality-code" placeholder="Bos / Orn: ART:" class="prefix-input-sm">
                                                 </div>
                                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                                    <select id="des-align-design" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                    <select id="des-align-quality-code" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
                                                         <option value="left">Sol</option>
                                                         <option value="center" selected>Orta</option>
                                                         <option value="right">Sag</option>
                                                     </select>
-                                                    <strong id="val-font-design" style="font-size: 0.75rem; color: #4f46e5;">8.5pt</strong>
+                                                    <strong id="val-font-header" style="font-size: 0.75rem; color: #4f46e5;">8.5pt</strong>
                                                 </div>
                                             </div>
-                                            <input type="range" id="des-font-design" min="6" max="14" step="0.5" value="8.5" class="range-slider">
-
-                                            <!-- Desen Çubuğu Zemin ve Renkleri -->
-                                            <div class="modular-controls-row" style="margin-top: 6px; border-top: 1px dashed #f1f5f9; padding-top: 6px;">
-                                                <label style="font-size: 0.75rem; color: #475569; font-weight: 600;">Desen Zemin Formati:</label>
-                                                <select id="des-design-style" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem; width: 130px;">
-                                                    <option value="filled" selected>Dolu Renkli Zemin</option>
-                                                    <option value="outline">Ince Cerceveli</option>
-                                                    <option value="plain">Zeminsiz / Sade Metin</option>
-                                                </select>
-                                            </div>
-                                            <div class="modular-controls-row" id="row-design-colors">
-                                                <div style="display: flex; align-items: center; gap: 4px;">
-                                                    <span style="font-size: 0.72rem; color: #64748b;">Zemin:</span>
-                                                    <input type="color" id="des-design-bg-color" value="#000000" class="color-input-styled" style="width: 24px; height: 24px;">
-                                                </div>
-                                                <div style="display: flex; align-items: center; gap: 4px;">
-                                                    <span style="font-size: 0.72rem; color: #64748b;">Yazi:</span>
-                                                    <input type="color" id="des-design-text-color" value="#ffffff" class="color-input-styled" style="width: 24px; height: 24px;">
-                                                </div>
-                                            </div>
+                                            <input type="range" id="des-font-header" min="6" max="14" step="0.5" value="8.5" class="range-slider">
                                         </div>
                                     </div>
 

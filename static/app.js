@@ -122,27 +122,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const valFontCompany = document.getElementById("val-font-company");
     const desAlignCompany = document.getElementById("des-align-company");
 
-    // 2. Kalite Bilgisi (Kod + İsim)
-    const desShowQualityRow = document.getElementById("des-show-quality-row");
-    const desPrefixQuality = document.getElementById("des-prefix-quality");
-    const desAlignQuality = document.getElementById("des-align-quality");
-    const desFontQuality = document.getElementById("des-font-quality");
-    const valFontQuality = document.getElementById("val-font-quality");
-    const desQualityStyle = document.getElementById("des-quality-style");
-    const desQualityBgColor = document.getElementById("des-quality-bg-color");
-    const desQualityTextColor = document.getElementById("des-quality-text-color");
-    const rowQualityColors = document.getElementById("row-quality-colors");
+    // 2. Kalite Adı (Quality Name)
+    const desShowQualityName = document.getElementById("des-show-quality-name");
+    const desFontQualityName = document.getElementById("des-font-quality-name");
+    const valFontQualityName = document.getElementById("val-font-quality-name");
+    const desAlignQualityName = document.getElementById("des-align-quality-name");
+    const desPrefixQualityName = document.getElementById("des-prefix-quality-name");
 
-    // 3. Desen / Varyant Kodu (Vurgu Çubuğu)
-    const desShowDesignBar = document.getElementById("des-show-design-bar");
-    const desPrefixDesign = document.getElementById("des-prefix-design");
-    const desAlignDesign = document.getElementById("des-align-design");
-    const desFontDesign = document.getElementById("des-font-design");
-    const valFontDesign = document.getElementById("val-font-design");
-    const desDesignStyle = document.getElementById("des-design-style");
-    const desDesignBgColor = document.getElementById("des-design-bg-color");
-    const desDesignTextColor = document.getElementById("des-design-text-color");
-    const rowDesignColors = document.getElementById("row-design-colors");
+    // 3. Varyant ve Renk Kodu Barı (Header / Quality Code Bar)
+    const desShowQualityCode = document.getElementById("des-show-quality-code");
+    const desFontHeader = document.getElementById("des-font-header");
+    const valFontHeader = document.getElementById("val-font-header");
+    const desAlignQualityCode = document.getElementById("des-align-quality-code");
+    const desPrefixQualityCode = document.getElementById("des-prefix-quality-code");
 
     // 4. Karışım (Composition)
     const desShowComp = document.getElementById("des-show-comp");
@@ -168,6 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const designerLiveLabel = document.getElementById("designer-live-label");
     const previewDimBadge = document.getElementById("preview-dim-badge");
     const btnSaveVisualDesign = document.getElementById("btn-save-visual-design");
+    const btnResetDefaultDesign = document.getElementById("btn-reset-default-design");
 
     // Internal Code Format Elements
     const codeTypeLetters = document.getElementById("code-type-letters");
@@ -248,6 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
             settings_header_desc: "Etiket tasarimi, logo secimi, yazi tipi (font), ozel boyutlar ve alan hizalamalari.",
             studio_title: "Canli Gorsel Etiket Tasarim Studyosu",
             studio_desc: "Etiket uzerindeki verilerin konumunu, boyutunu, hizalamasini ve logoyu canli taslak uzerinden duzenleyin. Mavi kesikli cizgiler etiket sinirini temsil eder.",
+            btn_reset_default: "Varsayılana Sıfırla",
             btn_save_design: "Tasarim Ayarlarini Kaydet",
             preview_title: "Canli Taslak Onizleme",
             dashed_help_strong: "Kesikli Cizgiler:",
@@ -428,6 +422,7 @@ document.addEventListener("DOMContentLoaded", () => {
             settings_header_desc: "Label layout, logo selection, font family, custom dimensions and alignments.",
             studio_title: "Live Visual Label Designer Studio",
             studio_desc: "Customize layout, font sizes, alignments and logo in real-time. Dashed blue line represents label boundaries.",
+            btn_reset_default: "Reset to Default",
             btn_save_design: "Save Design Settings",
             preview_title: "Live Draft Preview",
             dashed_help_strong: "Dashed Borders:",
@@ -1909,46 +1904,25 @@ document.addEventListener("DOMContentLoaded", () => {
             desLogoHeight.value = cfg.logo_height || 6.0;
             if (valLogoHeight) valLogoHeight.textContent = (cfg.logo_height || 6.0) + "mm";
         }
-        if (desLogoAlign) desLogoAlign.value = cfg.logo_align || "left";
-        if (desShowCompany) desShowCompany.checked = cfg.show_company !== false;
-        if (desFontCompany) {
-            const compSize = cfg.font_size_company !== undefined ? cfg.font_size_company : 8.5;
-            desFontCompany.value = compSize;
-            if (valFontCompany) valFontCompany.textContent = compSize + "pt";
+        // 2. Kalite Adı (Quality Name)
+        if (desShowQualityName) desShowQualityName.checked = cfg.show_quality_name !== false;
+        if (desFontQualityName) {
+            const qSize = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 7.5;
+            desFontQualityName.value = qSize;
+            if (valFontQualityName) valFontQualityName.textContent = qSize + "pt";
         }
-        if (desAlignCompany) desAlignCompany.value = cfg.align_company || "right";
+        if (desAlignQualityName) desAlignQualityName.value = cfg.align_quality_name || "center";
+        if (desPrefixQualityName) desPrefixQualityName.value = cfg.prefix_quality_name || "";
 
-        // 2. Kalite Bilgisi (Kod + İsim)
-        if (desShowQualityRow) desShowQualityRow.checked = cfg.show_quality_row !== false;
-        if (desFontQuality) {
-            const qSize = cfg.font_size_quality !== undefined ? cfg.font_size_quality : (cfg.font_size_quality_name || 8.0);
-            desFontQuality.value = qSize;
-            if (valFontQuality) valFontQuality.textContent = qSize + "pt";
+        // 3. Kalite & Varyant Kodu Barı (Header / Code Bar)
+        if (desShowQualityCode) desShowQualityCode.checked = cfg.show_quality_code !== false;
+        if (desFontHeader) {
+            const hSize = cfg.font_size_header !== undefined ? cfg.font_size_header : 8.5;
+            desFontHeader.value = hSize;
+            if (valFontHeader) valFontHeader.textContent = hSize + "pt";
         }
-        if (desAlignQuality) desAlignQuality.value = cfg.align_quality || "center";
-        if (desPrefixQuality) desPrefixQuality.value = cfg.prefix_quality || "";
-        if (desQualityStyle) {
-            desQualityStyle.value = cfg.quality_style || "plain";
-            if (rowQualityColors) rowQualityColors.style.display = (cfg.quality_style && cfg.quality_style !== "plain") ? "flex" : "none";
-        }
-        if (desQualityBgColor) desQualityBgColor.value = cfg.quality_bg_color || "#000000";
-        if (desQualityTextColor) desQualityTextColor.value = cfg.quality_text_color || "#000000";
-
-        // 3. Desen / Varyant Kodu (Vurgu Çubuğu)
-        if (desShowDesignBar) desShowDesignBar.checked = cfg.show_design_bar !== false;
-        if (desFontDesign) {
-            const dSize = cfg.font_size_design !== undefined ? cfg.font_size_design : (cfg.font_size_header || 8.5);
-            desFontDesign.value = dSize;
-            if (valFontDesign) valFontDesign.textContent = dSize + "pt";
-        }
-        if (desAlignDesign) desAlignDesign.value = cfg.align_design || "center";
-        if (desPrefixDesign) desPrefixDesign.value = cfg.prefix_design || "";
-        if (desDesignStyle) {
-            desDesignStyle.value = cfg.design_style || "filled";
-            if (rowDesignColors) rowDesignColors.style.display = (cfg.design_style === "plain") ? "none" : "flex";
-        }
-        if (desDesignBgColor) desDesignBgColor.value = cfg.design_bg_color || "#000000";
-        if (desDesignTextColor) desDesignTextColor.value = cfg.design_text_color || "#ffffff";
+        if (desAlignQualityCode) desAlignQualityCode.value = cfg.align_quality_code || "center";
+        if (desPrefixQualityCode) desPrefixQualityCode.value = cfg.prefix_quality_code || "";
 
         // 4. Karışım
         if (desShowComp) desShowComp.checked = cfg.show_composition !== false;
@@ -1958,7 +1932,6 @@ document.addEventListener("DOMContentLoaded", () => {
             if (valFontComp) valFontComp.textContent = compTxtSize + "pt";
         }
         if (desAlignComp) desAlignComp.value = cfg.align_composition || "left";
-        if (desPrefixComposition) desPrefixComposition.value = cfg.prefix_composition || "";
 
         // 5. Gramaj
         if (desShowWeight) desShowWeight.checked = cfg.show_weight !== false;
@@ -1968,9 +1941,8 @@ document.addEventListener("DOMContentLoaded", () => {
             if (valFontWeight) valFontWeight.textContent = weightSize + "pt";
         }
         if (desAlignWeight) desAlignWeight.value = cfg.align_weight || "left";
-        if (desPrefixWeight) desPrefixWeight.value = cfg.prefix_weight || "";
 
-        // 6. Barcode
+        // Barcode
         if (desBarcodeVisible) desBarcodeVisible.checked = cfg.barcode_visible !== false;
         if (desBarcodeHeight) {
             desBarcodeHeight.value = cfg.barcode_height || 8.0;
@@ -1980,10 +1952,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // Reorder Modular DOM Cards
         let initialOrder = cfg.element_order;
         if (!initialOrder || !Array.isArray(initialOrder)) {
-            initialOrder = ["logo_row", "quality_row", "design_bar", "composition", "weight", "barcode"];
+            initialOrder = ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"];
         }
-        // Normalize legacy names
-        initialOrder = initialOrder.map(id => id === "quality_name" ? "quality_row" : (id === "code_bar" ? "design_bar" : id));
+        initialOrder = initialOrder.map(id => id === "quality_row" ? "quality_name" : (id === "design_bar" ? "code_bar" : id));
         reorderModularCardsInDOM(initialOrder);
 
         // Internal Code Generator Settings
@@ -2032,23 +2003,18 @@ document.addEventListener("DOMContentLoaded", () => {
             // Modular Element Order
             element_order: currentOrder,
 
-            // Kalite Bilgisi (Kod + İsim)
-            show_quality_row: desShowQualityRow ? desShowQualityRow.checked : (currentDesignConfig.show_quality_row !== false),
-            prefix_quality: desPrefixQuality ? desPrefixQuality.value.trim() : (currentDesignConfig.prefix_quality || ""),
-            align_quality: desAlignQuality ? desAlignQuality.value : (currentDesignConfig.align_quality || "center"),
-            font_size_quality: parseNum(desFontQuality?.value, currentDesignConfig.font_size_quality || 8.0),
-            quality_style: desQualityStyle ? desQualityStyle.value : (currentDesignConfig.quality_style || "plain"),
-            quality_bg_color: desQualityBgColor ? desQualityBgColor.value : (currentDesignConfig.quality_bg_color || "#000000"),
-            quality_text_color: desQualityTextColor ? desQualityTextColor.value : (currentDesignConfig.quality_text_color || "#000000"),
+            // Kalite Adı
+            show_quality_name: desShowQualityName ? desShowQualityName.checked : (currentDesignConfig.show_quality_name !== false),
+            prefix_quality_name: desPrefixQualityName ? desPrefixQualityName.value.trim() : (currentDesignConfig.prefix_quality_name || ""),
+            align_quality_name: desAlignQualityName ? desAlignQualityName.value : (currentDesignConfig.align_quality_name || "center"),
+            font_size_quality_name: parseNum(desFontQualityName?.value, currentDesignConfig.font_size_quality_name || 7.5),
 
-            // Desen / Varyant Kodu (Vurgu Çubuğu)
-            show_design_bar: desShowDesignBar ? desShowDesignBar.checked : (currentDesignConfig.show_design_bar !== false),
-            prefix_design: desPrefixDesign ? desPrefixDesign.value.trim() : (currentDesignConfig.prefix_design || ""),
-            align_design: desAlignDesign ? desAlignDesign.value : (currentDesignConfig.align_design || "center"),
-            font_size_design: parseNum(desFontDesign?.value, currentDesignConfig.font_size_design || 8.5),
-            design_style: desDesignStyle ? desDesignStyle.value : (currentDesignConfig.design_style || "filled"),
-            design_bg_color: desDesignBgColor ? desDesignBgColor.value : (currentDesignConfig.design_bg_color || "#000000"),
-            design_text_color: desDesignTextColor ? desDesignTextColor.value : (currentDesignConfig.design_text_color || "#ffffff"),
+            // Kalite & Varyant Kodu Barı
+            show_quality_code: desShowQualityCode ? desShowQualityCode.checked : (currentDesignConfig.show_quality_code !== false),
+            prefix_quality_code: desPrefixQualityCode ? desPrefixQualityCode.value.trim() : (currentDesignConfig.prefix_quality_code || ""),
+            align_quality_code: desAlignQualityCode ? desAlignQualityCode.value : (currentDesignConfig.align_quality_code || "center"),
+            font_size_header: parseNum(desFontHeader?.value, currentDesignConfig.font_size_header || 8.5),
+            header_black_bar: true,
 
             // Prefixes
             prefix_composition: desPrefixComposition ? desPrefixComposition.value.trim() : "",
@@ -2081,16 +2047,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Unified Modular Label Inner HTML Generator
     function generateModularLabelInnerHtml(data, cfg, barcodeId = "live") {
-        let order = cfg.element_order || ["logo_row", "quality_row", "design_bar", "composition", "weight", "barcode"];
-        order = order.map(id => id === "quality_name" ? "quality_row" : (id === "code_bar" ? "design_bar" : id));
+        let order = cfg.element_order || ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"];
+        order = order.map(id => id === "quality_row" ? "quality_name" : (id === "design_bar" ? "code_bar" : id));
 
         const compClean = formatCompositionDisplay(data.composition, cfg.use_fiber_abbreviations);
         const logoSrc = cfg.active_logo_url || "/logo.png";
         const fontFamily = cfg.font_family || "'Outfit', sans-serif";
 
         const fCompany = cfg.font_size_company !== undefined ? cfg.font_size_company : 8.5;
-        const fQuality = cfg.font_size_quality !== undefined ? cfg.font_size_quality : (cfg.font_size_quality_name || 8.0);
-        const fDesign = cfg.font_size_design !== undefined ? cfg.font_size_design : (cfg.font_size_header || 8.5);
+        const fQualityName = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 7.5;
+        const fHeader = cfg.font_size_header !== undefined ? cfg.font_size_header : 8.5;
         const fComp = cfg.font_size_composition !== undefined ? cfg.font_size_composition : 7.5;
         const fWeight = cfg.font_size_weight !== undefined ? cfg.font_size_weight : 7.5;
 
@@ -2113,74 +2079,57 @@ document.addEventListener("DOMContentLoaded", () => {
 
             blocks.logo_row = `
                 <div class="print-logo-row" style="display: flex; align-items: center; ${alignStyle} margin-bottom: 1mm; width: 100%;">
-                    <img src="${logoSrc}" class="print-logo" style="height: ${cfg.logo_height}mm; width: auto; max-width: 32mm; object-fit: contain; display: block;" alt="LOGO">
+                    <img src="${logoSrc}" class="print-logo" style="height: ${cfg.logo_height || 6}mm; width: auto; max-width: 32mm; object-fit: contain; display: block;" alt="LOGO">
                     ${cfg.show_company ? `<div class="print-company" style="font-size: ${fCompany}pt; font-weight: 700; text-align: ${cfg.align_company || 'right'}; flex-grow: 1; margin-left: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000;">${toAppUpper(data.company_name) || "-"}</div>` : ''}
                 </div>
             `;
         }
 
-        // 2. Kalite Bilgisi (Kalite Kodu + Kalite Adı)
-        const showQuality = (cfg.show_quality_row !== false) && (cfg.show_quality_name !== false);
-        if (showQuality) {
-            const qCode = toAppUpper(data.quality_code);
-            const qName = toAppUpper(data.quality_name);
-            let combinedQuality = "";
-            if (cfg.default_template === "option-a") {
-                combinedQuality = toAppUpper(data.internal_code || "ELT0000001");
-            } else {
-                combinedQuality = (qCode && qName) ? `${qCode} ${qName}` : (qCode || qName || "-");
-            }
-
-            const prefix = cfg.prefix_quality ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_quality}</span>` : (cfg.prefix_quality_name ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_quality_name}</span>` : "");
-            const qStyle = cfg.quality_style || "plain";
-            const qBg = cfg.quality_bg_color || "#000000";
-            const qText = cfg.quality_text_color || "#000000";
-
-            let qBoxCSS = "";
-            if (qStyle === "filled") {
-                qBoxCSS = `background-color: ${qBg} !important; color: ${qText} !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; padding: 1.2mm 2.5mm; border-radius: 1mm; margin: 0.5mm 0;`;
-            } else if (qStyle === "outline") {
-                qBoxCSS = `background-color: transparent !important; color: ${qText} !important; border: 1.2px solid ${qBg}; padding: 1mm 2.5mm; border-radius: 1mm; margin: 0.5mm 0;`;
-            } else {
-                qBoxCSS = `color: #000000 !important; padding: 0.5mm 0;`;
-            }
-
+        // 2. Kalite Adı (Quality Name)
+        if (cfg.show_quality_name !== false) {
+            const prefix = cfg.prefix_quality_name ? `<span style="font-weight: 700; margin-right: 3px;">${cfg.prefix_quality_name}</span>` : "";
             const qHtml = `
-                <div class="print-name" style="${qBoxCSS} font-size: ${fQuality}pt; font-weight: 700; text-align: ${cfg.align_quality || cfg.align_quality_name || 'center'}; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${prefix}${combinedQuality}
+                <div class="print-name" style="font-size: ${fQualityName}pt; font-weight: 600; text-align: ${cfg.align_quality_name || 'center'}; width: 100%; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${prefix}${toAppUpper(data.quality_name) || "-"}
                 </div>
             `;
-            blocks.quality_row = qHtml;
             blocks.quality_name = qHtml;
+            blocks.quality_row = qHtml;
         }
 
-        // 3. Desen / Varyant Kodu (Vurgu Çubuğu)
-        const showDesign = (cfg.show_design_bar !== false) && (cfg.show_quality_code !== false);
-        if (showDesign) {
-            const dCode = toAppUpper(data.design_code || "-");
-            const prefix = cfg.prefix_design ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_design}</span>` : (cfg.prefix_quality_code ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_quality_code}</span>` : "");
-            
-            const dStyle = cfg.design_style || cfg.bar_style || "filled";
-            const dBg = cfg.design_bg_color || cfg.bar_bg_color || "#000000";
-            const dText = cfg.design_text_color || cfg.bar_text_color || "#ffffff";
-            const dRadius = (cfg.bar_border_radius !== undefined ? cfg.bar_border_radius : 1.0) + "mm";
-
-            let dBoxCSS = "";
-            if (dStyle === "filled") {
-                dBoxCSS = `background-color: ${dBg} !important; color: ${dText} !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; padding: 1.5mm 3mm; border-radius: ${dRadius};`;
-            } else if (dStyle === "outline") {
-                dBoxCSS = `background-color: transparent !important; color: #000000 !important; border: 1.5px solid ${dBg}; padding: 1.2mm 3mm; border-radius: ${dRadius};`;
+        // 3. Kalite & Varyant Kodu Barı (Header / Code Bar)
+        if (cfg.show_quality_code !== false) {
+            let combinedCode = "";
+            if (cfg.default_template === "option-a") {
+                combinedCode = toAppUpper(data.internal_code || "ELT0000001");
             } else {
-                dBoxCSS = `background-color: transparent !important; color: #000000 !important; padding: 0.8mm 0;`;
+                const qCode = toAppUpper(data.quality_code);
+                const dCode = toAppUpper(data.design_code);
+                combinedCode = (qCode && dCode) ? `${qCode}/${dCode}` : (qCode || dCode || "-");
+            }
+            const prefix = cfg.prefix_quality_code ? `<span style="font-weight: 700; margin-right: 3px;">${cfg.prefix_quality_code}</span>` : "";
+            
+            const barStyle = cfg.bar_style || "filled";
+            const barBg = cfg.bar_bg_color || "#000000";
+            const barText = cfg.bar_text_color || "#ffffff";
+            const barRadius = (cfg.bar_border_radius !== undefined ? cfg.bar_border_radius : 1.0) + "mm";
+
+            let codeBarCSS = "";
+            if (barStyle === "filled") {
+                codeBarCSS = `background-color: ${barBg} !important; color: ${barText} !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; padding: 1.5mm 3mm; border-radius: ${barRadius};`;
+            } else if (barStyle === "outline") {
+                codeBarCSS = `background-color: transparent !important; color: #000000 !important; border: 1.5px solid ${barBg}; padding: 1.2mm 3mm; border-radius: ${barRadius};`;
+            } else {
+                codeBarCSS = `background-color: transparent !important; color: #000000 !important; padding: 0.8mm 0;`;
             }
 
             const dHtml = `
-                <div class="print-code-line" style="${dBoxCSS} text-align: ${cfg.align_design || cfg.align_quality_code || 'center'}; font-weight: 700; font-size: ${fDesign}pt; margin: 1mm 0; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${prefix}${dCode}
+                <div class="print-code-line" style="${codeBarCSS} text-align: ${cfg.align_quality_code || 'center'}; font-weight: 700; font-size: ${fHeader}pt; margin: 1mm 0; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${prefix}${combinedCode}
                 </div>
             `;
-            blocks.design_bar = dHtml;
             blocks.code_bar = dHtml;
+            blocks.design_bar = dHtml;
         }
 
         // 4. Composition
@@ -2221,7 +2170,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (!assembledHtml.trim()) {
-            assembledHtml = (blocks.logo_row || "") + (blocks.quality_row || "") + (blocks.design_bar || "") + (blocks.composition || "") + (blocks.weight || "") + (blocks.barcode || "");
+            assembledHtml = (blocks.logo_row || "") + (blocks.quality_name || "") + (blocks.code_bar || "") + (blocks.composition || "") + (blocks.weight || "") + (blocks.barcode || "");
         }
 
         return `
@@ -2269,27 +2218,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // Modular Move Up & Move Down Event Handlers
     if (modularElementsList) {
         modularElementsList.addEventListener("click", (e) => {
-            const upBtn = e.target.closest(".btn-move-up");
-            const downBtn = e.target.closest(".btn-move-down");
-            if (upBtn) {
-                const card = upBtn.closest(".modular-element-card");
-                if (card && card.previousElementSibling) {
-                    modularElementsList.insertBefore(card, card.previousElementSibling);
-                    renderDesignerPreview();
-                }
-            } else if (downBtn) {
-                const card = downBtn.closest(".modular-element-card");
-                if (card && card.nextElementSibling) {
-                    modularElementsList.insertBefore(card.nextElementSibling, card);
-                    renderDesignerPreview();
-                }
-            }
-        });
-    }
-
-    // Presets Button Click Listener
-    document.querySelectorAll(".preset-chip-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
             document.querySelectorAll(".preset-chip-btn").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
 
@@ -2337,43 +2265,87 @@ document.addEventListener("DOMContentLoaded", () => {
     if (desBarTextColor) desBarTextColor.addEventListener("input", renderDesignerPreview);
     if (desBarRadius) desBarRadius.addEventListener("change", renderDesignerPreview);
 
-    // Kalite Bilgisi Dinleyicileri
-    if (desShowQualityRow) desShowQualityRow.addEventListener("change", renderDesignerPreview);
-    if (desPrefixQuality) desPrefixQuality.addEventListener("input", renderDesignerPreview);
-    if (desAlignQuality) desAlignQuality.addEventListener("change", renderDesignerPreview);
-    if (desFontQuality) {
-        desFontQuality.addEventListener("input", (e) => {
-            if (valFontQuality) valFontQuality.textContent = e.target.value + "pt";
+    // 2. Kalite Adı Listeners
+    if (desShowQualityName) desShowQualityName.addEventListener("change", renderDesignerPreview);
+    if (desFontQualityName) {
+        desFontQualityName.addEventListener("input", (e) => {
+            if (valFontQualityName) valFontQualityName.textContent = e.target.value + "pt";
             renderDesignerPreview();
         });
     }
-    if (desQualityStyle) {
-        desQualityStyle.addEventListener("change", (e) => {
-            if (rowQualityColors) rowQualityColors.style.display = e.target.value !== "plain" ? "flex" : "none";
-            renderDesignerPreview();
-        });
-    }
-    if (desQualityBgColor) desQualityBgColor.addEventListener("input", renderDesignerPreview);
-    if (desQualityTextColor) desQualityTextColor.addEventListener("input", renderDesignerPreview);
+    if (desAlignQualityName) desAlignQualityName.addEventListener("change", renderDesignerPreview);
+    if (desPrefixQualityName) desPrefixQualityName.addEventListener("input", renderDesignerPreview);
 
-    // Desen / Varyant Dinleyicileri
-    if (desShowDesignBar) desShowDesignBar.addEventListener("change", renderDesignerPreview);
-    if (desPrefixDesign) desPrefixDesign.addEventListener("input", renderDesignerPreview);
-    if (desAlignDesign) desAlignDesign.addEventListener("change", renderDesignerPreview);
-    if (desFontDesign) {
-        desFontDesign.addEventListener("input", (e) => {
-            if (valFontDesign) valFontDesign.textContent = e.target.value + "pt";
+    // 3. Kalite & Varyant Kodu (Header Bar) Listeners
+    if (desShowQualityCode) desShowQualityCode.addEventListener("change", renderDesignerPreview);
+    if (desFontHeader) {
+        desFontHeader.addEventListener("input", (e) => {
+            if (valFontHeader) valFontHeader.textContent = e.target.value + "pt";
             renderDesignerPreview();
         });
     }
-    if (desDesignStyle) {
-        desDesignStyle.addEventListener("change", (e) => {
-            if (rowDesignColors) rowDesignColors.style.display = e.target.value === "plain" ? "none" : "flex";
-            renderDesignerPreview();
+    if (desAlignQualityCode) desAlignQualityCode.addEventListener("change", renderDesignerPreview);
+    if (desPrefixQualityCode) desPrefixQualityCode.addEventListener("input", renderDesignerPreview);
+
+    // Reset Default Design Button
+    if (btnResetDefaultDesign) {
+        btnResetDefaultDesign.addEventListener("click", () => {
+            const DEFAULT_CONFIG = {
+                default_template: "option-b",
+                printer_type: "a4",
+                label_width: 63.5,
+                label_height: 46.6,
+                col_gap: 0.1,
+                row_gap: 0.1,
+                margin_top: 8.0,
+                margin_left: 6.0,
+                logo_visible: true,
+                logo_height: 6.0,
+                logo_align: "left",
+                active_logo_url: "/logo.png",
+                font_family: "'Outfit', sans-serif",
+                use_fiber_abbreviations: false,
+                label_bg_color: "#ffffff",
+                label_border_style: "none",
+                label_border_color: "#000000",
+                bar_style: "filled",
+                bar_bg_color: "#000000",
+                bar_text_color: "#ffffff",
+                bar_border_radius: "1.0",
+                element_order: ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"],
+                prefix_quality_name: "",
+                prefix_quality_code: "",
+                prefix_composition: "",
+                prefix_weight: "",
+                font_size_header: 8.5,
+                font_size_company: 8.5,
+                font_size_quality_name: 7.5,
+                font_size_composition: 7.5,
+                font_size_weight: 7.5,
+                font_size_body: 7.5,
+                header_black_bar: true,
+                barcode_height: 8.0,
+                barcode_visible: true,
+                show_company: true,
+                show_quality_name: true,
+                show_quality_code: true,
+                show_composition: true,
+                show_weight: true,
+                align_company: "right",
+                align_quality_name: "center",
+                align_quality_code: "center",
+                align_composition: "left",
+                align_weight: "left"
+            };
+            currentDesignConfig = Object.assign({}, DEFAULT_CONFIG);
+            try {
+                localStorage.setItem("elite_sticker_settings", JSON.stringify(currentDesignConfig));
+            } catch(e) {}
+            applyConfigToUI(currentDesignConfig);
+            saveVisualDesignToAPI();
+            showToast("Orijinal varsayılan etiket tasarımı başarıyla geri yüklendi!", 1500);
         });
     }
-    if (desDesignBgColor) desDesignBgColor.addEventListener("input", renderDesignerPreview);
-    if (desDesignTextColor) desDesignTextColor.addEventListener("input", renderDesignerPreview);
 
     // Prefixes Listeners
     [desPrefixComposition, desPrefixWeight].forEach(input => {
