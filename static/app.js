@@ -1697,101 +1697,31 @@ function initApp() {
         });
     }
 
-    function applyConfigToUI(cfg) {
-        if (prefDefaultTemplate) prefDefaultTemplate.value = cfg.default_template;
-        if (cfg.default_template === "option-b") {
-            radioOptB.checked = true;
-            if (desOptB) desOptB.checked = true;
-        } else {
-            radioOptA.checked = true;
-            if (desOptA) desOptA.checked = true;
+    function getModularElementsOrderFromDOM() {
+        const order = [];
+        if (modularElementsList) {
+            const cards = modularElementsList.querySelectorAll(".modular-element-card");
+            cards.forEach(card => {
+                if (card.dataset.elementId) {
+                    order.push(card.dataset.elementId);
+                }
+            });
         }
+        return order.length > 0 ? order : ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"];
+    }
 
-        if (prefPrinterType) prefPrinterType.value = cfg.printer_type;
-        if (prefLabelWidth) prefLabelWidth.value = cfg.label_width;
-        if (prefLabelHeight) prefLabelHeight.value = cfg.label_height;
-        if (prefColGap) prefColGap.value = cfg.col_gap;
-        if (prefRowGap) prefRowGap.value = cfg.row_gap;
-        if (prefMarginTop) prefMarginTop.value = cfg.margin_top;
-        if (prefMarginLeft) prefMarginLeft.value = cfg.margin_left;
-
-        if (desLogoVisible) desLogoVisible.checked = cfg.logo_visible;
-        if (desLogoHeight) {
-            desLogoHeight.value = cfg.logo_height;
-            if (valLogoHeight) valLogoHeight.textContent = cfg.logo_height + "mm";
-        }
-        if (desLogoAlign) desLogoAlign.value = cfg.logo_align;
-
-        if (desFontFamily && cfg.font_family) desFontFamily.value = cfg.font_family;
-        if (desUseFiberAbbr) desUseFiberAbbr.checked = !!cfg.use_fiber_abbreviations;
-
-        // 1. Firma Adı
-        if (desShowCompany) desShowCompany.checked = cfg.show_company;
-        if (desFontCompany) {
-            const compSize = cfg.font_size_company !== undefined ? cfg.font_size_company : 8.5;
-            desFontCompany.value = compSize;
-            if (valFontCompany) valFontCompany.textContent = compSize + "pt";
-        }
-        if (desAlignCompany) desAlignCompany.value = cfg.align_company || "right";
-
-        // 2. Kalite Adı
-        if (desShowQualityName) desShowQualityName.checked = cfg.show_quality_name !== false;
-        if (desFontQualityName) {
-            const qNameSize = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 7.5;
-            desFontQualityName.value = qNameSize;
-            if (valFontQualityName) valFontQualityName.textContent = qNameSize + "pt";
-        }
-        if (desAlignQualityName) desAlignQualityName.value = cfg.align_quality_name || "center";
-
-        // 3. Varyant ve Renk Kodu
-        if (desShowQualityCode) desShowQualityCode.checked = cfg.show_quality_code !== false;
-        if (desHeaderBlackBar) desHeaderBlackBar.checked = cfg.header_black_bar;
-        if (desFontHeader) {
-            const headSize = cfg.font_size_header !== undefined ? cfg.font_size_header : 8.5;
-            desFontHeader.value = headSize;
-            if (valFontHeader) valFontHeader.textContent = headSize + "pt";
-        }
-        if (desAlignQualityCode) desAlignQualityCode.value = cfg.align_quality_code || "center";
-
-        // 4. Karışım
-        if (desShowComp) desShowComp.checked = cfg.show_composition;
-        if (desFontComp) {
-            const compTxtSize = cfg.font_size_composition !== undefined ? cfg.font_size_composition : 7.5;
-            desFontComp.value = compTxtSize;
-            if (valFontComp) valFontComp.textContent = compTxtSize + "pt";
-        }
-        if (desAlignComp) desAlignComp.value = cfg.align_composition || "left";
-
-        // 5. Gramaj
-        if (desShowWeight) desShowWeight.checked = cfg.show_weight;
-        if (desFontWeight) {
-            const weightSize = cfg.font_size_weight !== undefined ? cfg.font_size_weight : 7.5;
-            desFontWeight.value = weightSize;
-            if (valFontWeight) valFontWeight.textContent = weightSize + "pt";
-        }
-        if (desAlignWeight) desAlignWeight.value = cfg.align_weight || "left";
-
-        // Barcode
-        if (desBarcodeVisible) desBarcodeVisible.checked = cfg.barcode_visible;
-        if (desBarcodeHeight) {
-            desBarcodeHeight.value = cfg.barcode_height;
-            if (valBarcodeHeight) valBarcodeHeight.textContent = cfg.barcode_height + "mm";
-        }
-
-        // Internal Code Generator Settings
-        if (codeTypeLetters && codeTypeNumbers) {
-            if (cfg.code_prefix_type === "numbers_only") {
-                codeTypeNumbers.checked = true;
-            } else {
-                codeTypeLetters.checked = true;
+    function reorderModularCardsInDOM(orderList) {
+        if (!modularElementsList || !orderList || !Array.isArray(orderList)) return;
+        orderList.forEach(elemId => {
+            const card = modularElementsList.querySelector(`.modular-element-card[data-element-id="${elemId}"]`);
+            if (card) {
+                modularElementsList.appendChild(card);
             }
-        }
-        if (codePrefixText) codePrefixText.value = cfg.code_prefix_text || "ELT";
-        if (codeSeparator) codeSeparator.value = cfg.code_separator !== undefined ? cfg.code_separator : "";
-        if (codeDigits) codeDigits.value = cfg.code_digits !== undefined ? String(cfg.code_digits) : "7";
-        if (codeStartNumber) codeStartNumber.value = cfg.code_start_number !== undefined ? cfg.code_start_number : 1;
-        updateCodePreview();
+        });
+    }
 
+    function syncElementOrderFromDOM() {
+        currentDesignConfig.element_order = getModularElementsOrderFromDOM();
         renderDesignerPreview();
     }
 
