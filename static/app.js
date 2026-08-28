@@ -1394,7 +1394,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Current Active Design Config
-    let currentDesignConfig = {
+    const DEFAULT_DESIGN_CONFIG = {
+        config_version: "3.6.0",
         default_template: "option-b",
         printer_type: "a4",
         label_width: 63.5,
@@ -1451,12 +1452,18 @@ document.addEventListener("DOMContentLoaded", () => {
         align_weight: "left"
     };
 
-    // Load LocalStorage Cache immediately for instant persistence
+    let currentDesignConfig = Object.assign({}, DEFAULT_DESIGN_CONFIG);
+
+    // Load LocalStorage Cache immediately (with strict version check)
     try {
         const cached = localStorage.getItem("elite_sticker_settings");
         if (cached) {
             const parsed = JSON.parse(cached);
-            Object.assign(currentDesignConfig, parsed);
+            if (parsed && parsed.config_version === "3.6.0") {
+                Object.assign(currentDesignConfig, parsed);
+            } else {
+                localStorage.removeItem("elite_sticker_settings");
+            }
         }
     } catch (e) {}
 

@@ -1,4 +1,5 @@
 {
+    "config_version": "3.6.0",
     "api_key": "AQ.Ab8RN6LUBwjV7pxpZhthaaDHKUYzMxiymHeAr1o6RL469kRR7Q",
     "default_template": "option-b",
     "printer_type": "a4",
