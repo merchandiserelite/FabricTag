@@ -2120,7 +2120,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // 2. Kalite Bilgisi (Kalite Kodu + Kalite Adı)
-        if (cfg.show_quality_row !== false && cfg.show_quality_name !== false) {
+        const showQuality = (cfg.show_quality_row !== false) && (cfg.show_quality_name !== false);
+        if (showQuality) {
             const qCode = toAppUpper(data.quality_code);
             const qName = toAppUpper(data.quality_name);
             let combinedQuality = "";
@@ -2130,7 +2131,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 combinedQuality = (qCode && qName) ? `${qCode} ${qName}` : (qCode || qName || "-");
             }
 
-            const prefix = cfg.prefix_quality ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_quality}</span>` : "";
+            const prefix = cfg.prefix_quality ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_quality}</span>` : (cfg.prefix_quality_name ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_quality_name}</span>` : "");
             const qStyle = cfg.quality_style || "plain";
             const qBg = cfg.quality_bg_color || "#000000";
             const qText = cfg.quality_text_color || "#000000";
@@ -2144,17 +2145,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 qBoxCSS = `color: #000000 !important; padding: 0.5mm 0;`;
             }
 
-            blocks.quality_row = `
-                <div class="print-name" style="${qBoxCSS} font-size: ${fQuality}pt; font-weight: 700; text-align: ${cfg.align_quality || 'center'}; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            const qHtml = `
+                <div class="print-name" style="${qBoxCSS} font-size: ${fQuality}pt; font-weight: 700; text-align: ${cfg.align_quality || cfg.align_quality_name || 'center'}; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                     ${prefix}${combinedQuality}
                 </div>
             `;
+            blocks.quality_row = qHtml;
+            blocks.quality_name = qHtml;
         }
 
         // 3. Desen / Varyant Kodu (Vurgu Çubuğu)
-        if (cfg.show_design_bar !== false && cfg.show_quality_code !== false) {
+        const showDesign = (cfg.show_design_bar !== false) && (cfg.show_quality_code !== false);
+        if (showDesign) {
             const dCode = toAppUpper(data.design_code || "-");
-            const prefix = cfg.prefix_design ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_design}</span>` : "";
+            const prefix = cfg.prefix_design ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_design}</span>` : (cfg.prefix_quality_code ? `<span style="font-weight: 700; margin-right: 4px;">${cfg.prefix_quality_code}</span>` : "");
             
             const dStyle = cfg.design_style || cfg.bar_style || "filled";
             const dBg = cfg.design_bg_color || cfg.bar_bg_color || "#000000";
@@ -2170,15 +2174,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 dBoxCSS = `background-color: transparent !important; color: #000000 !important; padding: 0.8mm 0;`;
             }
 
-            blocks.design_bar = `
-                <div class="print-code-line" style="${dBoxCSS} text-align: ${cfg.align_design || 'center'}; font-weight: 700; font-size: ${fDesign}pt; margin: 1mm 0; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            const dHtml = `
+                <div class="print-code-line" style="${dBoxCSS} text-align: ${cfg.align_design || cfg.align_quality_code || 'center'}; font-weight: 700; font-size: ${fDesign}pt; margin: 1mm 0; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                     ${prefix}${dCode}
                 </div>
             `;
+            blocks.design_bar = dHtml;
+            blocks.code_bar = dHtml;
         }
 
         // 4. Composition
-        if (cfg.show_composition) {
+        if (cfg.show_composition !== false) {
             const prefix = cfg.prefix_composition ? `<strong class="print-title" style="margin-right: 3px;">${cfg.prefix_composition}</strong>` : "";
             blocks.composition = `
                 <div class="print-comp" style="font-size: ${fComp}pt; font-weight: 500; text-align: ${cfg.align_composition || 'left'}; width: 100%; color: #000; line-height: 1.2; word-break: break-word;">
@@ -2188,7 +2194,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // 5. Weight
-        if (cfg.show_weight) {
+        if (cfg.show_weight !== false) {
             const prefix = cfg.prefix_weight ? `<strong class="print-title" style="margin-right: 3px;">${cfg.prefix_weight}</strong>` : "";
             blocks.weight = `
                 <div class="print-weight" style="font-size: ${fWeight}pt; font-weight: 700; text-align: ${cfg.align_weight || 'left'}; width: 100%; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
@@ -2198,10 +2204,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // 6. Barcode
-        if (cfg.barcode_visible) {
+        if (cfg.barcode_visible !== false) {
             blocks.barcode = `
                 <div class="print-barcode-container" style="display: flex; justify-content: center; width: 100%; margin-top: auto; padding-top: 0.5mm;">
-                    <svg class="print-barcode-svg" id="barcode-${barcodeId}" style="max-width: 90%; height: ${cfg.barcode_height}mm;"></svg>
+                    <svg class="print-barcode-svg" id="barcode-${barcodeId}" style="max-width: 90%; height: ${cfg.barcode_height || 8}mm;"></svg>
                 </div>
             `;
         }
@@ -2213,6 +2219,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 assembledHtml += blocks[elemId];
             }
         });
+
+        if (!assembledHtml.trim()) {
+            assembledHtml = (blocks.logo_row || "") + (blocks.quality_row || "") + (blocks.design_bar || "") + (blocks.composition || "") + (blocks.weight || "") + (blocks.barcode || "");
+        }
 
         return `
             <div class="print-label" style="font-family: ${fontFamily}; width: 100%; height: 100%; padding: 2.5mm 3.5mm; background-color: ${labelBg} !important; ${labelBorderCSS} box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;">
