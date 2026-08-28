@@ -57,6 +57,17 @@ def init_db():
     conn.commit()
     conn.close()
 
+def get_total_fabrics_count() -> int:
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM fabrics")
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else 0
+    except Exception:
+        return 0
+
 def load_code_settings():
     try:
         import json

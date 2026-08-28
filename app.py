@@ -16,6 +16,7 @@ from pyngrok import ngrok, conf
 
 import database
 import analyzer
+import licensing
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -274,6 +275,18 @@ def server_info():
         "https_access_url": tunnel_url or f"https://{local_ip}:8000"
     }
 
+class LicenseActivateRequest(BaseModel):
+    license_key: str
+    company: Optional[str] = "COMMERCIAL"
+
+@app.get("/api/license/status")
+def get_license_status():
+    return licensing.get_license_status()
+
+@app.post("/api/license/activate")
+def activate_license_endpoint(req: LicenseActivateRequest):
+    return licensing.activate_license(req.license_key, req.company or "COMMERCIAL")
+
 @app.get("/api/settings")
 def get_settings():
     settings = load_settings()
@@ -432,6 +445,13 @@ async def upload_logo(file: UploadFile = File(...)):
 
 @app.post("/api/scan")
 async def scan_swatch(file: UploadFile = File(...)):
+    lic_stat = licensing.get_license_status()
+    if not lic_stat.get("can_create_new", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Ücretsiz 20 kumaş kaydetme limitine ulaştınız. Lütfen sınırsız kullanım için lisansınızı aktive edin."
+        )
+
     settings = load_settings()
     api_key = settings.get("api_key", "")
     if not api_key:
@@ -466,6 +486,13 @@ async def scan_swatch(file: UploadFile = File(...)):
 
 @app.post("/api/kartela-oku")
 async def scan_kartela_base64(req: Base64ScanRequest):
+    lic_stat = licensing.get_license_status()
+    if not lic_stat.get("can_create_new", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Ücretsiz 20 kumaş kaydetme limitine ulaştınız. Lütfen sınırsız kullanım için lisansınızı aktive edin."
+        )
+
     settings = load_settings()
     api_key = settings.get("api_key", "")
     if not api_key:
@@ -506,6 +533,12 @@ async def scan_kartela_base64(req: Base64ScanRequest):
 
 @app.post("/api/fabrics")
 def save_fabric(req: FabricSaveRequest):
+    lic_stat = licensing.get_license_status()
+    if not lic_stat.get("can_create_new", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Ücretsiz 20 kumaş kaydetme limitine ulaştınız. Lütfen sınırsız kullanım için lisansınızı aktive edin."
+        )
     try:
         saved_row = database.add_fabric(
             company_name=req.company_name,

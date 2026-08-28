@@ -23,7 +23,7 @@
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     
-    <link rel="stylesheet" href="style.css?v=3.8.0">
+    <link rel="stylesheet" href="style.css?v=4.0.0">
 </head>
 <body>
     <!-- Toast Banner Notification for Alerts -->
@@ -41,13 +41,16 @@
             <i class="fa-solid fa-tags logo-icon"></i>
             <h2>FabricTag</h2>
         </div>
-        <div class="lang-pill-toggle" style="margin-left: auto; max-width: 220px;">
+        <div class="lang-pill-toggle" style="margin-left: auto; max-width: 320px; overflow-x: auto;">
             <button type="button" class="lang-btn active" data-lang="tr" title="Türkçe">🇹🇷 TR</button>
             <button type="button" class="lang-btn" data-lang="en" title="English">🇬🇧 EN</button>
             <button type="button" class="lang-btn" data-lang="de" title="Deutsch">🇩🇪 DE</button>
             <button type="button" class="lang-btn" data-lang="it" title="Italiano">🇮🇹 IT</button>
             <button type="button" class="lang-btn" data-lang="es" title="Español">🇪🇸 ES</button>
             <button type="button" class="lang-btn" data-lang="fr" title="Français">🇫🇷 FR</button>
+            <button type="button" class="lang-btn" data-lang="ar" title="العربية">🇸🇦 AR</button>
+            <button type="button" class="lang-btn" data-lang="zh" title="中文">🇨🇳 ZH</button>
+            <button type="button" class="lang-btn" data-lang="ja" title="日本語">🇯🇵 JA</button>
         </div>
     </header>
 
@@ -66,7 +69,7 @@
                     <button class="sidebar-close-btn" id="sidebar-close-btn">&times;</button>
                 </div>
 
-                <!-- Language Switcher in Sidebar (6 Languages) -->
+                <!-- Language Switcher in Sidebar (9 Languages) -->
                 <div class="lang-switcher-container">
                     <div style="display: flex; align-items: center; justify-content: space-between;">
                         <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600;"><i class="fa-solid fa-globe"></i> <span data-i18n="lang_label">Dil / Language:</span></span>
@@ -78,6 +81,9 @@
                         <button type="button" class="lang-btn" data-lang="it" title="Italiano">🇮🇹 IT</button>
                         <button type="button" class="lang-btn" data-lang="es" title="Español">🇪🇸 ES</button>
                         <button type="button" class="lang-btn" data-lang="fr" title="Français">🇫🇷 FR</button>
+                        <button type="button" class="lang-btn" data-lang="ar" title="العربية">🇸🇦 AR</button>
+                        <button type="button" class="lang-btn" data-lang="zh" title="中文">🇨🇳 ZH</button>
+                        <button type="button" class="lang-btn" data-lang="ja" title="日本語">🇯🇵 JA</button>
                     </div>
                 </div>
 
@@ -91,14 +97,28 @@
                     <button class="nav-btn" data-tab="settings-tab" onclick="window.switchAppTab && window.switchAppTab('settings-tab', this)">
                         <i class="fa-solid fa-gear"></i> <span data-i18n="nav_settings">Ayarlar & Tasarim</span>
                     </button>
+                    <button type="button" class="nav-btn" id="btn-open-user-guide" style="border: 1px dashed rgba(99, 102, 241, 0.4); margin-top: 6px;">
+                        <i class="fa-solid fa-book-open"></i> <span data-i18n="nav_user_guide">Kullanım Rehberi</span>
+                    </button>
                 </nav>
 
                 <!-- PWA Mobile App Install Button -->
-                <div class="sidebar-pwa-install" id="sidebar-pwa-container" style="margin-top: 1rem; margin-bottom: 0.85rem; width: 100%;">
+                <div class="sidebar-pwa-install" id="sidebar-pwa-container" style="margin-top: 0.85rem; margin-bottom: 0.75rem; width: 100%;">
                     <button type="button" class="btn btn-primary" id="btn-install-pwa" style="width: 100%; font-size: 0.82rem; padding: 10px 12px; border-radius: var(--radius-sm); background: linear-gradient(135deg, #4f46e5, #06b6d4); border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;">
                         <i class="fa-solid fa-mobile-screen-button"></i> <span data-i18n="btn_install_pwa">Telefona Uygulama Olarak Yukle</span>
                     </button>
                 </div>
+            </div>
+
+            <!-- License Status Card -->
+            <div class="sidebar-license-card" id="sidebar-license-card">
+                <div class="sidebar-license-badge free" id="license-badge-status">
+                    <i class="fa-solid fa-gift"></i>
+                    <span id="license-badge-text">Ücretsiz: 20/20 Kalan</span>
+                </div>
+                <button type="button" class="btn-license-trigger" id="btn-open-license-modal">
+                    <i class="fa-solid fa-key"></i> <span data-i18n="btn_license_activate">Lisansla / Satın Al</span>
+                </button>
             </div>
 
             <!-- Left Sidebar Collapsible Mobile Connection & QR Box -->
@@ -1182,9 +1202,121 @@
         </div>
     </div>
 
+    <!-- License & Activation Modal -->
+    <div class="modal-overlay" id="modal-license-overlay">
+        <div class="modal-card" style="max-width: 540px;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #1e1b4b, #312e81); color: #ffffff;">
+                <h3 style="color: #ffffff;"><i class="fa-solid fa-shield-halved" style="color: #6366f1;"></i> <span data-i18n="license_modal_title">FabricTag Lisans Aktivasyonu</span></h3>
+                <button type="button" class="modal-close" id="btn-close-license-modal" style="color: #ffffff;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <div class="license-status-banner" id="modal-license-status-box" style="margin-bottom: 1.25rem; padding: 14px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 0.85rem; font-weight: 700; color: #1e293b;" id="modal-license-status-title">Durum: Ücretsiz Deneme Sürümü</span>
+                        <span class="badge badge-warning" id="modal-license-status-badge" style="padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; background: #fef3c7; color: #92400e;">20/20 Kullanım</span>
+                    </div>
+                    <p style="font-size: 0.8rem; color: #64748b; margin-top: 6px; line-height: 1.4;" data-i18n="license_trial_desc">
+                        İlk 20 kumaş kaydını ücretsiz olarak deneyebilirsiniz. Sınırsız kullanım ve ticari lisans için lütfen aktivasyon anahtarınızı girin.
+                    </p>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: #334155; display: flex; justify-content: space-between;">
+                        <span data-i18n="lbl_hardware_id">Bilgisayarınızın Donanım Kimliği (Hardware ID):</span>
+                        <span style="font-size: 0.75rem; color: #6366f1; cursor: pointer;" id="btn-copy-hardware-id"><i class="fa-regular fa-copy"></i> Kopyala</span>
+                    </label>
+                    <div style="display: flex; gap: 8px; margin-top: 4px;">
+                        <input type="text" id="license-hardware-id-input" readonly class="text-input" style="font-family: monospace; font-weight: 700; background: #f1f5f9; color: #0f172a;" value="FT-XXXX-XXXX-XXXX">
+                        <button type="button" class="btn btn-secondary" id="btn-copy-hw-action" style="padding: 8px 14px;" title="Kopyala">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                    </div>
+                    <small style="color: #64748b; font-size: 0.75rem; margin-top: 4px; display: block;" data-i18n="hardware_id_help">
+                        Lisans anahtarı satın alırken bu kodu bize iletmeniz yeterlidir.
+                    </small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: #334155;" data-i18n="lbl_enter_license_key">Aktivasyon / Lisans Anahtarı:</label>
+                    <input type="text" id="license-key-input" placeholder="FTLIC-XXXX-XXXX-XXXX-XXXX-XXXX" class="text-input" style="font-family: monospace; text-transform: uppercase; margin-top: 4px;">
+                </div>
+
+                <div id="license-activation-alert" style="display: none; padding: 10px 14px; border-radius: 6px; font-size: 0.82rem; margin-bottom: 1rem;"></div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-license" data-i18n="btn_cancel">Kapat</button>
+                    <button type="button" class="btn btn-primary" id="btn-submit-license-activate" style="padding: 10px 24px; font-weight: 700; background: linear-gradient(135deg, #4f46e5, #06b6d4);">
+                        <i class="fa-solid fa-shield-check"></i> <span data-i18n="btn_activate_now">Lisansı Aktive Et</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interactive Step-by-Step User Guide Modal -->
+    <div class="modal-overlay" id="modal-user-guide-overlay">
+        <div class="modal-card" style="max-width: 720px; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #1e1b4b, #4338ca); color: #ffffff;">
+                <h3 style="color: #ffffff;"><i class="fa-solid fa-book-open" style="color: #38bdf8;"></i> <span data-i18n="guide_modal_title">FabricTag Hızlı Başlangıç & Kullanım Rehberi</span></h3>
+                <button type="button" class="modal-close" id="btn-close-user-guide" style="color: #ffffff;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem; overflow-y: auto; flex-grow: 1;">
+                <div class="guide-steps-container">
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #4f46e5; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">1</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step1_title">Gemini Yapay Zeka API Anahtarı Kurulumu</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 10px 36px; line-height: 1.5;" data-i18n="guide_step1_desc">
+                            FabricTag kartelaları okumak için Google Gemini AI modelini kullanır. Google AI Studio üzerinden ücretsiz API anahtarınızı alıp <strong>Ayarlar</strong> sekmesine girmeniz yeterlidir.
+                        </p>
+                        <div style="margin-left: 36px;">
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" class="btn btn-secondary" style="font-size: 0.75rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px;">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> <span data-i18n="guide_step1_btn">Ücretsiz Google API Anahtarı Al</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #06b6d4; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">2</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step2_title">Kartela Tarama ve Otomatik Okuma</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step2_desc">
+                            Kartela fotoğrafını 3 şekilde yükleyebilirsiniz: <strong>Webcam/Kamera</strong> ile seri çekim, <strong>Telefondan QR ile Kablosuz</strong> tarama veya <strong>Fotoğraf Yükleyerek</strong>. Yapay zeka tüm kumaş bilgilerini saniyeler içinde ayrıştırır.
+                        </p>
+                    </div>
+
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #10b981; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">3</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step3_title">Görsel Etiket Tasarımı & Barkod Baskısı</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step3_desc">
+                            <strong>Ayarlar & Tasarım</strong> bölümünden logonuzu yükleyebilir, etiket satırlarını sürükle-bırak ile dilediğiniz gibi sıralayabilir ve font/renkleri canlı önizleyebilirsiniz. A4 tabaka veya Argox/Zebra rulo yazıcılara tam uyumludur.
+                        </p>
+                    </div>
+
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #8b5cf6; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">4</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step4_title">Excel İçe/Dışa Aktarma ve Bulut Yedekleme</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step4_desc">
+                            Mevcut Excel arşivinizi tek tıkla sisteme aktarabilir veya kayıtlarınızı filtreleyip Excel olarak dışa aktarabilirsiniz. OneDrive bulut yedekleme sistemiyle verileriniz her gün otomatik korunur.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; background: #f8fafc;">
+                <button type="button" class="btn btn-primary" id="btn-close-guide-footer" data-i18n="btn_understood">Anladım, Başla</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Hidden Print Area -->
     <div id="print-section"></div>
 
-    <script src="app.js?v=3.8.0"></script>
+    <script src="app.js?v=4.0.0"></script>
 </body>
 </html>
