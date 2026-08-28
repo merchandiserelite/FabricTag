@@ -15,7 +15,14 @@ BACKUPS_DIR = os.path.join(BASE_DIR, "backups")
 # Detect OneDrive for automatic real-time cloud syncing
 USER_HOME = os.path.expanduser("~")
 ONEDRIVE_DIR = os.path.join(USER_HOME, "OneDrive")
-ONEDRIVE_BACKUP_DIR = os.path.join(ONEDRIVE_DIR, "FabricTag_Cloud_Backups") if os.path.exists(ONEDRIVE_DIR) else None
+ONEDRIVE_SOUL_WAYS = os.path.join(ONEDRIVE_DIR, "OneDrive - Soul ways")
+
+if os.path.exists(ONEDRIVE_SOUL_WAYS):
+    ONEDRIVE_BACKUP_DIR = os.path.join(ONEDRIVE_SOUL_WAYS, "FabricTag_Cloud_Backups")
+elif os.path.exists(ONEDRIVE_DIR):
+    ONEDRIVE_BACKUP_DIR = os.path.join(ONEDRIVE_DIR, "FabricTag_Cloud_Backups")
+else:
+    ONEDRIVE_BACKUP_DIR = None
 
 os.makedirs(BACKUPS_DIR, exist_ok=True)
 if ONEDRIVE_BACKUP_DIR:

@@ -96,9 +96,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const desLogoAlign = document.getElementById("des-logo-align");
     const logoControlsContent = document.getElementById("logo-controls-content");
     
+    // Theme & Label Background / Border
+    const desLabelBgColor = document.getElementById("des-label-bg-color");
+    const desLabelBorderStyle = document.getElementById("des-label-border-style");
+    const desLabelBorderColor = document.getElementById("des-label-border-color");
+    const groupLabelBorderColor = document.getElementById("group-label-border-color");
+
+    // Bar Styles & Colors
+    const desBarStyle = document.getElementById("des-bar-style");
+    const desBarBgColor = document.getElementById("des-bar-bg-color");
+    const desBarTextColor = document.getElementById("des-bar-text-color");
+    const desBarRadius = document.getElementById("des-bar-radius");
+    const rowBarBgColor = document.getElementById("row-bar-bg-color");
+
     // Font Family & Fiber Abbreviations
     const desFontFamily = document.getElementById("des-font-family");
     const desUseFiberAbbr = document.getElementById("des-use-fiber-abbr");
+
+    // Modular Container & Elements
+    const modularElementsList = document.getElementById("modular-elements-list");
 
     // 1. Firma Adı (Company)
     const desShowCompany = document.getElementById("des-show-company");
@@ -111,6 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const desFontQualityName = document.getElementById("des-font-quality-name");
     const valFontQualityName = document.getElementById("val-font-quality-name");
     const desAlignQualityName = document.getElementById("des-align-quality-name");
+    const desPrefixQualityName = document.getElementById("des-prefix-quality-name");
 
     // 3. Varyant ve Renk Kodu (Header / Quality Code Bar)
     const desShowQualityCode = document.getElementById("des-show-quality-code");
@@ -118,18 +135,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const desFontHeader = document.getElementById("des-font-header");
     const valFontHeader = document.getElementById("val-font-header");
     const desAlignQualityCode = document.getElementById("des-align-quality-code");
+    const desPrefixQualityCode = document.getElementById("des-prefix-quality-code");
 
     // 4. Karışım (Composition)
     const desShowComp = document.getElementById("des-show-comp");
     const desFontComp = document.getElementById("des-font-comp");
     const valFontComp = document.getElementById("val-font-comp");
     const desAlignComp = document.getElementById("des-align-comp");
+    const desPrefixComposition = document.getElementById("des-prefix-composition");
 
     // 5. Gramaj (Weight)
     const desShowWeight = document.getElementById("des-show-weight");
     const desFontWeight = document.getElementById("des-font-weight");
     const valFontWeight = document.getElementById("val-font-weight");
     const desAlignWeight = document.getElementById("des-align-weight");
+    const desPrefixWeight = document.getElementById("des-prefix-weight");
     
     // Barcode
     const desBarcodeVisible = document.getElementById("des-barcode-visible");
@@ -1373,7 +1393,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Current Active Design Config
     let currentDesignConfig = {
-        default_template: "option-a",
+        default_template: "option-b",
         printer_type: "a4",
         label_width: 63.5,
         label_height: 46.6,
@@ -1387,6 +1407,27 @@ document.addEventListener("DOMContentLoaded", () => {
         active_logo_url: "/logo.png",
         font_family: "'Outfit', sans-serif",
         use_fiber_abbreviations: false,
+
+        // Modular Theme & Colors
+        label_bg_color: "#ffffff",
+        label_border_style: "none",
+        label_border_color: "#000000",
+        
+        // Bar styles
+        bar_style: "filled", // filled, outline, plain
+        bar_bg_color: "#000000",
+        bar_text_color: "#ffffff",
+        bar_border_radius: "1.0",
+
+        // Element Order
+        element_order: ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"],
+
+        // Prefixes
+        prefix_quality_name: "",
+        prefix_quality_code: "",
+        prefix_composition: "",
+        prefix_weight: "",
+
         font_size_header: 8.5,
         font_size_company: 8.5,
         font_size_quality_name: 7.5,
@@ -1823,16 +1864,260 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ==========================================
-    // CANLI GÖRSEL ETİKET TASARIMCISI (STUDIO)
+    // CANLI MODULER ETİKET TASARIMCISI (STUDIO)
     // ==========================================
-    
+
+    const PRESETS_CONFIG = {
+        "classic-black": {
+            bar_style: "filled",
+            bar_bg_color: "#000000",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "1.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "none",
+            label_border_color: "#000000",
+            header_black_bar: true,
+            default_template: "option-b",
+            element_order: ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"],
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: ""
+        },
+        "corporate-navy": {
+            bar_style: "filled",
+            bar_bg_color: "#1e3a8a",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "2.5",
+            label_bg_color: "#ffffff",
+            label_border_style: "solid",
+            label_border_color: "#cbd5e1",
+            header_black_bar: true,
+            default_template: "option-b",
+            element_order: ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"],
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: ""
+        },
+        "emerald-green": {
+            bar_style: "filled",
+            bar_bg_color: "#065f46",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "2.5",
+            label_bg_color: "#ffffff",
+            label_border_style: "none",
+            label_border_color: "#065f46",
+            header_black_bar: true,
+            default_template: "option-b",
+            element_order: ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"],
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: ""
+        },
+        "luxury-burgundy": {
+            bar_style: "filled",
+            bar_bg_color: "#991b1b",
+            bar_text_color: "#facc15",
+            bar_border_radius: "1.0",
+            label_bg_color: "#fffbeb",
+            label_border_style: "double",
+            label_border_color: "#991b1b",
+            header_black_bar: true,
+            default_template: "option-b",
+            element_order: ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"],
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: ""
+        },
+        "minimalist-white": {
+            bar_style: "outline",
+            bar_bg_color: "#64748b",
+            bar_text_color: "#000000",
+            bar_border_radius: "0",
+            label_bg_color: "#ffffff",
+            label_border_style: "solid",
+            label_border_color: "#94a3b8",
+            header_black_bar: false,
+            default_template: "option-b",
+            element_order: ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"],
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: ""
+        },
+        "secret-code-a": {
+            bar_style: "plain",
+            bar_bg_color: "#000000",
+            bar_text_color: "#000000",
+            bar_border_radius: "0",
+            label_bg_color: "#ffffff",
+            label_border_style: "none",
+            label_border_color: "#000000",
+            header_black_bar: false,
+            default_template: "option-a",
+            element_order: ["logo_row", "code_bar", "composition", "weight", "barcode"],
+            prefix_quality_name: "",
+            prefix_quality_code: "QUALITY:",
+            prefix_composition: "COMP.:",
+            prefix_weight: "WEIGHT:"
+        }
+    };
+
+    function reorderModularCardsInDOM(orderArray) {
+        if (!modularElementsList || !orderArray || !Array.isArray(orderArray)) return;
+        orderArray.forEach(id => {
+            const card = modularElementsList.querySelector(`[data-element-id="${id}"]`);
+            if (card) {
+                modularElementsList.appendChild(card);
+            }
+        });
+    }
+
+    function getModularElementsOrderFromDOM() {
+        if (!modularElementsList) return ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"];
+        const cards = modularElementsList.querySelectorAll(".modular-element-card");
+        const order = [];
+        cards.forEach(c => {
+            if (c.dataset.elementId) order.push(c.dataset.elementId);
+        });
+        return order.length ? order : ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"];
+    }
+
+    function applyConfigToUI(cfg) {
+        if (prefDefaultTemplate) prefDefaultTemplate.value = cfg.default_template || "option-b";
+        if (cfg.default_template === "option-b") {
+            radioOptB.checked = true;
+        } else {
+            radioOptA.checked = true;
+        }
+
+        if (prefPrinterType) prefPrinterType.value = cfg.printer_type || "a4";
+        if (prefLabelWidth) prefLabelWidth.value = cfg.label_width || 63.5;
+        if (prefLabelHeight) prefLabelHeight.value = cfg.label_height || 46.6;
+        if (prefColGap) prefColGap.value = cfg.col_gap !== undefined ? cfg.col_gap : 0.1;
+        if (prefRowGap) prefRowGap.value = cfg.row_gap !== undefined ? cfg.row_gap : 0.1;
+        if (prefMarginTop) prefMarginTop.value = cfg.margin_top !== undefined ? cfg.margin_top : 8.0;
+        if (prefMarginLeft) prefMarginLeft.value = cfg.margin_left !== undefined ? cfg.margin_left : 6.0;
+
+        // Theme & Background / Border
+        if (desLabelBgColor) desLabelBgColor.value = cfg.label_bg_color || "#ffffff";
+        if (desLabelBorderStyle) {
+            desLabelBorderStyle.value = cfg.label_border_style || "none";
+            if (groupLabelBorderColor) {
+                groupLabelBorderColor.style.display = (cfg.label_border_style && cfg.label_border_style !== "none") ? "flex" : "none";
+            }
+        }
+        if (desLabelBorderColor) desLabelBorderColor.value = cfg.label_border_color || "#000000";
+
+        // Bar Style & Colors
+        if (desBarStyle) {
+            desBarStyle.value = cfg.bar_style || (cfg.header_black_bar === false ? "plain" : "filled");
+            if (rowBarBgColor) {
+                rowBarBgColor.style.display = (desBarStyle.value === "plain") ? "none" : "flex";
+            }
+        }
+        if (desBarBgColor) desBarBgColor.value = cfg.bar_bg_color || "#000000";
+        if (desBarTextColor) desBarTextColor.value = cfg.bar_text_color || "#ffffff";
+        if (desBarRadius) desBarRadius.value = cfg.bar_border_radius !== undefined ? String(cfg.bar_border_radius) : "1.0";
+
+        // Font Family & Fiber
+        if (desFontFamily && cfg.font_family) desFontFamily.value = cfg.font_family;
+        if (desUseFiberAbbr) desUseFiberAbbr.checked = !!cfg.use_fiber_abbreviations;
+
+        // 1. Logo & Company
+        if (desLogoVisible) desLogoVisible.checked = cfg.logo_visible !== false;
+        if (desLogoHeight) {
+            desLogoHeight.value = cfg.logo_height || 6.0;
+            if (valLogoHeight) valLogoHeight.textContent = (cfg.logo_height || 6.0) + "mm";
+        }
+        if (desLogoAlign) desLogoAlign.value = cfg.logo_align || "left";
+        if (desShowCompany) desShowCompany.checked = cfg.show_company !== false;
+        if (desFontCompany) {
+            const compSize = cfg.font_size_company !== undefined ? cfg.font_size_company : 8.5;
+            desFontCompany.value = compSize;
+            if (valFontCompany) valFontCompany.textContent = compSize + "pt";
+        }
+        if (desAlignCompany) desAlignCompany.value = cfg.align_company || "right";
+
+        // 2. Kalite Adı
+        if (desShowQualityName) desShowQualityName.checked = cfg.show_quality_name !== false;
+        if (desFontQualityName) {
+            const qNameSize = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 7.5;
+            desFontQualityName.value = qNameSize;
+            if (valFontQualityName) valFontQualityName.textContent = qNameSize + "pt";
+        }
+        if (desAlignQualityName) desAlignQualityName.value = cfg.align_quality_name || "center";
+        if (desPrefixQualityName) desPrefixQualityName.value = cfg.prefix_quality_name || "";
+
+        // 3. Varyant & Kalite Kodu Barı
+        if (desShowQualityCode) desShowQualityCode.checked = cfg.show_quality_code !== false;
+        if (desFontHeader) {
+            const headSize = cfg.font_size_header !== undefined ? cfg.font_size_header : 8.5;
+            desFontHeader.value = headSize;
+            if (valFontHeader) valFontHeader.textContent = headSize + "pt";
+        }
+        if (desAlignQualityCode) desAlignQualityCode.value = cfg.align_quality_code || "center";
+        if (desPrefixQualityCode) desPrefixQualityCode.value = cfg.prefix_quality_code || "";
+
+        // 4. Karışım
+        if (desShowComp) desShowComp.checked = cfg.show_composition !== false;
+        if (desFontComp) {
+            const compTxtSize = cfg.font_size_composition !== undefined ? cfg.font_size_composition : 7.5;
+            desFontComp.value = compTxtSize;
+            if (valFontComp) valFontComp.textContent = compTxtSize + "pt";
+        }
+        if (desAlignComp) desAlignComp.value = cfg.align_composition || "left";
+        if (desPrefixComposition) desPrefixComposition.value = cfg.prefix_composition || "";
+
+        // 5. Gramaj
+        if (desShowWeight) desShowWeight.checked = cfg.show_weight !== false;
+        if (desFontWeight) {
+            const weightSize = cfg.font_size_weight !== undefined ? cfg.font_size_weight : 7.5;
+            desFontWeight.value = weightSize;
+            if (valFontWeight) valFontWeight.textContent = weightSize + "pt";
+        }
+        if (desAlignWeight) desAlignWeight.value = cfg.align_weight || "left";
+        if (desPrefixWeight) desPrefixWeight.value = cfg.prefix_weight || "";
+
+        // 6. Barcode
+        if (desBarcodeVisible) desBarcodeVisible.checked = cfg.barcode_visible !== false;
+        if (desBarcodeHeight) {
+            desBarcodeHeight.value = cfg.barcode_height || 8.0;
+            if (valBarcodeHeight) valBarcodeHeight.textContent = (cfg.barcode_height || 8.0) + "mm";
+        }
+
+        // Reorder Modular DOM Cards
+        if (cfg.element_order && Array.isArray(cfg.element_order)) {
+            reorderModularCardsInDOM(cfg.element_order);
+        }
+
+        // Internal Code Generator Settings
+        if (codeTypeLetters && codeTypeNumbers) {
+            if (cfg.code_prefix_type === "numbers_only") {
+                codeTypeNumbers.checked = true;
+            } else {
+                codeTypeLetters.checked = true;
+            }
+        }
+        if (codePrefixText) codePrefixText.value = cfg.code_prefix_text || "ELT";
+        if (codeSeparator) codeSeparator.value = cfg.code_separator !== undefined ? cfg.code_separator : "";
+        if (codeDigits) codeDigits.value = cfg.code_digits !== undefined ? String(cfg.code_digits) : "7";
+        if (codeStartNumber) codeStartNumber.value = cfg.code_start_number !== undefined ? cfg.code_start_number : 1;
+        updateCodePreview();
+
+        renderDesignerPreview();
+    }
+
     function getDesignerCurrentState() {
-        const selectedTemplate = document.querySelector('input[name="designer-template"]:checked')?.value || currentDesignConfig.default_template;
         const selectedLogoUrl = desLogoSelect ? desLogoSelect.value : currentDesignConfig.active_logo_url;
         const selectedFontFamily = desFontFamily ? desFontFamily.value : currentDesignConfig.font_family;
+        const currentOrder = getModularElementsOrderFromDOM();
 
         return {
-            default_template: selectedTemplate,
+            default_template: currentDesignConfig.default_template || "option-b",
             printer_type: prefPrinterType ? prefPrinterType.value : currentDesignConfig.printer_type,
             label_width: parseNum(prefLabelWidth?.value, currentDesignConfig.label_width),
             label_height: parseNum(prefLabelHeight?.value, currentDesignConfig.label_height),
@@ -1840,32 +2125,183 @@ document.addEventListener("DOMContentLoaded", () => {
             row_gap: parseNum(prefRowGap?.value, currentDesignConfig.row_gap),
             margin_top: parseNum(prefMarginTop?.value, currentDesignConfig.margin_top),
             margin_left: parseNum(prefMarginLeft?.value, currentDesignConfig.margin_left),
+            
+            // Theme Colors & Borders
+            label_bg_color: desLabelBgColor ? desLabelBgColor.value : (currentDesignConfig.label_bg_color || "#ffffff"),
+            label_border_style: desLabelBorderStyle ? desLabelBorderStyle.value : (currentDesignConfig.label_border_style || "none"),
+            label_border_color: desLabelBorderColor ? desLabelBorderColor.value : (currentDesignConfig.label_border_color || "#000000"),
+            
+            // Bar style & Colors
+            bar_style: desBarStyle ? desBarStyle.value : (currentDesignConfig.bar_style || "filled"),
+            bar_bg_color: desBarBgColor ? desBarBgColor.value : (currentDesignConfig.bar_bg_color || "#000000"),
+            bar_text_color: desBarTextColor ? desBarTextColor.value : (currentDesignConfig.bar_text_color || "#ffffff"),
+            bar_border_radius: desBarRadius ? desBarRadius.value : (currentDesignConfig.bar_border_radius || "1.0"),
+            header_black_bar: (desBarStyle?.value === "filled" && desBarBgColor?.value === "#000000"),
+
+            // Modular Element Order
+            element_order: currentOrder,
+
+            // Prefixes
+            prefix_quality_name: desPrefixQualityName ? desPrefixQualityName.value.trim() : "",
+            prefix_quality_code: desPrefixQualityCode ? desPrefixQualityCode.value.trim() : "",
+            prefix_composition: desPrefixComposition ? desPrefixComposition.value.trim() : "",
+            prefix_weight: desPrefixWeight ? desPrefixWeight.value.trim() : "",
+
+            // Element settings
             logo_visible: desLogoVisible ? desLogoVisible.checked : currentDesignConfig.logo_visible,
             logo_height: parseNum(desLogoHeight?.value, currentDesignConfig.logo_height),
             logo_align: desLogoAlign ? desLogoAlign.value : currentDesignConfig.logo_align,
             active_logo_url: selectedLogoUrl || "/logo.png",
             font_family: selectedFontFamily || "'Outfit', sans-serif",
             use_fiber_abbreviations: desUseFiberAbbr ? desUseFiberAbbr.checked : currentDesignConfig.use_fiber_abbreviations,
-            header_black_bar: desHeaderBlackBar ? desHeaderBlackBar.checked : currentDesignConfig.header_black_bar,
+            
             font_size_header: parseNum(desFontHeader?.value, currentDesignConfig.font_size_header),
             font_size_company: parseNum(desFontCompany?.value, currentDesignConfig.font_size_company),
             font_size_quality_name: parseNum(desFontQualityName?.value, currentDesignConfig.font_size_quality_name),
             font_size_composition: parseNum(desFontComp?.value, currentDesignConfig.font_size_composition),
             font_size_weight: parseNum(desFontWeight?.value, currentDesignConfig.font_size_weight),
             font_size_body: parseNum(desFontComp?.value, currentDesignConfig.font_size_body),
+            
             show_company: desShowCompany ? desShowCompany.checked : currentDesignConfig.show_company,
             show_quality_name: desShowQualityName ? desShowQualityName.checked : currentDesignConfig.show_quality_name,
             show_quality_code: desShowQualityCode ? desShowQualityCode.checked : currentDesignConfig.show_quality_code,
             show_composition: desShowComp ? desShowComp.checked : currentDesignConfig.show_composition,
             show_weight: desShowWeight ? desShowWeight.checked : currentDesignConfig.show_weight,
+            
             align_company: desAlignCompany ? desAlignCompany.value : currentDesignConfig.align_company,
             align_quality_name: desAlignQualityName ? desAlignQualityName.value : currentDesignConfig.align_quality_name,
             align_quality_code: desAlignQualityCode ? desAlignQualityCode.value : currentDesignConfig.align_quality_code,
             align_composition: desAlignComp ? desAlignComp.value : currentDesignConfig.align_composition,
             align_weight: desAlignWeight ? desAlignWeight.value : currentDesignConfig.align_weight,
+            
             barcode_visible: desBarcodeVisible ? desBarcodeVisible.checked : currentDesignConfig.barcode_visible,
             barcode_height: parseNum(desBarcodeHeight?.value, currentDesignConfig.barcode_height)
         };
+    }
+
+    // Unified Modular Label Inner HTML Generator
+    function generateModularLabelInnerHtml(data, cfg, barcodeId = "live") {
+        const order = cfg.element_order || ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"];
+        const compClean = formatCompositionDisplay(data.composition, cfg.use_fiber_abbreviations);
+        const logoSrc = cfg.active_logo_url || "/logo.png";
+        const fontFamily = cfg.font_family || "'Outfit', sans-serif";
+
+        const fCompany = cfg.font_size_company !== undefined ? cfg.font_size_company : 8.5;
+        const fQualityName = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 7.5;
+        const fComp = cfg.font_size_composition !== undefined ? cfg.font_size_composition : 7.5;
+        const fWeight = cfg.font_size_weight !== undefined ? cfg.font_size_weight : 7.5;
+        const fHeader = cfg.font_size_header !== undefined ? cfg.font_size_header : 8.5;
+
+        // Theme Background & Border
+        const labelBg = cfg.label_bg_color || "#ffffff";
+        const borderStyle = cfg.label_border_style || "none";
+        const borderColor = cfg.label_border_color || "#000000";
+        let labelBorderCSS = "";
+        if (borderStyle !== "none") {
+            labelBorderCSS = `border: ${borderStyle === "double" ? "3px double" : "1px " + borderStyle} ${borderColor};`;
+        }
+
+        // Bar / Code Line styling
+        const barStyle = cfg.bar_style || "filled";
+        const barBg = cfg.bar_bg_color || "#000000";
+        const barText = cfg.bar_text_color || "#ffffff";
+        const barRadius = (cfg.bar_border_radius !== undefined ? cfg.bar_border_radius : 1.0) + "mm";
+
+        let codeBarCSS = "";
+        if (barStyle === "filled") {
+            codeBarCSS = `background-color: ${barBg} !important; color: ${barText} !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; padding: 1.5mm 3mm; border-radius: ${barRadius};`;
+        } else if (barStyle === "outline") {
+            codeBarCSS = `background-color: transparent !important; color: #000000 !important; border: 1.5px solid ${barBg}; padding: 1.2mm 3mm; border-radius: ${barRadius};`;
+        } else {
+            codeBarCSS = `background-color: transparent !important; color: #000000 !important; padding: 0.8mm 0;`;
+        }
+
+        const blocks = {};
+
+        // 1. Logo Row
+        if (cfg.logo_visible) {
+            let alignStyle = "justify-content: flex-start;";
+            if (cfg.logo_align === "center") alignStyle = "justify-content: center;";
+            if (cfg.logo_align === "right") alignStyle = "justify-content: flex-end;";
+
+            blocks.logo_row = `
+                <div class="print-logo-row" style="display: flex; align-items: center; ${alignStyle} margin-bottom: 1mm; width: 100%;">
+                    <img src="${logoSrc}" class="print-logo" style="height: ${cfg.logo_height}mm; width: auto; max-width: 32mm; object-fit: contain; display: block;" alt="LOGO">
+                    ${cfg.show_company ? `<div class="print-company" style="font-size: ${fCompany}pt; font-weight: 700; text-align: ${cfg.align_company || 'right'}; flex-grow: 1; margin-left: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000;">${toAppUpper(data.company_name) || "-"}</div>` : ''}
+                </div>
+            `;
+        }
+
+        // 2. Quality Name
+        if (cfg.show_quality_name !== false) {
+            const prefix = cfg.prefix_quality_name ? `<span style="font-weight: 700; margin-right: 3px;">${cfg.prefix_quality_name}</span>` : "";
+            blocks.quality_name = `
+                <div class="print-name" style="font-size: ${fQualityName}pt; font-weight: 600; text-align: ${cfg.align_quality_name || 'center'}; width: 100%; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${prefix}${toAppUpper(data.quality_name) || "-"}
+                </div>
+            `;
+        }
+
+        // 3. Code Bar
+        if (cfg.show_quality_code !== false) {
+            let combinedCode = "";
+            if (cfg.default_template === "option-a") {
+                combinedCode = toAppUpper(data.internal_code || "ELT0000001");
+            } else {
+                const qCode = toAppUpper(data.quality_code);
+                const dCode = toAppUpper(data.design_code);
+                combinedCode = (qCode && dCode) ? `${qCode}/${dCode}` : (qCode || dCode || "-");
+            }
+            const prefix = cfg.prefix_quality_code ? `<span style="font-weight: 700; margin-right: 3px;">${cfg.prefix_quality_code}</span>` : "";
+            blocks.code_bar = `
+                <div class="print-code-line" style="${codeBarCSS} text-align: ${cfg.align_quality_code || 'center'}; font-weight: 700; font-size: ${fHeader}pt; margin: 1mm 0; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${prefix}${combinedCode}
+                </div>
+            `;
+        }
+
+        // 4. Composition
+        if (cfg.show_composition) {
+            const prefix = cfg.prefix_composition ? `<strong class="print-title" style="margin-right: 3px;">${cfg.prefix_composition}</strong>` : "";
+            blocks.composition = `
+                <div class="print-comp" style="font-size: ${fComp}pt; font-weight: 500; text-align: ${cfg.align_composition || 'left'}; width: 100%; color: #000; line-height: 1.2; word-break: break-word;">
+                    ${prefix}<span class="print-value">${compClean || "-"}</span>
+                </div>
+            `;
+        }
+
+        // 5. Weight
+        if (cfg.show_weight) {
+            const prefix = cfg.prefix_weight ? `<strong class="print-title" style="margin-right: 3px;">${cfg.prefix_weight}</strong>` : "";
+            blocks.weight = `
+                <div class="print-weight" style="font-size: ${fWeight}pt; font-weight: 700; text-align: ${cfg.align_weight || 'left'}; width: 100%; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${prefix}<span class="print-value">${toAppUpper(data.weight) || "-"}</span>
+                </div>
+            `;
+        }
+
+        // 6. Barcode
+        if (cfg.barcode_visible) {
+            blocks.barcode = `
+                <div class="print-barcode-container" style="display: flex; justify-content: center; width: 100%; margin-top: auto; padding-top: 0.5mm;">
+                    <svg class="print-barcode-svg" id="barcode-${barcodeId}" style="max-width: 90%; height: ${cfg.barcode_height}mm;"></svg>
+                </div>
+            `;
+        }
+
+        // Assemble HTML based on element order
+        let assembledHtml = "";
+        order.forEach(elemId => {
+            if (blocks[elemId]) {
+                assembledHtml += blocks[elemId];
+            }
+        });
+
+        return `
+            <div class="print-label" style="font-family: ${fontFamily}; width: 100%; height: 100%; padding: 2.5mm 3.5mm; background-color: ${labelBg} !important; ${labelBorderCSS} box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;">
+                ${assembledHtml}
+            </div>
+        `;
     }
 
     function renderDesignerPreview() {
@@ -1877,91 +2313,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const w = cfg.label_width || 63.5;
         const h = cfg.label_height || 46.6;
 
-        // Set dimensions on dashed boundary
         dashedLabelBoundary.style.width = w + "mm";
         dashedLabelBoundary.style.height = h + "mm";
         if (previewDimBadge) previewDimBadge.textContent = `${w}mm × ${h}mm`;
 
-        // Render HTML inside preview
         const data = sampleLabelData;
-        const compClean = formatCompositionDisplay(data.composition, cfg.use_fiber_abbreviations);
-        const logoSrc = cfg.active_logo_url || "/logo.png";
-        const fontFamily = cfg.font_family || "'Outfit', sans-serif";
+        designerLiveLabel.innerHTML = generateModularLabelInnerHtml(data, cfg, "designer-live");
 
-        let logoHtml = "";
-        if (cfg.logo_visible) {
-            let alignStyle = "justify-content: flex-start;";
-            if (cfg.logo_align === "center") alignStyle = "justify-content: center;";
-            if (cfg.logo_align === "right") alignStyle = "justify-content: flex-end;";
-
-            logoHtml = `
-                <div class="print-logo-row" style="display: flex; align-items: center; ${alignStyle} margin-bottom: 1mm;">
-                    <img src="${logoSrc}" style="height: ${cfg.logo_height}mm; width: auto; max-width: 32mm; object-fit: contain;" alt="LOGO">
-                    ${cfg.default_template === "option-b" && cfg.show_company ? `<div class="print-company" style="font-size: ${cfg.font_size_company}pt; font-weight: 700; text-align: ${cfg.align_company || 'right'}; flex-grow: 1; margin-left: 5px;">${data.company_name}</div>` : ''}
-                </div>
-            `;
-        }
-
-        let barcodeHtml = "";
-        if (cfg.barcode_visible) {
-            barcodeHtml = `
-                <div class="print-barcode-container" style="display: flex; justify-content: center; margin-top: auto; padding-top: 0.5mm;">
-                    <svg id="designer-live-barcode" style="max-width: 90%; height: ${cfg.barcode_height}mm;"></svg>
-                </div>
-            `;
-        }
-
-        let bodyHtml = "";
-        if (cfg.default_template === "option-a") {
-            const justifyCode = toFlexJustify(cfg.align_quality_code || "left");
-            const justifyComp = toFlexJustify(cfg.align_composition || "left");
-            const justifyWeight = toFlexJustify(cfg.align_weight || "left");
-
-            bodyHtml = `
-                <div class="print-label print-option-a" style="font-family: ${fontFamily}; width: 100%; height: 100%; padding: 2.5mm 3.5mm; display: flex; flex-direction: column; justify-content: space-between;">
-                    ${logoHtml}
-                    ${cfg.show_quality_code !== false ? `
-                    <div class="print-row" style="display: flex; justify-content: ${justifyCode}; gap: 1.5mm; text-align: ${cfg.align_quality_code || 'left'};">
-                        <span class="print-title" style="font-size: ${cfg.font_size_header}pt; font-weight: 700;">QUALITY:</span>
-                        <span class="print-value" style="font-size: ${cfg.font_size_header}pt; font-weight: 700;">${data.internal_code}</span>
-                    </div>` : ''}
-                    ${cfg.show_composition ? `
-                    <div class="print-row" style="display: flex; justify-content: ${justifyComp}; gap: 1.5mm; text-align: ${cfg.align_composition || 'left'};">
-                        <span class="print-title" style="font-size: ${cfg.font_size_composition}pt; font-weight: 700;">COMP.:</span>
-                        <span class="print-value" style="font-size: ${cfg.font_size_composition}pt;">${compClean}</span>
-                    </div>` : ''}
-                    ${cfg.show_weight ? `
-                    <div class="print-row" style="display: flex; justify-content: ${justifyWeight}; gap: 1.5mm; text-align: ${cfg.align_weight || 'left'};">
-                        <span class="print-title" style="font-size: ${cfg.font_size_weight}pt; font-weight: 700;">WEIGHT:</span>
-                        <span class="print-value" style="font-size: ${cfg.font_size_weight}pt; font-weight: 700;">${data.weight}</span>
-                    </div>` : ''}
-                    ${barcodeHtml}
-                </div>
-            `;
-        } else {
-            const combinedCode = `${data.quality_code}/${data.design_code}`;
-            const headerBarStyle = cfg.header_black_bar 
-                ? `background-color: #000000 !important; color: #ffffff !important; padding: 1.5mm 0;`
-                : `background: #e2e8f0; color: #000000; padding: 1mm 0;`;
-
-            bodyHtml = `
-                <div class="print-label print-option-b" style="font-family: ${fontFamily}; width: 100%; height: 100%; padding: 2.5mm 3.5mm; display: flex; flex-direction: column; justify-content: space-between;">
-                    ${logoHtml}
-                    ${cfg.show_quality_name !== false ? `<div class="print-name" style="font-size: ${cfg.font_size_quality_name}pt; font-weight: 600; text-align: ${cfg.align_quality_name || 'center'};">${data.quality_name}</div>` : ''}
-                    ${cfg.show_quality_code !== false ? `<div class="print-code-line" style="${headerBarStyle} text-align: ${cfg.align_quality_code || 'center'}; font-weight: 700; font-size: ${cfg.font_size_header}pt; margin: 1mm 0;">${combinedCode}</div>` : ''}
-                    ${cfg.show_composition ? `<div class="print-comp" style="font-size: ${cfg.font_size_composition}pt; font-weight: 500; text-align: ${cfg.align_composition || 'left'};">${compClean}</div>` : ''}
-                    ${cfg.show_weight ? `<div class="print-weight" style="font-size: ${cfg.font_size_weight}pt; font-weight: 700; text-align: ${cfg.align_weight || 'left'};">${data.weight}</div>` : ''}
-                    ${barcodeHtml}
-                </div>
-            `;
-        }
-
-        designerLiveLabel.innerHTML = bodyHtml;
-
-        // Render Barcode
+        // Render live barcode
         if (cfg.barcode_visible) {
             setTimeout(() => {
-                const svgEl = document.getElementById("designer-live-barcode");
+                const svgEl = document.getElementById("barcode-designer-live");
                 if (svgEl && window.JsBarcode) {
                     try {
                         JsBarcode(svgEl, data.internal_code, {
@@ -1977,10 +2339,83 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Studio Event Listeners for Live Instant Updates
-    if (desOptA) desOptA.addEventListener("change", () => { renderDesignerPreview(); });
-    if (desOptB) desOptB.addEventListener("change", () => { renderDesignerPreview(); });
-    
+    // Modular Move Up & Move Down Event Handlers
+    if (modularElementsList) {
+        modularElementsList.addEventListener("click", (e) => {
+            const upBtn = e.target.closest(".btn-move-up");
+            const downBtn = e.target.closest(".btn-move-down");
+            if (upBtn) {
+                const card = upBtn.closest(".modular-element-card");
+                if (card && card.previousElementSibling) {
+                    modularElementsList.insertBefore(card, card.previousElementSibling);
+                    renderDesignerPreview();
+                }
+            } else if (downBtn) {
+                const card = downBtn.closest(".modular-element-card");
+                if (card && card.nextElementSibling) {
+                    modularElementsList.insertBefore(card.nextElementSibling, card);
+                    renderDesignerPreview();
+                }
+            }
+        });
+    }
+
+    // Presets Button Click Listener
+    document.querySelectorAll(".preset-chip-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".preset-chip-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+
+            const presetKey = btn.dataset.preset;
+            if (PRESETS_CONFIG[presetKey]) {
+                const p = PRESETS_CONFIG[presetKey];
+                Object.assign(currentDesignConfig, p);
+                applyConfigToUI(currentDesignConfig);
+                showToast("Şablon yüklendi: " + btn.textContent.trim(), 1000);
+            }
+        });
+    });
+
+    // Color Swatch Buttons Click Listener
+    document.querySelectorAll(".color-swatch-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const targetId = btn.dataset.target;
+            const color = btn.dataset.color;
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                targetEl.value = color;
+                targetEl.dispatchEvent(new Event("input", { bubbles: true }));
+                targetEl.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+        });
+    });
+
+    // Label Theme & Bar Controls Listeners
+    if (desLabelBgColor) desLabelBgColor.addEventListener("input", renderDesignerPreview);
+    if (desLabelBorderStyle) {
+        desLabelBorderStyle.addEventListener("change", (e) => {
+            if (groupLabelBorderColor) groupLabelBorderColor.style.display = e.target.value !== "none" ? "flex" : "none";
+            renderDesignerPreview();
+        });
+    }
+    if (desLabelBorderColor) desLabelBorderColor.addEventListener("input", renderDesignerPreview);
+
+    if (desBarStyle) {
+        desBarStyle.addEventListener("change", (e) => {
+            if (rowBarBgColor) rowBarBgColor.style.display = e.target.value === "plain" ? "none" : "flex";
+            renderDesignerPreview();
+        });
+    }
+    if (desBarBgColor) desBarBgColor.addEventListener("input", renderDesignerPreview);
+    if (desBarTextColor) desBarTextColor.addEventListener("input", renderDesignerPreview);
+    if (desBarRadius) desBarRadius.addEventListener("change", renderDesignerPreview);
+
+    // Prefixes Listeners
+    [desPrefixQualityName, desPrefixQualityCode, desPrefixComposition, desPrefixWeight].forEach(input => {
+        if (input) input.addEventListener("input", renderDesignerPreview);
+    });
+
+    // Logo & Element Controls Listeners
     if (desLogoVisible) {
         desLogoVisible.addEventListener("change", (e) => {
             if (logoControlsContent) logoControlsContent.style.opacity = e.target.checked ? "1" : "0.4";
@@ -1995,11 +2430,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (desLogoAlign) desLogoAlign.addEventListener("change", renderDesignerPreview);
 
-    // Font Family & Fiber Abbreviations
+    // Font Family & Fiber
     if (desFontFamily) desFontFamily.addEventListener("change", renderDesignerPreview);
     if (desUseFiberAbbr) desUseFiberAbbr.addEventListener("change", renderDesignerPreview);
 
-    // 1. Firma Adı
+    // 1. Company
     if (desShowCompany) desShowCompany.addEventListener("change", renderDesignerPreview);
     if (desFontCompany) {
         desFontCompany.addEventListener("input", (e) => {
@@ -2009,7 +2444,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (desAlignCompany) desAlignCompany.addEventListener("change", renderDesignerPreview);
 
-    // 2. Kalite Adı
+    // 2. Quality Name
     if (desShowQualityName) desShowQualityName.addEventListener("change", renderDesignerPreview);
     if (desFontQualityName) {
         desFontQualityName.addEventListener("input", (e) => {
@@ -2019,9 +2454,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (desAlignQualityName) desAlignQualityName.addEventListener("change", renderDesignerPreview);
 
-    // 3. Varyant ve Renk Kodu
+    // 3. Quality Code Bar
     if (desShowQualityCode) desShowQualityCode.addEventListener("change", renderDesignerPreview);
-    if (desHeaderBlackBar) desHeaderBlackBar.addEventListener("change", renderDesignerPreview);
     if (desFontHeader) {
         desFontHeader.addEventListener("input", (e) => {
             if (valFontHeader) valFontHeader.textContent = e.target.value + "pt";
@@ -2030,7 +2464,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (desAlignQualityCode) desAlignQualityCode.addEventListener("change", renderDesignerPreview);
 
-    // 4. Karışım
+    // 4. Composition
     if (desShowComp) desShowComp.addEventListener("change", renderDesignerPreview);
     if (desFontComp) {
         desFontComp.addEventListener("input", (e) => {
@@ -2040,7 +2474,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (desAlignComp) desAlignComp.addEventListener("change", renderDesignerPreview);
 
-    // 5. Gramaj
+    // 5. Weight
     if (desShowWeight) desShowWeight.addEventListener("change", renderDesignerPreview);
     if (desFontWeight) {
         desFontWeight.addEventListener("input", (e) => {
@@ -2050,7 +2484,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (desAlignWeight) desAlignWeight.addEventListener("change", renderDesignerPreview);
 
-    // Barcode
+    // 6. Barcode
     if (desBarcodeVisible) {
         desBarcodeVisible.addEventListener("change", (e) => {
             if (barcodeControlsContent) barcodeControlsContent.style.opacity = e.target.checked ? "1" : "0.4";
@@ -2064,21 +2498,16 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Event listeners for paper dimensions
+    // Dimensions
     [prefLabelWidth, prefLabelHeight, prefColGap, prefRowGap, prefMarginTop, prefMarginLeft].forEach(input => {
         if (input) {
-            input.addEventListener("input", () => {
-                renderDesignerPreview();
-            });
+            input.addEventListener("input", renderDesignerPreview);
         }
     });
+
     if (prefDefaultTemplate) {
         prefDefaultTemplate.addEventListener("change", (e) => {
-            if (e.target.value === "option-b") {
-                if (desOptB) desOptB.checked = true;
-            } else {
-                if (desOptA) desOptA.checked = true;
-            }
+            currentDesignConfig.default_template = e.target.value;
             renderDesignerPreview();
         });
     }
@@ -2097,7 +2526,7 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .then(res => res.json())
         .then(() => {
-            showToast("Tasarım ayarları başarıyla kaydedildi!", 1200);
+            showToast("Tüm tasarım ayarları ve şablon başarıyla kaydedildi!", 1500);
             loadSettings();
         })
         .catch(err => {
@@ -2108,9 +2537,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (btnSaveVisualDesign) btnSaveVisualDesign.addEventListener("click", saveVisualDesignToAPI);
 
     if (btnSavePrintPrefs) {
-        btnSavePrintPrefs.addEventListener("click", () => {
-            saveVisualDesignToAPI();
-        });
+        btnSavePrintPrefs.addEventListener("click", saveVisualDesignToAPI);
     }
     
     btnSaveSettings.addEventListener("click", () => {
@@ -2489,89 +2916,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Dynamic Label Printing HTML Builder based on Saved Design Configuration
     function createSingleLabelHTML(data, option, barcodeId) {
-        const cfg = currentDesignConfig;
-        const compClean = formatCompositionDisplay(data.composition, cfg.use_fiber_abbreviations);
-        const code = toAppUpper(data.internal_code || "ELT0000001");
-        const logoSrc = cfg.active_logo_url || "/logo.png";
-        const fontFamily = cfg.font_family || "'Outfit', sans-serif";
-        
-        const fCompany = cfg.font_size_company !== undefined ? cfg.font_size_company : 8.5;
-        const fQualityName = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 7.5;
-        const fComp = cfg.font_size_composition !== undefined ? cfg.font_size_composition : 7.5;
-        const fWeight = cfg.font_size_weight !== undefined ? cfg.font_size_weight : 7.5;
-        const fHeader = cfg.font_size_header !== undefined ? cfg.font_size_header : 8.5;
-
-        let logoHtml = "";
-        if (cfg.logo_visible) {
-            let alignStyle = "justify-content: flex-start;";
-            if (cfg.logo_align === "center") alignStyle = "justify-content: center;";
-            if (cfg.logo_align === "right") alignStyle = "justify-content: flex-end;";
-
-            logoHtml = `
-                <div class="print-logo-row" style="display: flex; align-items: center; ${alignStyle} margin-bottom: 1.5mm;">
-                    <img src="${logoSrc}" class="print-logo" style="height: ${cfg.logo_height}mm; width: auto; max-width: 32mm; object-fit: contain; display: block;" alt="FabricTag">
-                    ${option === "option-b" && cfg.show_company ? `<div class="print-company" style="font-size: ${fCompany}pt; font-weight: 700; text-align: ${cfg.align_company || 'right'}; flex-grow: 1; white-space: nowrap; overflow: hidden; margin-left: 5px;">${toAppUpper(data.company_name) || "-"}</div>` : ''}
-                </div>
-            `;
-        }
-
-        let barcodeHtml = "";
-        if (cfg.barcode_visible) {
-            barcodeHtml = `
-                <div class="print-barcode-container" style="display: flex; justify-content: center; margin-top: auto; padding-top: 0.5mm;">
-                    <svg class="print-barcode-svg" id="barcode-${barcodeId}" style="max-width: 90%; height: ${cfg.barcode_height}mm;"></svg>
-                </div>
-            `;
-        }
-        
-        if (option === "option-a") {
-            const justifyCode = toFlexJustify(cfg.align_quality_code || "left");
-            const justifyComp = toFlexJustify(cfg.align_composition || "left");
-            const justifyWeight = toFlexJustify(cfg.align_weight || "left");
-
-            return `
-                <div class="print-label print-option-a" style="font-family: ${fontFamily}; font-size: ${fComp}pt;">
-                    ${logoHtml}
-                    ${cfg.show_quality_code !== false ? `
-                    <div class="print-row" style="display: flex; justify-content: ${justifyCode}; gap: 1.5mm; text-align: ${cfg.align_quality_code || 'left'};">
-                        <span class="print-title" style="font-size: ${fHeader}pt; font-weight: 700; color: #000;">QUALITY:</span>
-                        <span class="print-value" style="font-size: ${fHeader}pt; font-weight: 700; color: #000;">${code}</span>
-                    </div>` : ''}
-                    ${cfg.show_composition ? `
-                    <div class="print-row" style="display: flex; justify-content: ${justifyComp}; gap: 1.5mm; text-align: ${cfg.align_composition || 'left'};">
-                        <span class="print-title" style="font-size: ${fComp}pt; font-weight: 700; color: #000;">COMP.:</span>
-                        <span class="print-value" style="font-size: ${fComp}pt; font-weight: 600; color: #000;">${compClean || "-"}</span>
-                    </div>` : ''}
-                    ${cfg.show_weight ? `
-                    <div class="print-row" style="display: flex; justify-content: ${justifyWeight}; gap: 1.5mm; text-align: ${cfg.align_weight || 'left'};">
-                        <span class="print-title" style="font-size: ${fWeight}pt; font-weight: 700; color: #000;">WEIGHT:</span>
-                        <span class="print-value" style="font-size: ${fWeight}pt; font-weight: 700; color: #000;">${toAppUpper(data.weight) || "-"}</span>
-                    </div>` : ''}
-                    ${barcodeHtml}
-                </div>
-            `;
-        } else {
-            const qCode = toAppUpper(data.quality_code);
-            const dCode = toAppUpper(data.design_code);
-            const combinedCode = (qCode && dCode) 
-                ? `${qCode}/${dCode}`
-                : (qCode || dCode || "-");
-                
-            const headerBarStyle = cfg.header_black_bar
-                ? `background-color: #000000 !important; color: #ffffff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; padding: 1.5mm 0;`
-                : `background-color: #f1f5f9; color: #000000; padding: 1mm 0;`;
-
-            return `
-                <div class="print-label print-option-b" style="font-family: ${fontFamily}; font-size: ${fComp}pt;">
-                    ${logoHtml}
-                    ${cfg.show_quality_name !== false ? `<div class="print-name" style="font-size: ${fQualityName}pt; font-weight: 600; text-align: ${cfg.align_quality_name || 'center'};">${toAppUpper(data.quality_name) || "-"}</div>` : ''}
-                    ${cfg.show_quality_code !== false ? `<div class="print-code-line" style="${headerBarStyle} text-align: ${cfg.align_quality_code || 'center'}; font-weight: 700; font-size: ${fHeader}pt; margin: 1mm 0;">${combinedCode}</div>` : ''}
-                    ${cfg.show_composition ? `<div class="print-comp" style="font-size: ${fComp}pt; font-weight: 500; text-align: ${cfg.align_composition || 'left'};">${compClean || "-"}</div>` : ''}
-                    ${cfg.show_weight ? `<div class="print-weight" style="font-size: ${fWeight}pt; font-weight: 700; text-align: ${cfg.align_weight || 'left'};">${toAppUpper(data.weight) || "-"}</div>` : ''}
-                    ${barcodeHtml}
-                </div>
-            `;
-        }
+        const cfg = Object.assign({}, currentDesignConfig);
+        if (option) cfg.default_template = option;
+        return generateModularLabelInnerHtml(data, cfg, barcodeId);
     }
 
     // Opens Printable Document with Custom User Preferences (Argox Roll vs A4 Grid)

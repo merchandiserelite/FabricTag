@@ -436,69 +436,70 @@
 
                         <!-- Right: Interactive Controls -->
                         <div class="designer-controls-pane">
-                            <!-- 1. Template Selector -->
+                            <!-- 1. Quick Presets Bar -->
                             <div class="control-group-box">
-                                <label class="control-group-title"><i class="fa-solid fa-layer-group"></i> <span data-i18n="ctrl_template_type">Sablon Turu</span></label>
-                                <div class="radio-pill-group">
-                                    <label class="pill-label">
-                                        <input type="radio" name="designer-template" value="option-a" id="des-opt-a" checked>
-                                        <span data-i18n="opt_a_full">Secenek A (Gizli Kodlu)</span>
-                                    </label>
-                                    <label class="pill-label">
-                                        <input type="radio" name="designer-template" value="option-b" id="des-opt-b">
-                                        <span data-i18n="opt_b_full">Secenek B (Detayli Acik)</span>
-                                    </label>
+                                <label class="control-group-title"><i class="fa-solid fa-wand-magic-sparkles"></i> <span data-i18n="ctrl_presets_title">Hazir Tasarim Sablonlari & Renk Temalari</span></label>
+                                <div class="presets-grid">
+                                    <button type="button" class="preset-chip-btn active" data-preset="classic-black">
+                                        <span class="preset-dot" style="background: #000000;"></span>
+                                        <span>Klasik Siyah Bar</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="corporate-navy">
+                                        <span class="preset-dot" style="background: #1e3a8a;"></span>
+                                        <span>Kurumsal Lacivert</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="emerald-green">
+                                        <span class="preset-dot" style="background: #065f46;"></span>
+                                        <span>Zumrut Yesili</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="luxury-burgundy">
+                                        <span class="preset-dot" style="background: #991b1b;"></span>
+                                        <span>Bordo Luks</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="minimalist-white">
+                                        <span class="preset-dot" style="background: #f8fafc; border: 1px solid #94a3b8;"></span>
+                                        <span>Minimalist Beyaz</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="secret-code-a">
+                                        <span class="preset-dot" style="background: #6366f1;"></span>
+                                        <span>Gizli Kod (Op. A)</span>
+                                    </button>
                                 </div>
                             </div>
 
-                            <!-- 2. Logo Controls with Custom Logo Upload & Selector -->
+                            <!-- 2. Global Etiket Zemin & Cerceve Ayarlari -->
                             <div class="control-group-box">
-                                <div class="control-title-with-toggle">
-                                    <span class="control-group-title"><i class="fa-solid fa-image"></i> <span data-i18n="ctrl_logo_title">Sirket Logosu</span></span>
-                                    <label class="switch-toggle">
-                                        <input type="checkbox" id="des-logo-visible" checked>
-                                        <span class="slider-round"></span>
-                                    </label>
-                                </div>
-                                <div id="logo-controls-content">
-                                    <!-- Logo Selector Dropdown & Upload -->
-                                    <div style="margin-bottom: 10px;">
-                                        <label style="font-size: 0.8rem; font-weight: 600; color: #475569; display:block; margin-bottom:4px;" data-i18n="lbl_active_logo">Aktif Logo Secimi:</label>
-                                        <div style="display: flex; gap: 6px; align-items: center;">
-                                            <select id="des-logo-select" class="select-input-sm" style="flex: 1;">
-                                                <option value="/logo.png" data-i18n="opt_default_logo">Varsayilan FabricTag Logo</option>
-                                            </select>
-                                            <input type="file" id="logo-file-input" accept="image/png, image/jpeg, image/svg+xml, image/webp" style="display:none;">
-                                            <button type="button" class="btn btn-secondary" id="btn-upload-logo" style="padding: 6px 12px; font-size: 0.8rem; white-space: nowrap; font-weight: 600;">
-                                                <i class="fa-solid fa-cloud-arrow-up"></i> <span data-i18n="btn_upload_logo">Logo Yukle</span>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div class="control-slider-row">
-                                        <div class="slider-header">
-                                            <span data-i18n="lbl_logo_height">Logo Yuksekligi:</span>
-                                            <strong id="val-logo-height">6.0mm</strong>
-                                        </div>
-                                        <input type="range" id="des-logo-height" min="3" max="15" step="0.5" value="6.0" class="range-slider">
-                                    </div>
-                                    <div class="control-select-row" style="margin-top: 8px;">
-                                        <label data-i18n="lbl_logo_align">Logo Hizalama:</label>
-                                        <select id="des-logo-align" class="select-input-sm">
-                                            <option value="left" data-i18n="opt_align_left">Sol</option>
-                                            <option value="center" data-i18n="opt_align_center">Orta</option>
-                                            <option value="right" data-i18n="opt_align_right">Sag</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 3. Font Family & Field Font Sizes & Alignment -->
-                            <div class="control-group-box">
-                                <span class="control-group-title"><i class="fa-solid fa-font"></i> <span data-i18n="ctrl_font_sizes">Yazi Fontu & Alan Boyutlari</span></span>
+                                <span class="control-group-title"><i class="fa-solid fa-palette"></i> <span data-i18n="ctrl_theme_title">Etiket Zemini & Kenarlik Stili</span></span>
                                 
+                                <div class="modular-controls-row" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Etiket Zemin Rengi:</label>
+                                    <div class="color-picker-group">
+                                        <input type="color" id="des-label-bg-color" value="#ffffff" class="color-input-styled">
+                                        <div class="color-swatch-list">
+                                            <button type="button" class="color-swatch-btn" style="background: #ffffff;" data-target="des-label-bg-color" data-color="#ffffff" title="Beyaz"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #f8fafc;" data-target="des-label-bg-color" data-color="#f8fafc" title="Acik Gri"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #fffbeb;" data-target="des-label-bg-color" data-color="#fffbeb" title="Krem"></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="modular-controls-row" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Etiket Kenarligi:</label>
+                                    <select id="des-label-border-style" class="select-input-sm" style="width: 140px;">
+                                        <option value="none">Yok (Duz)</option>
+                                        <option value="solid">Ince Duz Cizgi</option>
+                                        <option value="dashed">Kesikli Cizgi</option>
+                                        <option value="double">Cift Cizgi</option>
+                                    </select>
+                                </div>
+
+                                <div class="modular-controls-row" id="group-label-border-color" style="margin-bottom: 8px; display: none;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Kenarlik Rengi:</label>
+                                    <input type="color" id="des-label-border-color" value="#000000" class="color-input-styled">
+                                </div>
+
                                 <!-- Font Family Selection Dropdown -->
-                                <div style="margin-bottom: 12px;">
+                                <div style="margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 8px;">
                                     <label style="font-size: 0.8rem; font-weight: 600; color: #475569; display:block; margin-bottom:4px;" data-i18n="lbl_font_family">Yazi Font Ailesi (Yazi Tipi):</label>
                                     <select id="des-font-family" class="select-input-sm">
                                         <option value="'Outfit', sans-serif" data-i18n="opt_font_outfit">Outfit (Modern & Temiz - Varsayilan)</option>
@@ -511,7 +512,7 @@
                                 </div>
 
                                 <!-- International Fiber Abbreviation Toggle -->
-                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; margin-bottom: 12px;">
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; margin-top: 8px;">
                                     <div class="control-title-with-toggle" style="margin-bottom: 2px;">
                                         <span style="font-size: 0.82rem; font-weight: 700; color: #334155;">
                                             <i class="fa-solid fa-globe"></i> <span data-i18n="ctrl_fiber_abbr_title">Uluslararasi Elyaf Kisaltmasi (ISO/BISFA)</span>
@@ -525,126 +526,279 @@
                                         Orn: Pamuk ➔ CO, Polyester ➔ PES, Elastan ➔ EA, Viskon ➔ CV
                                     </span>
                                 </div>
+                            </div>
 
-                                <!-- 1. Firma Adı (Company) -->
-                                <div class="field-control-item" style="border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 8px;">
-                                    <div class="control-title-with-toggle" style="margin-bottom: 4px;">
-                                        <label class="checkbox-pill" style="padding: 2px 6px; font-size: 0.8rem; border: none; background: transparent;">
-                                            <input type="checkbox" id="des-show-company" checked> <strong data-i18n="lbl_field_company">Firma Adi</strong>
-                                        </label>
-                                        <span style="font-size: 0.78rem; color: #4f46e5; font-weight: 700;" id="val-font-company">8.5pt</span>
-                                    </div>
-                                    <input type="range" id="des-font-company" min="5" max="14" step="0.5" value="8.5" class="range-slider">
-                                    <div class="control-select-row" style="margin-top: 6px;">
-                                        <label style="font-size: 0.75rem; color: #64748b;" data-i18n="lbl_align">Hizalama:</label>
-                                        <select id="des-align-company" class="select-input-sm">
-                                            <option value="left" data-i18n="opt_align_left">Sol</option>
-                                            <option value="center" data-i18n="opt_align_center">Orta</option>
-                                            <option value="right" data-i18n="opt_align_right" selected>Sag</option>
-                                        </select>
+                            <!-- 3. Vurgu Cubugu (Bar) Renk & Stil Ekipmanlari -->
+                            <div class="control-group-box">
+                                <span class="control-group-title"><i class="fa-solid fa-paintbrush"></i> <span data-i18n="ctrl_bar_style_title">Vurgu Cubugu (Varyant / Kod Satiri) Stili</span></span>
+                                
+                                <div class="modular-controls-row" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Cubuk Formati:</label>
+                                    <select id="des-bar-style" class="select-input-sm" style="width: 140px;">
+                                        <option value="filled">Dolu Renkli Zemin</option>
+                                        <option value="outline">Ince Cerceveli</option>
+                                        <option value="plain">Zeminsiz / Sade Metin</option>
+                                    </select>
+                                </div>
+
+                                <div class="modular-controls-row" id="row-bar-bg-color" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Zemin Rengi:</label>
+                                    <div class="color-picker-group">
+                                        <input type="color" id="des-bar-bg-color" value="#000000" class="color-input-styled">
+                                        <div class="color-swatch-list">
+                                            <button type="button" class="color-swatch-btn" style="background: #000000;" data-target="des-bar-bg-color" data-color="#000000" title="Siyah"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #1e3a8a;" data-target="des-bar-bg-color" data-color="#1e3a8a" title="Lacivert"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #065f46;" data-target="des-bar-bg-color" data-color="#065f46" title="Koyu Yesil"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #991b1b;" data-target="des-bar-bg-color" data-color="#991b1b" title="Bordo"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #581c87;" data-target="des-bar-bg-color" data-color="#581c87" title="Mor"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #475569;" data-target="des-bar-bg-color" data-color="#475569" title="Antrasit"></button>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <!-- 2. Kalite Adı (Quality Name) -->
-                                <div class="field-control-item" style="border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 8px;">
-                                    <div class="control-title-with-toggle" style="margin-bottom: 4px;">
-                                        <label class="checkbox-pill" style="padding: 2px 6px; font-size: 0.8rem; border: none; background: transparent;">
-                                            <input type="checkbox" id="des-show-quality-name" checked> <strong data-i18n="lbl_field_quality_name">Kalite Adi</strong>
-                                        </label>
-                                        <span style="font-size: 0.78rem; color: #4f46e5; font-weight: 700;" id="val-font-quality-name">7.5pt</span>
-                                    </div>
-                                    <input type="range" id="des-font-quality-name" min="5" max="14" step="0.5" value="7.5" class="range-slider">
-                                    <div class="control-select-row" style="margin-top: 6px;">
-                                        <label style="font-size: 0.75rem; color: #64748b;" data-i18n="lbl_align">Hizalama:</label>
-                                        <select id="des-align-quality-name" class="select-input-sm">
-                                            <option value="left" data-i18n="opt_align_left">Sol</option>
-                                            <option value="center" data-i18n="opt_align_center" selected>Orta</option>
-                                            <option value="right" data-i18n="opt_align_right">Sag</option>
-                                        </select>
+                                <div class="modular-controls-row" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Metin Rengi:</label>
+                                    <div class="color-picker-group">
+                                        <input type="color" id="des-bar-text-color" value="#ffffff" class="color-input-styled">
+                                        <div class="color-swatch-list">
+                                            <button type="button" class="color-swatch-btn" style="background: #ffffff;" data-target="des-bar-text-color" data-color="#ffffff" title="Beyaz"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #000000;" data-target="des-bar-text-color" data-color="#000000" title="Siyah"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #facc15;" data-target="des-bar-text-color" data-color="#facc15" title="Sari Altin"></button>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <!-- 3. Varyant ve Renk Kodu (Header / Quality Code Bar) -->
-                                <div class="field-control-item" style="border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 8px;">
-                                    <div class="control-title-with-toggle" style="margin-bottom: 4px;">
-                                        <label class="checkbox-pill" style="padding: 2px 6px; font-size: 0.8rem; border: none; background: transparent;">
-                                            <input type="checkbox" id="des-show-quality-code" checked> <strong data-i18n="lbl_field_variant_code">Varyant ve Renk Kodu</strong>
-                                        </label>
-                                        <span style="font-size: 0.78rem; color: #4f46e5; font-weight: 700;" id="val-font-header">8.5pt</span>
-                                    </div>
-                                    <input type="range" id="des-font-header" min="6" max="14" step="0.5" value="8.5" class="range-slider">
-                                    <div class="control-select-row" style="margin-top: 6px;">
-                                        <label style="font-size: 0.75rem; color: #64748b;" data-i18n="lbl_align">Hizalama:</label>
-                                        <select id="des-align-quality-code" class="select-input-sm">
-                                            <option value="left" data-i18n="opt_align_left">Sol</option>
-                                            <option value="center" data-i18n="opt_align_center" selected>Orta</option>
-                                            <option value="right" data-i18n="opt_align_right">Sag</option>
-                                        </select>
-                                    </div>
-                                    <div class="control-toggle-row" style="margin-top: 6px; padding: 4px 6px; background: #f8fafc; border-radius: 4px;">
-                                        <span style="font-size: 0.75rem; color: #475569;" data-i18n="lbl_black_bar">Siyah Zemin / Beyaz Yazi (Secenek B):</span>
-                                        <label class="switch-toggle">
-                                            <input type="checkbox" id="des-header-black-bar" checked>
-                                            <span class="slider-round"></span>
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <!-- 4. Karışım (Composition) -->
-                                <div class="field-control-item" style="border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 8px;">
-                                    <div class="control-title-with-toggle" style="margin-bottom: 4px;">
-                                        <label class="checkbox-pill" style="padding: 2px 6px; font-size: 0.8rem; border: none; background: transparent;">
-                                            <input type="checkbox" id="des-show-comp" checked> <strong data-i18n="lbl_field_composition">Karisim</strong>
-                                        </label>
-                                        <span style="font-size: 0.78rem; color: #4f46e5; font-weight: 700;" id="val-font-comp">7.5pt</span>
-                                    </div>
-                                    <input type="range" id="des-font-comp" min="5" max="14" step="0.5" value="7.5" class="range-slider">
-                                    <div class="control-select-row" style="margin-top: 6px;">
-                                        <label style="font-size: 0.75rem; color: #64748b;" data-i18n="lbl_align">Hizalama:</label>
-                                        <select id="des-align-comp" class="select-input-sm">
-                                            <option value="left" data-i18n="opt_align_left" selected>Sol</option>
-                                            <option value="center" data-i18n="opt_align_center">Orta</option>
-                                            <option value="right" data-i18n="opt_align_right">Sag</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <!-- 5. Gramaj (Weight) -->
-                                <div class="field-control-item" style="border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 8px;">
-                                    <div class="control-title-with-toggle" style="margin-bottom: 4px;">
-                                        <label class="checkbox-pill" style="padding: 2px 6px; font-size: 0.8rem; border: none; background: transparent;">
-                                            <input type="checkbox" id="des-show-weight" checked> <strong data-i18n="lbl_field_weight">Gramaj</strong>
-                                        </label>
-                                        <span style="font-size: 0.78rem; color: #4f46e5; font-weight: 700;" id="val-font-weight">7.5pt</span>
-                                    </div>
-                                    <input type="range" id="des-font-weight" min="5" max="14" step="0.5" value="7.5" class="range-slider">
-                                    <div class="control-select-row" style="margin-top: 6px;">
-                                        <label style="font-size: 0.75rem; color: #64748b;" data-i18n="lbl_align">Hizalama:</label>
-                                        <select id="des-align-weight" class="select-input-sm">
-                                            <option value="left" data-i18n="opt_align_left" selected>Sol</option>
-                                            <option value="center" data-i18n="opt_align_center">Orta</option>
-                                            <option value="right" data-i18n="opt_align_right">Sag</option>
-                                        </select>
-                                    </div>
+                                <div class="modular-controls-row">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Kose Yuvarlama:</label>
+                                    <select id="des-bar-radius" class="select-input-sm" style="width: 140px;">
+                                        <option value="0">0mm (Keskin Kose)</option>
+                                        <option value="1.0" selected>1.0mm (Hafif Yuvarlak)</option>
+                                        <option value="2.5">2.5mm (Modern Yuvarlak)</option>
+                                        <option value="5.0">5.0mm (Oval / Pill)</option>
+                                    </select>
                                 </div>
                             </div>
 
-                            <!-- 4. Barcode Controls -->
+                            <!-- 4. Moduler Alanlar & Siralama Listesi -->
                             <div class="control-group-box">
-                                <div class="control-title-with-toggle">
-                                    <span class="control-group-title"><i class="fa-solid fa-barcode"></i> <span data-i18n="ctrl_barcode_title">Barkod Cizgisi</span></span>
-                                    <label class="switch-toggle">
-                                        <input type="checkbox" id="des-barcode-visible" checked>
-                                        <span class="slider-round"></span>
-                                    </label>
-                                </div>
-                                <div id="barcode-controls-content">
-                                    <div class="control-slider-row">
-                                        <div class="slider-header">
-                                            <span data-i18n="lbl_barcode_height">Barkod Yuksekligi:</span>
-                                            <strong id="val-barcode-height">8.0mm</strong>
+                                <span class="control-group-title"><i class="fa-solid fa-arrows-up-down"></i> <span data-i18n="ctrl_modular_title">Moduler Alan Siralamasi & Bilgi Ekipmanlari</span></span>
+                                <p style="font-size: 0.76rem; color: #64748b; margin-bottom: 10px;">
+                                    Yukari (▲) ve Asagi (▼) butonlariyla alanlarin yerlerini degistirebilir, goz ikonuyla gizleyebilir/acabilirsiniz:
+                                </p>
+
+                                <div class="modular-elements-list" id="modular-elements-list">
+                                    <!-- A. Logo & Firma Adı -->
+                                    <div class="modular-element-card" data-element-id="logo_row">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-image"></i> Logo & Firma Adi</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-logo-visible" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
                                         </div>
-                                        <input type="range" id="des-barcode-height" min="4" max="18" step="0.5" value="8.0" class="range-slider">
+                                        <div class="modular-card-body" id="logo-controls-content">
+                                            <div style="display: flex; gap: 6px; align-items: center;">
+                                                <select id="des-logo-select" class="select-input-sm" style="flex: 1;">
+                                                    <option value="/logo.png" data-i18n="opt_default_logo">Varsayilan FabricTag Logo</option>
+                                                </select>
+                                                <input type="file" id="logo-file-input" accept="image/png, image/jpeg, image/svg+xml, image/webp" style="display:none;">
+                                                <button type="button" class="btn btn-secondary" id="btn-upload-logo" style="padding: 4px 8px; font-size: 0.75rem; white-space: nowrap; font-weight: 600;">
+                                                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                                                </button>
+                                            </div>
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">Logo Boyutu:</span>
+                                                    <strong id="val-logo-height" style="font-size: 0.78rem; color: #4f46e5;">6.0mm</strong>
+                                                </div>
+                                                <input type="range" id="des-logo-height" min="3" max="14" step="0.5" value="6.0" class="range-slider" style="width: 110px;">
+                                            </div>
+                                            <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                <label class="checkbox-pill" style="padding: 2px 4px; font-size: 0.75rem; border: none; background: transparent;">
+                                                    <input type="checkbox" id="des-show-company" checked> <span>Firma Adini Bas</span>
+                                                </label>
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <select id="des-align-company" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left">Sol</option>
+                                                        <option value="center">Orta</option>
+                                                        <option value="right" selected>Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-company" style="font-size: 0.75rem; color: #4f46e5;">8.5pt</strong>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- B. Kalite Adı (Quality Name) -->
+                                    <div class="modular-element-card" data-element-id="quality_name">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-tag"></i> Kalite Adi</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-show-quality-name" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body">
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                    <input type="text" id="des-prefix-quality-name" placeholder="Bos / Orn: KALITE:" class="prefix-input-sm">
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    <select id="des-align-quality-name" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left">Sol</option>
+                                                        <option value="center" selected>Orta</option>
+                                                        <option value="right">Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-quality-name" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
+                                                </div>
+                                            </div>
+                                            <input type="range" id="des-font-quality-name" min="5" max="14" step="0.5" value="7.5" class="range-slider">
+                                        </div>
+                                    </div>
+
+                                    <!-- C. Kalite & Varyant Kodu (Vurgu Çubuğu) -->
+                                    <div class="modular-element-card" data-element-id="code_bar">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-barcode"></i> Kalite & Varyant Kodu (Vurgu Cubugu)</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-show-quality-code" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body">
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                    <input type="text" id="des-prefix-quality-code" placeholder="Bos / Orn: ART:" class="prefix-input-sm">
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    <select id="des-align-quality-code" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left">Sol</option>
+                                                        <option value="center" selected>Orta</option>
+                                                        <option value="right">Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-header" style="font-size: 0.75rem; color: #4f46e5;">8.5pt</strong>
+                                                </div>
+                                            </div>
+                                            <input type="range" id="des-font-header" min="6" max="14" step="0.5" value="8.5" class="range-slider">
+                                        </div>
+                                    </div>
+
+                                    <!-- D. Karışım (Composition) -->
+                                    <div class="modular-element-card" data-element-id="composition">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-scroll"></i> Kumas Karisimi</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-show-comp" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body">
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                    <input type="text" id="des-prefix-composition" placeholder="Bos / Orn: COMP.:" class="prefix-input-sm">
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    <select id="des-align-comp" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left" selected>Sol</option>
+                                                        <option value="center">Orta</option>
+                                                        <option value="right">Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-comp" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
+                                                </div>
+                                            </div>
+                                            <input type="range" id="des-font-comp" min="5" max="14" step="0.5" value="7.5" class="range-slider">
+                                        </div>
+                                    </div>
+
+                                    <!-- E. Gramaj (Weight) -->
+                                    <div class="modular-element-card" data-element-id="weight">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-weight-scale"></i> Gramaj / Agirlik</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-show-weight" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body">
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                    <input type="text" id="des-prefix-weight" placeholder="Bos / Orn: WEIGHT:" class="prefix-input-sm">
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    <select id="des-align-weight" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left" selected>Sol</option>
+                                                        <option value="center">Orta</option>
+                                                        <option value="right">Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-weight" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
+                                                </div>
+                                            </div>
+                                            <input type="range" id="des-font-weight" min="5" max="14" step="0.5" value="7.5" class="range-slider">
+                                        </div>
+                                    </div>
+
+                                    <!-- F. Barkod / QR Çizgisi -->
+                                    <div class="modular-element-card" data-element-id="barcode">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-barcode"></i> Barkod / QR Cizgisi</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-barcode-visible" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body" id="barcode-controls-content">
+                                            <div class="modular-controls-row">
+                                                <span style="font-size: 0.75rem; color: #64748b;">Barkod Yuksekligi:</span>
+                                                <strong id="val-barcode-height" style="font-size: 0.78rem; color: #4f46e5;">8.0mm</strong>
+                                            </div>
+                                            <input type="range" id="des-barcode-height" min="4" max="18" step="0.5" value="8.0" class="range-slider">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -936,12 +1090,12 @@
     </div>
 
     <!-- Excel Import & Smart Column Matcher Modal -->
-    <div class="modal-backdrop" id="excel-import-modal">
-        <div class="modal-card" style="max-width: 760px; max-height: 90vh; display: flex; flex-direction: column;">
+    <div class="modal-overlay" id="excel-import-modal">
+        <div class="modal-box" style="max-width: 760px; max-height: 90vh; display: flex; flex-direction: column;">
             <div class="modal-header">
                 <div class="modal-title">
                     <i class="fa-solid fa-file-import" style="color: #4f46e5;"></i>
-                    <h2 data-i18n="modal_import_title">Excel ile Toplu Kumas Yukleme</h2>
+                    <h2 data-i18n="modal_import_title" style="font-size: 1.15rem; font-weight: 700; margin: 0; color: #1e293b;">Excel'den Kumas Ice Aktarma</h2>
                 </div>
                 <button type="button" class="modal-close-btn" id="btn-close-import-modal">&times;</button>
             </div>
