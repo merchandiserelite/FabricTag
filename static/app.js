@@ -1,4 +1,38 @@
-document.addEventListener("DOMContentLoaded", () => {
+// Global Foolproof Tab Switcher
+window.switchAppTab = function(targetTab, btnEl) {
+    try {
+        const navButtons = document.querySelectorAll(".nav-btn");
+        const tabContents = document.querySelectorAll(".tab-content");
+        
+        navButtons.forEach(btn => btn.classList.remove("active"));
+        tabContents.forEach(tab => tab.classList.remove("active"));
+        
+        if (btnEl) {
+            btnEl.classList.add("active");
+        } else {
+            const matchedBtn = document.querySelector(`.nav-btn[data-tab="${targetTab}"]`);
+            if (matchedBtn) matchedBtn.classList.add("active");
+        }
+        
+        const targetContent = document.getElementById(targetTab);
+        if (targetContent) targetContent.classList.add("active");
+        
+        const sidebar = document.getElementById("app-sidebar");
+        const sidebarOverlay = document.getElementById("sidebar-overlay");
+        if (sidebar) sidebar.classList.remove("mobile-open");
+        if (sidebarOverlay) sidebarOverlay.classList.remove("active");
+        
+        if (targetTab === "database-tab" && typeof window.loadDatabase === "function") {
+            window.loadDatabase();
+        } else if (targetTab === "settings-tab" && typeof window.loadSettings === "function") {
+            window.loadSettings();
+        }
+    } catch (e) {
+        console.error("switchAppTab error:", e);
+    }
+};
+
+function initApp() {
     // DOM Elements
     const navButtons = document.querySelectorAll(".nav-btn");
     const tabContents = document.querySelectorAll(".tab-content");
@@ -3808,10 +3842,20 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Expose Functions Globally for direct clicks
+    window.loadDatabase = loadDatabase;
+    window.loadSettings = loadSettings;
+
     // Initial Startup UI Rendering & Server Info
     applyConfigToUI(currentDesignConfig);
     checkServerInfo();
     loadSettings();
     applyLanguage(currentLang);
-});
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initApp);
+} else {
+    initApp();
+}
 

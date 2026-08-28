@@ -23,7 +23,7 @@
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     
-    <link rel="stylesheet" href="style.css?v=3.6.0">
+    <link rel="stylesheet" href="style.css?v=3.6.2">
 </head>
 <body>
     <!-- Toast Banner Notification for Alerts -->
@@ -81,13 +81,13 @@
                 </div>
 
                 <nav class="nav-menu">
-                    <button class="nav-btn active" data-tab="scan-tab">
+                    <button class="nav-btn active" data-tab="scan-tab" onclick="window.switchAppTab && window.switchAppTab('scan-tab', this)">
                         <i class="fa-solid fa-camera"></i> <span data-i18n="nav_scan">Kartela Tara</span>
                     </button>
-                    <button class="nav-btn" data-tab="database-tab">
+                    <button class="nav-btn" data-tab="database-tab" onclick="window.switchAppTab && window.switchAppTab('database-tab', this)">
                         <i class="fa-solid fa-database"></i> <span data-i18n="nav_database">Veritabani / Gecmis</span>
                     </button>
-                    <button class="nav-btn" data-tab="settings-tab">
+                    <button class="nav-btn" data-tab="settings-tab" onclick="window.switchAppTab && window.switchAppTab('settings-tab', this)">
                         <i class="fa-solid fa-gear"></i> <span data-i18n="nav_settings">Ayarlar & Tasarim</span>
                     </button>
                 </nav>
@@ -1180,6 +1180,6 @@
     <!-- Hidden Print Area -->
     <div id="print-section"></div>
 
-    <script src="app.js?v=3.6.0"></script>
+    <script src="app.js?v=3.6.2"></script>
 </body>
 </html>
