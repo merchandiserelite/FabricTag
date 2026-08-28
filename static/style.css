@@ -359,6 +359,12 @@ body {
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
     z-index: 99;
+    pointer-events: none;
+}
+
+.sidebar-overlay.active {
+    display: block;
+    pointer-events: auto;
 }
 
 /* Main Content Area */
@@ -1728,11 +1734,13 @@ body {
     align-items: center;
     justify-content: center;
     padding: 1rem;
+    pointer-events: none !important;
 }
 
 .modal-overlay.active,
 .modal-backdrop.active {
     display: flex !important;
+    pointer-events: auto !important;
     animation: fadeIn 0.2s ease-out;
 }
 

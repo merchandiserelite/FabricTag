@@ -1911,6 +1911,15 @@ document.addEventListener("DOMContentLoaded", () => {
             desLogoHeight.value = cfg.logo_height || 6.0;
             if (valLogoHeight) valLogoHeight.textContent = (cfg.logo_height || 6.0) + "mm";
         }
+        if (desLogoAlign) desLogoAlign.value = cfg.logo_align || "left";
+        if (desShowCompany) desShowCompany.checked = cfg.show_company !== false;
+        if (desFontCompany) {
+            const compSize = cfg.font_size_company !== undefined ? cfg.font_size_company : 8.5;
+            desFontCompany.value = compSize;
+            if (valFontCompany) valFontCompany.textContent = compSize + "pt";
+        }
+        if (desAlignCompany) desAlignCompany.value = cfg.align_company || "right";
+
         // 2. Kalite Adı (Quality Name)
         if (desShowQualityName) desShowQualityName.checked = cfg.show_quality_name !== false;
         if (desFontQualityName) {
