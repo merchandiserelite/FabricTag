@@ -23,7 +23,7 @@
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     
-    <link rel="stylesheet" href="style.css?v=4.0.1">
+    <link rel="stylesheet" href="style.css?v=4.0.2">
 </head>
 <body>
     <!-- Toast Banner Notification for Alerts -->
@@ -69,21 +69,21 @@
                     <button class="sidebar-close-btn" id="sidebar-close-btn">&times;</button>
                 </div>
 
-                <!-- Language Switcher in Sidebar (9 Languages) -->
+                <!-- Modern Language Dropdown Selector (9 Languages) -->
                 <div class="lang-switcher-container">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600;"><i class="fa-solid fa-globe"></i> <span data-i18n="lang_label">Dil / Language:</span></span>
-                    </div>
-                    <div class="lang-pill-toggle">
-                        <button type="button" class="lang-btn active" data-lang="tr" title="Türkçe">🇹🇷 TR</button>
-                        <button type="button" class="lang-btn" data-lang="en" title="English">🇬🇧 EN</button>
-                        <button type="button" class="lang-btn" data-lang="de" title="Deutsch">🇩🇪 DE</button>
-                        <button type="button" class="lang-btn" data-lang="it" title="Italiano">🇮🇹 IT</button>
-                        <button type="button" class="lang-btn" data-lang="es" title="Español">🇪🇸 ES</button>
-                        <button type="button" class="lang-btn" data-lang="fr" title="Français">🇫🇷 FR</button>
-                        <button type="button" class="lang-btn" data-lang="ar" title="العربية">🇸🇦 AR</button>
-                        <button type="button" class="lang-btn" data-lang="zh" title="中文">🇨🇳 ZH</button>
-                        <button type="button" class="lang-btn" data-lang="ja" title="日本語">🇯🇵 JA</button>
+                    <div class="lang-select-wrapper">
+                        <i class="fa-solid fa-globe lang-select-icon"></i>
+                        <select id="app-lang-select" class="lang-select-dropdown" onchange="window.applyAppLanguage && window.applyAppLanguage(this.value)">
+                            <option value="tr" selected>🇹🇷 Türkçe (TR)</option>
+                            <option value="en">🇬🇧 English (EN)</option>
+                            <option value="de">🇩🇪 Deutsch (DE)</option>
+                            <option value="it">🇮🇹 Italiano (IT)</option>
+                            <option value="es">🇪🇸 Español (ES)</option>
+                            <option value="fr">🇫🇷 Français (FR)</option>
+                            <option value="ar">🇸🇦 العربية (AR)</option>
+                            <option value="zh">🇨🇳 中文 (ZH)</option>
+                            <option value="ja">🇯🇵 日本語 (JA)</option>
+                        </select>
                     </div>
                 </div>
 
@@ -92,12 +92,12 @@
                         <i class="fa-solid fa-camera"></i> <span data-i18n="nav_scan">Kartela Tara</span>
                     </button>
                     <button class="nav-btn" data-tab="database-tab" onclick="window.switchAppTab && window.switchAppTab('database-tab', this)">
-                        <i class="fa-solid fa-database"></i> <span data-i18n="nav_database">Veritabani / Gecmis</span>
+                        <i class="fa-solid fa-database"></i> <span data-i18n="nav_database">Veritabanı / Geçmiş</span>
                     </button>
                     <button class="nav-btn" data-tab="settings-tab" onclick="window.switchAppTab && window.switchAppTab('settings-tab', this)">
-                        <i class="fa-solid fa-gear"></i> <span data-i18n="nav_settings">Ayarlar & Tasarim</span>
+                        <i class="fa-solid fa-gear"></i> <span data-i18n="nav_settings">Ayarlar & Tasarım</span>
                     </button>
-                    <button type="button" class="nav-btn" id="btn-open-user-guide" style="border: 1px dashed rgba(99, 102, 241, 0.4); margin-top: 6px;">
+                    <button type="button" class="btn-guide-nav" id="btn-open-user-guide" onclick="window.openUserGuideModal && window.openUserGuideModal()">
                         <i class="fa-solid fa-book-open"></i> <span data-i18n="nav_user_guide">Kullanım Rehberi</span>
                     </button>
                 </nav>
@@ -1315,6 +1315,6 @@
     <!-- Hidden Print Area -->
     <div id="print-section"></div>
 
-    <script src="app.js?v=4.0.1"></script>
+    <script src="app.js?v=4.0.2"></script>
 </body>
 </html>

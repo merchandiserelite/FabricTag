@@ -1075,6 +1075,11 @@ function initApp() {
         document.documentElement.lang = lang;
         if (lang === "ar") { document.documentElement.dir = "rtl"; } else { document.documentElement.dir = "ltr"; }
 
+        const langDropdown = document.getElementById("app-lang-select");
+        if (langDropdown && langDropdown.value !== lang) {
+            langDropdown.value = lang;
+        }
+
         const dict = i18n[lang] || i18n.tr;
         document.querySelectorAll("[data-i18n]").forEach(el => {
             const key = el.getAttribute("data-i18n");
@@ -1098,7 +1103,7 @@ function initApp() {
             dbSearch.placeholder = dict.search_placeholder;
         }
 
-        // Update active class on lang buttons
+        // Update active class on lang buttons if any exist
         document.querySelectorAll(".lang-btn").forEach(btn => {
             if (btn.dataset.lang === lang) {
                 btn.classList.add("active");
@@ -4290,24 +4295,42 @@ function initApp() {
     }
 
     // ==========================================
-    // KULLANICI REHBERI (USER GUIDE) MODALI
+    // KULLANICI REHBERİ (USER GUIDE) & LİSANS MODALLARI
     // ==========================================
-    const modalUserGuideOverlay = document.getElementById("modal-user-guide-overlay");
+    window.openUserGuideModal = function() {
+        const overlay = document.getElementById("modal-user-guide-overlay");
+        if (overlay) overlay.classList.add("active");
+    };
+
+    window.closeUserGuideModal = function() {
+        const overlay = document.getElementById("modal-user-guide-overlay");
+        if (overlay) overlay.classList.remove("active");
+    };
+
+    window.openLicenseModal = function() {
+        const overlay = document.getElementById("modal-license-overlay");
+        if (overlay) overlay.classList.add("active");
+        if (licenseKeyInput) licenseKeyInput.value = "";
+        if (licenseActivationAlert) licenseActivationAlert.style.display = "none";
+        loadLicenseStatus();
+    };
+
+    window.closeLicenseModal = function() {
+        const overlay = document.getElementById("modal-license-overlay");
+        if (overlay) overlay.classList.remove("active");
+    };
+
+    window.applyAppLanguage = function(lang) {
+        applyLanguage(lang);
+    };
+
     const btnOpenUserGuide = document.getElementById("btn-open-user-guide");
     const btnCloseUserGuide = document.getElementById("btn-close-user-guide");
     const btnCloseGuideFooter = document.getElementById("btn-close-guide-footer");
 
-    function openUserGuide() {
-        if (modalUserGuideOverlay) modalUserGuideOverlay.classList.add("active");
-    }
-
-    function closeUserGuide() {
-        if (modalUserGuideOverlay) modalUserGuideOverlay.classList.remove("active");
-    }
-
-    if (btnOpenUserGuide) btnOpenUserGuide.addEventListener("click", openUserGuide);
-    if (btnCloseUserGuide) btnCloseUserGuide.addEventListener("click", closeUserGuide);
-    if (btnCloseGuideFooter) btnCloseGuideFooter.addEventListener("click", closeUserGuide);
+    if (btnOpenUserGuide) btnOpenUserGuide.addEventListener("click", window.openUserGuideModal);
+    if (btnCloseUserGuide) btnCloseUserGuide.addEventListener("click", window.closeUserGuideModal);
+    if (btnCloseGuideFooter) btnCloseGuideFooter.addEventListener("click", window.closeUserGuideModal);
 
     applyLanguage(currentLang);
 }
