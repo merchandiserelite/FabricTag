@@ -2065,27 +2065,33 @@ function initApp() {
             `;
         }
 
-        // 2. Kalite Adı (Quality Name)
+        // 2. Kalite Kodu & Kalite Adı Satırı (Düz / Açık Yazı)
         if (cfg.show_quality_name !== false) {
+            let qText = "";
+            const qCode = toAppUpper(data.quality_code);
+            const qName = toAppUpper(data.quality_name);
+            if (qCode && qName) {
+                qText = `${qCode} ${qName}`;
+            } else {
+                qText = qCode || qName || "-";
+            }
             const prefix = cfg.prefix_quality_name ? `<span style="font-weight: 700; margin-right: 3px;">${cfg.prefix_quality_name}</span>` : "";
             const qHtml = `
-                <div class="print-name" style="font-size: ${fQualityName}pt; font-weight: 600; text-align: ${cfg.align_quality_name || 'center'}; width: 100%; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${prefix}${toAppUpper(data.quality_name) || "-"}
+                <div class="print-name" style="font-size: ${fQualityName}pt; font-weight: 700; text-align: ${cfg.align_quality_name || 'center'}; width: 100%; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0.5mm 0;">
+                    ${prefix}${qText}
                 </div>
             `;
             blocks.quality_name = qHtml;
             blocks.quality_row = qHtml;
         }
 
-        // 3. Kalite & Varyant Kodu Barı (Header / Code Bar)
+        // 3. Desen / Varyant Kodu Barı (Siyah Zeminli Bar)
         if (cfg.show_quality_code !== false) {
-            let combinedCode = "";
+            let barContent = "";
             if (cfg.default_template === "option-a") {
-                combinedCode = toAppUpper(data.internal_code || "ELT0000001");
+                barContent = toAppUpper(data.internal_code || "ELT0000001");
             } else {
-                const qCode = toAppUpper(data.quality_code);
-                const dCode = toAppUpper(data.design_code);
-                combinedCode = (qCode && dCode) ? `${qCode}/${dCode}` : (qCode || dCode || "-");
+                barContent = toAppUpper(data.design_code) || "-";
             }
             const prefix = cfg.prefix_quality_code ? `<span style="font-weight: 700; margin-right: 3px;">${cfg.prefix_quality_code}</span>` : "";
             
@@ -2105,7 +2111,7 @@ function initApp() {
 
             const dHtml = `
                 <div class="print-code-line" style="${codeBarCSS} text-align: ${cfg.align_quality_code || 'center'}; font-weight: 700; font-size: ${fHeader}pt; margin: 1mm 0; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${prefix}${combinedCode}
+                    ${prefix}${barContent}
                 </div>
             `;
             blocks.code_bar = dHtml;
@@ -2427,6 +2433,74 @@ function initApp() {
         prefDefaultTemplate.addEventListener("change", (e) => {
             currentDesignConfig.default_template = e.target.value;
             renderDesignerPreview();
+        });
+    }
+
+    // Reset Default Design Action
+    if (btnResetDefaultDesign) {
+        btnResetDefaultDesign.addEventListener("click", () => {
+            const DEFAULT_CONFIG = {
+                config_version: "3.7.5",
+                default_template: "option-b",
+                printer_type: "a4",
+                label_width: 63.5,
+                label_height: 46.6,
+                col_gap: 0.1,
+                row_gap: 0.1,
+                margin_top: 8.0,
+                margin_left: 6.0,
+                logo_visible: true,
+                logo_height: 6.0,
+                logo_align: "left",
+                active_logo_url: "/logo.png",
+                font_family: "'Outfit', sans-serif",
+                use_fiber_abbreviations: false,
+                label_bg_color: "#ffffff",
+                label_border_style: "none",
+                label_border_color: "#000000",
+                bar_style: "filled",
+                bar_bg_color: "#000000",
+                bar_text_color: "#ffffff",
+                bar_border_radius: "1.0",
+                element_order: ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"],
+                prefix_quality_name: "",
+                prefix_quality_code: "",
+                prefix_composition: "",
+                prefix_weight: "",
+                font_size_header: 8.5,
+                font_size_company: 8.5,
+                font_size_quality_name: 7.5,
+                font_size_composition: 7.5,
+                font_size_weight: 7.5,
+                font_size_body: 7.5,
+                header_black_bar: true,
+                barcode_height: 8.0,
+                barcode_visible: true,
+                show_company: true,
+                show_quality_name: true,
+                show_quality_code: true,
+                show_composition: true,
+                show_weight: true,
+                align_company: "right",
+                align_quality_name: "center",
+                align_quality_code: "center",
+                align_composition: "left",
+                align_weight: "left"
+            };
+
+            currentDesignConfig = Object.assign({}, DEFAULT_CONFIG);
+            try {
+                localStorage.setItem("elite_sticker_settings", JSON.stringify(DEFAULT_CONFIG));
+            } catch(e) {}
+            applyConfigToUI(DEFAULT_CONFIG);
+
+            fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(DEFAULT_CONFIG)
+            }).then(() => {
+                showToast("Orijinal tasarım fabrika ayarlarına sıfırlandı!", 1500);
+            });
         });
     }
 
