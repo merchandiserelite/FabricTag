@@ -2268,11 +2268,32 @@ function initApp() {
     // Modular Move Up & Move Down Event Handlers
     if (modularElementsList) {
         modularElementsList.addEventListener("click", (e) => {
+            const moveUpBtn = e.target.closest(".btn-move-up");
+            const moveDownBtn = e.target.closest(".btn-move-down");
+            if (moveUpBtn) {
+                const card = moveUpBtn.closest(".modular-element-card");
+                if (card && card.previousElementSibling) {
+                    card.parentNode.insertBefore(card, card.previousElementSibling);
+                    syncElementOrderFromDOM();
+                }
+            } else if (moveDownBtn) {
+                const card = moveDownBtn.closest(".modular-element-card");
+                if (card && card.nextElementSibling) {
+                    card.parentNode.insertBefore(card.nextElementSibling, card);
+                    syncElementOrderFromDOM();
+                }
+            }
+        });
+    }
+
+    // Preset Chip Buttons Click Listener
+    document.querySelectorAll(".preset-chip-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
             document.querySelectorAll(".preset-chip-btn").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
 
             const presetKey = btn.dataset.preset;
-            if (PRESETS_CONFIG[presetKey]) {
+            if (typeof PRESETS_CONFIG !== "undefined" && PRESETS_CONFIG[presetKey]) {
                 const p = PRESETS_CONFIG[presetKey];
                 Object.assign(currentDesignConfig, p);
                 applyConfigToUI(currentDesignConfig);
