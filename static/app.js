@@ -2170,7 +2170,7 @@ function initApp() {
     }
     
     if (btnSaveSettings) {
-        btnSaveSettings.addEventListener("click", () => {
+        btnSaveSettings.addEventListener("click", async () => {
             const key = settingsApiKey ? settingsApiKey.value.trim() : "";
             if (!key) {
                 alert("Lütfen geçerli bir API anahtarı girin!");
@@ -2180,97 +2180,89 @@ function initApp() {
             btnSaveSettings.disabled = true;
             btnSaveSettings.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Doğrulanıyor...';
             
-            // 1. Google Gemini API'sine anlık doğrulama isteği gönder
-            fetch("/api/test-key", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ api_key: key })
-            })
-            .then(res => res.json())
-            .then(testResult => {
+            try {
+                // 1. Google Gemini API testi
+                const testRes = await fetch("/api/test-key", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ api_key: key })
+                });
+                const testResult = await testRes.json();
+                
                 if (!testResult.valid) {
                     if (apiKeySavedText) {
                         apiKeySavedText.textContent = "Bağlantı Hatası: " + testResult.message;
                         apiKeySavedText.className = "help-text error";
                     }
                     showToast("API Doğrulanamadı: " + testResult.message, 4000);
-                    btnSaveSettings.disabled = false;
-                    btnSaveSettings.innerHTML = '<span data-i18n="btn_save">' + (i18n[currentLang]?.btn_save || "Kaydet") + '</span>';
                     return;
                 }
 
-                // 2. Doğrulandıysa kalıcı olarak kaydet
-                fetch("/api/settings", {
+                // 2. Kalıcı kaydet
+                const saveRes = await fetch("/api/settings", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ api_key: key })
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast("Google Gemini API Anahtarı Doğrulandı ve Kaydedildi! 🟢", 2500);
-                        if (settingsApiKey) settingsApiKey.value = "";
-                        if (apiKeySavedText) {
-                            apiKeySavedText.textContent = "Google Gemini API bağlantısı aktif ve hazır.";
-                            apiKeySavedText.className = "help-text success";
-                        }
-                        loadSettings();
-                    }
-                })
-                .catch(err => alert("Kaydetme hatası: " + err))
-                .finally(() => {
-                    btnSaveSettings.disabled = false;
-                    btnSaveSettings.innerHTML = '<span data-i18n="btn_save">' + (i18n[currentLang]?.btn_save || "Kaydet") + '</span>';
                 });
-            })
-            .catch(err => {
-                alert("Doğrulama hatası: " + err);
+                const saveData = await saveRes.json();
+                
+                if (saveData.success) {
+                    showToast("Google Gemini API Anahtarı Doğrulandı ve Kaydedildi! 🟢", 2500);
+                    if (settingsApiKey) settingsApiKey.value = "";
+                    if (apiKeySavedText) {
+                        apiKeySavedText.textContent = "Google Gemini API bağlantısı aktif ve hazır.";
+                        apiKeySavedText.className = "help-text success";
+                    }
+                    loadSettings();
+                }
+            } catch (err) {
+                console.error("Save API error:", err);
+                alert("İşlem sırasında bir hata oluştu: " + err);
+            } finally {
                 btnSaveSettings.disabled = false;
-                btnSaveSettings.innerHTML = '<span data-i18n="btn_save">' + (i18n[currentLang]?.btn_save || "Kaydet") + '</span>';
-            });
+                btnSaveSettings.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btn_save">' + (i18n[currentLang]?.btn_save || "Kaydet") + '</span>';
+            }
         });
     }
 
     // Test API Key Button
     const btnTestApiKey = document.getElementById("btn-test-api-key");
     if (btnTestApiKey) {
-        btnTestApiKey.addEventListener("click", () => {
+        btnTestApiKey.addEventListener("click", async () => {
             const typedKey = settingsApiKey ? settingsApiKey.value.trim() : "";
             btnTestApiKey.disabled = true;
             btnTestApiKey.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Test Ediliyor...';
 
-            fetch("/api/test-key", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ api_key: typedKey })
-            })
-            .then(res => res.json())
-            .then(res => {
-                if (res.valid) {
+            try {
+                const res = await fetch("/api/test-key", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ api_key: typedKey })
+                });
+                const data = await res.json();
+                if (data.valid) {
                     if (apiKeySavedText) {
-                        apiKeySavedText.textContent = res.message;
+                        apiKeySavedText.textContent = data.message;
                         apiKeySavedText.className = "help-text success";
                     }
-                    showToast("Google Gemini API Bağlantısı Başarılı!", 2000);
+                    showToast("Google Gemini API Bağlantısı Başarılı! 🟢", 2000);
                     loadSettings();
                 } else {
                     if (apiKeySavedText) {
-                        apiKeySavedText.textContent = res.message;
+                        apiKeySavedText.textContent = data.message;
                         apiKeySavedText.className = "help-text error";
                     }
-                    showToast("Bağlantı Başarısız: " + res.message, 3000);
+                    showToast("Bağlantı Başarısız: " + data.message, 3500);
                 }
-            })
-            .catch(err => {
+            } catch (err) {
                 if (apiKeySavedText) {
                     apiKeySavedText.textContent = "Test hatası: " + err;
                     apiKeySavedText.className = "help-text error";
                 }
-            })
-            .finally(() => {
+            } finally {
                 btnTestApiKey.disabled = false;
                 btnTestApiKey.innerHTML = '<i class="fa-solid fa-bolt"></i> Test Et';
-            });
+            }
         });
     }
 
