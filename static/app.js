@@ -367,7 +367,18 @@ function initApp() {
                 "btn_check_update": "Güncellemeleri Denetle",
                 "update_banner_title": "Yeni FabricTag Güncellemesi Mevcut!",
                 "update_banner_desc": "Daha yüksek yapay zeka performansı ve yeni özellikler için güncelleyin.",
-                "btn_download_update": "Güncellemeyi İndir"
+                "btn_download_update": "Güncellemeyi İndir",
+                "modal_mobile_title": "Telefona Bağlan ve Uygulama Olarak Yükle",
+                "modal_mobile_desc": "Aynı Wi-Fi ağındaki herhangi bir akıllı telefonun kamerasıyla aşağıdaki QR kodu okutarak FabricTag'e bağlanabilir ve telefonunuza uygulama olarak yükleyebilirsiniz.",
+                "btn_copy_link": "Linki Kopyala",
+                "android_step1": "Telefonunuzun kamerasını açıp yukarıdaki QR kodu okutun.",
+                "android_step2": "Chrome tarayıcısında sağ üstteki 3 nokta (⋮) simgesine dokunun.",
+                "android_step3": "Menüden \"Uygulamayı Yükle\" veya \"Ana Ekrana Ekle\" butonuna basın.",
+                "android_step4": "Telefonunuzun ana ekranında FabricTag logosunu göreceksiniz.",
+                "ios_step1": "iPhone kamerasını açıp QR kodu okutun ve Safari'de açın.",
+                "ios_step2": "Safari'nin alt menüsündeki Paylaş (Share) simgesine dokunun.",
+                "ios_step3": "Aşağı kaydırıp \"Ana Ekrana Ekle (Add to Home Screen)\" seçeneğini seçin.",
+                "ios_step4": "Sağ üstteki \"Ekle\"ye basın. FabricTag artık telefonunuzda tam ekran bir uygulama olarak açılır!"
         },
         "en": {
                 "lang_label": "Language:",
@@ -520,7 +531,18 @@ function initApp() {
                 "btn_check_update": "Check for Updates",
                 "update_banner_title": "New FabricTag Update Available!",
                 "update_banner_desc": "Update now for enhanced AI accuracy and latest performance improvements.",
-                "btn_download_update": "Download Update"
+                "btn_download_update": "Download Update",
+                "modal_mobile_title": "Connect to Phone & Install Mobile App",
+                "modal_mobile_desc": "Scan the QR code below with any smartphone on the same Wi-Fi network to connect to FabricTag and install it as a standalone mobile app.",
+                "btn_copy_link": "Copy Link",
+                "android_step1": "Open your smartphone camera and scan the QR code above.",
+                "android_step2": "In Chrome browser, tap the 3 dots (⋮) in the top-right corner.",
+                "android_step3": "Select \"Install App\" or \"Add to Home Screen\".",
+                "android_step4": "FabricTag icon will appear on your phone home screen ready to use!",
+                "ios_step1": "Open iPhone Camera, scan the QR code and open in Safari.",
+                "ios_step2": "Tap the Share icon at the bottom of Safari.",
+                "ios_step3": "Scroll down and tap \"Add to Home Screen\".",
+                "ios_step4": "Tap \"Add\" in the top right. FabricTag will open as a full-screen app!"
         },
         "de": {
                 "lang_label": "Sprache:",
@@ -566,7 +588,18 @@ function initApp() {
                 "btn_check_update": "Nach Updates Suchen",
                 "update_banner_title": "Neues FabricTag-Update Verfügbar!",
                 "update_banner_desc": "Aktualisieren Sie jetzt für verbesserte KI-Leistung und neue Funktionen.",
-                "btn_download_update": "Update Herunterladen"
+                "btn_download_update": "Update Herunterladen",
+                "modal_mobile_title": "Mit Smartphone Verbinden & App Installieren",
+                "modal_mobile_desc": "Scannen Sie den untenstehenden QR-Code mit der Kamera Ihres Smartphones im selben WLAN, um FabricTag als App zu installieren.",
+                "btn_copy_link": "Link Kopieren",
+                "android_step1": "Öffnen Sie die Kamera und scannen Sie den QR-Code oben.",
+                "android_step2": "Tippen Sie in Chrome oben rechts auf die 3 Punkte (⋮).",
+                "android_step3": "Wählen Sie \"App installieren\" oder \"Zum Startbildschirm hinzufügen\".",
+                "android_step4": "Das FabricTag-Symbol erscheint auf Ihrem Startbildschirm.",
+                "ios_step1": "iPhone-Kamera öffnen, QR-Code scannen und in Safari öffnen.",
+                "ios_step2": "Tippen Sie unten in Safari auf das Teilen-Symbol.",
+                "ios_step3": "Scrollen Sie nach unten zu \"Zum Home-Bildschirm\".",
+                "ios_step4": "Tippen Sie oben rechts auf \"Hinzufügen\"."
         },
         "it": {
                 "lang_label": "Lingua:",
@@ -612,7 +645,18 @@ function initApp() {
                 "btn_check_update": "Controlla Aggiornamenti",
                 "update_banner_title": "Nuovo Aggiornamento FabricTag Disponibile!",
                 "update_banner_desc": "Aggiorna ora per una maggiore precisione dell'IA e nuove funzionalità.",
-                "btn_download_update": "Scarica Aggiornamento"
+                "btn_download_update": "Scarica Aggiornamento",
+                "modal_mobile_title": "Collega a Smartphone & Installa App",
+                "modal_mobile_desc": "Scansiona il codice QR qui sotto con qualsiasi smartphone sulla stessa rete Wi-Fi per installare FabricTag come applicazione.",
+                "btn_copy_link": "Copia Link",
+                "android_step1": "Apri la fotocamera del telefono e scansiona il codice QR in alto.",
+                "android_step2": "Nel browser Chrome, tocca i 3 puntini (⋮) in alto a destra.",
+                "android_step3": "Seleziona \"Installa app\" o \"Aggiungi a schermata Home\".",
+                "android_step4": "L'icona FabricTag apparirà sulla schermata principale del telefono.",
+                "ios_step1": "Apri la fotocamera di iPhone, scansiona il codice QR e apri in Safari.",
+                "ios_step2": "Tocca l'icona Condividi in basso su Safari.",
+                "ios_step3": "Scorri verso il basso e tocca \"Aggiungi a schermata Home\".",
+                "ios_step4": "Tocca \"Aggiungi\" in alto a destra."
         },
         "es": {
                 "lang_label": "Idioma:",
@@ -658,7 +702,18 @@ function initApp() {
                 "btn_check_update": "Buscar Actualizaciones",
                 "update_banner_title": "¡Nueva Actualización de FabricTag Disponible!",
                 "update_banner_desc": "Actualice ahora para mejorar el rendimiento de la IA y nuevas funciones.",
-                "btn_download_update": "Descargar Actualización"
+                "btn_download_update": "Descargar Actualización",
+                "modal_mobile_title": "Conectar al Móvil e Instalar App",
+                "modal_mobile_desc": "Escanee el código QR a continuación con la cámara de su teléfono móvil en la misma red Wi-Fi para instalar FabricTag como aplicación.",
+                "btn_copy_link": "Copiar Enlace",
+                "android_step1": "Abra la cámara de su teléfono y escanee el código QR de arriba.",
+                "android_step2": "En Chrome, toque los 3 puntos (⋮) en la esquina superior derecha.",
+                "android_step3": "Seleccione \"Instalar aplicación\" o \"Añadir a pantalla de inicio\".",
+                "android_step4": "¡El icono de FabricTag aparecerá en la pantalla de inicio de su teléfono!",
+                "ios_step1": "Abra la cámara del iPhone, escanee el código QR y ábralo en Safari.",
+                "ios_step2": "Toque el icono Compartir en la parte inferior de Safari.",
+                "ios_step3": "Desplácese hacia abajo y elija \"Añadir a pantalla de inicio\".",
+                "ios_step4": "Toque \"Añadir\" en la esquina superior derecha."
         },
         "fr": {
                 "lang_label": "Langue:",
@@ -704,7 +759,18 @@ function initApp() {
                 "btn_check_update": "Rechercher des Mises à Jour",
                 "update_banner_title": "Nouvelle Mise à Jour FabricTag Disponible !",
                 "update_banner_desc": "Mettez à jour maintenant pour des performances IA accrues.",
-                "btn_download_update": "Télécharger la Mise à Jour"
+                "btn_download_update": "Télécharger la Mise à Jour",
+                "modal_mobile_title": "Connecter au Téléphone & Installer l'App",
+                "modal_mobile_desc": "Scannez le code QR ci-dessous avec votre smartphone connecté au même réseau Wi-Fi pour installer FabricTag sous forme d'application.",
+                "btn_copy_link": "Copier le Lien",
+                "android_step1": "Ouvrez l'appareil photo et scannez le code QR ci-dessus.",
+                "android_step2": "Dans Chrome, appuyez sur les 3 points (⋮) en haut à droite.",
+                "android_step3": "Sélectionnez \"Installer l'application\" ou \"Ajouter à l'écran d'accueil\".",
+                "android_step4": "L'icône FabricTag apparaîtra sur l'écran d'accueil de votre téléphone.",
+                "ios_step1": "Ouvrez l'appareil photo iPhone, scannez le code QR et ouvrez dans Safari.",
+                "ios_step2": "Appuyez sur le bouton Partager en bas de Safari.",
+                "ios_step3": "Faites défiler vers le bas et sélectionnez \"Sur l'écran d'accueil\".",
+                "ios_step4": "Appuyez sur \"Ajouter\" en haut à droite."
         },
         "ar": {
                 "lang_label": "اللغة:",
@@ -818,7 +884,18 @@ function initApp() {
                 "btn_check_update": "التحقق من وجود تحديثات",
                 "update_banner_title": "يتوفر تحديث جديد لـ FabricTag!",
                 "update_banner_desc": "قم بالتحديث الآن للحصول على أداء أعلى وميزات جديدة.",
-                "btn_download_update": "تحميل التحديث"
+                "btn_download_update": "تحميل التحديث",
+                "modal_mobile_title": "الاتصال بالهاتف وتثبيت التطبيق",
+                "modal_mobile_desc": "امسح رمز الاستجابة السريعة (QR) أدناه بكاميرا أي هاتف على نفس شبكة Wi-Fi لتثبيت FabricTag كتطبيق مستقل.",
+                "btn_copy_link": "نسخ الرابط",
+                "android_step1": "افتح كاميرا الهاتف وامسح رمز QR أعلاه.",
+                "android_step2": "في متصفح Chrome، اضغط على النقاط الثلاث (⋮) في أعلى اليمين.",
+                "android_step3": "اختر \"تثبيت التطبيق\" أو \"إضافة إلى الشاشة الرئيسية\".",
+                "android_step4": "ستظهر أيقونة FabricTag على شاشة هاتفك الرئيسية!",
+                "ios_step1": "افتح كاميرا iPhone، امسح رمز QR وافتحه في متصفح Safari.",
+                "ios_step2": "اضغط على أيقونة المشاركة (Share) أسفل متصفح Safari.",
+                "ios_step3": "مرر لأسفل واختر \"إضافة إلى الصفحة الرئيسية\".",
+                "ios_step4": "اضغط على \"إضافة\" في أعلى اليسار."
         },
         "zh": {
                 "lang_label": "语言:",
@@ -932,7 +1009,18 @@ function initApp() {
                 "btn_check_update": "检查更新",
                 "update_banner_title": "发现 FabricTag 新版本！",
                 "update_banner_desc": "立即更新以体验更强大的 AI 识别能力与新功能。",
-                "btn_download_update": "下载更新"
+                "btn_download_update": "下载更新",
+                "modal_mobile_title": "连接手机并安装应用",
+                "modal_mobile_desc": "在同一 Wi-Fi 网络下使用手机相机扫描下方二维码，即可连接 FabricTag 并将其安装为独立手机应用。",
+                "btn_copy_link": "复制链接",
+                "android_step1": "打开手机相机扫描上方二维码打开网页。",
+                "android_step2": "在 Chrome 浏览器中点击右上角 3 个点 (⋮)。",
+                "android_step3": "选择 \"安装应用\" 或 \"添加到主屏幕\"。",
+                "android_step4": "FabricTag 图标将出现在手机桌面上！",
+                "ios_step1": "打开 iPhone 相机扫描二维码并在 Safari 中打开。",
+                "ios_step2": "点击 Safari 底部菜单中的分享图标。",
+                "ios_step3": "向下滚动并选择 \"添加到主屏幕\"。",
+                "ios_step4": "点击右上角的 \"添加\" 即可。"
         },
         "ja": {
                 "lang_label": "言語:",
@@ -1046,7 +1134,18 @@ function initApp() {
                 "btn_check_update": "更新を確認",
                 "update_banner_title": "FabricTagの新しいアップデートがあります！",
                 "update_banner_desc": "最新のAI精度向上と新機能をご利用いただくために更新してください。",
-                "btn_download_update": "更新をダウンロード"
+                "btn_download_update": "更新をダウンロード",
+                "modal_mobile_title": "スマートフォン接続＆アプリインストール",
+                "modal_mobile_desc": "同じWi-Fi内のスマートフォンカメラでQRコードを読み取り、FabricTagをスマホアプリとしてインストールできます。",
+                "btn_copy_link": "リンクをコピー",
+                "android_step1": "スマホのカメラを起動して上記のQRコードをスキャンします。",
+                "android_step2": "Chromeブラウザ右上のメニュー（3つの点 ⋮）をタップします。",
+                "android_step3": "「アプリをインストール」または「ホーム画面に追加」を選択します。",
+                "android_step4": "スマートフォンのホーム画面にFabricTagアイコンが追加されます！",
+                "ios_step1": "iPhoneのカメラでQRコードを読み取り、Safariで開きます。",
+                "ios_step2": "Safari下部の「共有」アイコンをタップします。",
+                "ios_step3": "下にスクロールして「ホーム画面に追加」を選択します。",
+                "ios_step4": "右上の「追加」をタップして完了です！"
         }
 };
 
@@ -1066,6 +1165,10 @@ function initApp() {
         const langDropdown = document.getElementById("app-lang-select");
         if (langDropdown && langDropdown.value !== lang) {
             langDropdown.value = lang;
+        }
+        const mobileLangDropdown = document.getElementById("mobile-app-lang-select");
+        if (mobileLangDropdown && mobileLangDropdown.value !== lang) {
+            mobileLangDropdown.value = lang;
         }
 
         const dict = i18n[lang] || i18n.tr;
@@ -3843,9 +3946,96 @@ function initApp() {
         }
     });
 
+    // ==========================================
+    // MOBILE CONNECT & PWA INSTALL MODAL
+    // ==========================================
+    const modalMobileInstall = document.getElementById("modal-mobile-install");
+    const btnCloseMobileModal = document.getElementById("btn-close-mobile-modal");
+    const btnCloseMobileFooter = document.getElementById("btn-close-mobile-footer");
+    const modalQrImg = document.getElementById("modal-qr-img");
+    const modalQrLinkText = document.getElementById("modal-qr-link-text");
+    const btnCopyModalLink = document.getElementById("btn-copy-modal-link");
+    const tabBtnAndroid = document.getElementById("tab-btn-android");
+    const tabBtnIos = document.getElementById("tab-btn-ios");
+    const guideTabAndroid = document.getElementById("guide-tab-android");
+    const guideTabIos = document.getElementById("guide-tab-ios");
+
+    function openMobileInstallModal() {
+        if (!modalMobileInstall) return;
+        
+        // Fetch current active server QR code and link
+        const sidebarLink = document.querySelector("#network-access-url a");
+        const sidebarQrImg = document.querySelector("#network-access-url img");
+        const activeUrl = sidebarLink ? sidebarLink.href : (window.location.origin);
+        
+        if (modalQrImg) {
+            modalQrImg.onerror = function() {
+                this.onerror = null;
+                this.src = `https://chart.googleapis.com/chart?cht=qr&chs=250x250&chl=${encodeURIComponent(activeUrl)}`;
+            };
+            if (sidebarQrImg && sidebarQrImg.src) {
+                modalQrImg.src = sidebarQrImg.src.replace("size=150x150", "size=250x250");
+            } else {
+                modalQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(activeUrl)}`;
+            }
+        }
+        if (modalQrLinkText) {
+            modalQrLinkText.textContent = activeUrl;
+        }
+
+        // Auto-select tab based on user agent if on mobile
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        switchMobileGuideTab(isIOS ? 'ios' : 'android');
+
+        modalMobileInstall.classList.add("active");
+    }
+
+    function closeMobileInstallModal() {
+        if (modalMobileInstall) modalMobileInstall.classList.remove("active");
+    }
+
+    function switchMobileGuideTab(tab) {
+        if (tab === 'ios') {
+            if (tabBtnIos) tabBtnIos.classList.add("active");
+            if (tabBtnAndroid) tabBtnAndroid.classList.remove("active");
+            if (guideTabIos) guideTabIos.style.display = "block";
+            if (guideTabAndroid) guideTabAndroid.style.display = "none";
+        } else {
+            if (tabBtnAndroid) tabBtnAndroid.classList.add("active");
+            if (tabBtnIos) tabBtnIos.classList.remove("active");
+            if (guideTabAndroid) guideTabAndroid.style.display = "block";
+            if (guideTabIos) guideTabIos.style.display = "none";
+        }
+    }
+
+    window.openMobileInstallModal = openMobileInstallModal;
+    window.closeMobileInstallModal = closeMobileInstallModal;
+    window.switchMobileGuideTab = switchMobileGuideTab;
+
+    if (btnCloseMobileModal) btnCloseMobileModal.addEventListener("click", closeMobileInstallModal);
+    if (btnCloseMobileFooter) btnCloseMobileFooter.addEventListener("click", closeMobileInstallModal);
+
+    if (modalMobileInstall) {
+        modalMobileInstall.addEventListener("click", (e) => {
+            if (e.target === modalMobileInstall) closeMobileInstallModal();
+        });
+    }
+
+    if (btnCopyModalLink) {
+        btnCopyModalLink.addEventListener("click", () => {
+            if (modalQrLinkText && modalQrLinkText.textContent) {
+                navigator.clipboard.writeText(modalQrLinkText.textContent).then(() => {
+                    showToast("Bağlantı linki kopyalandı! 📋", 1500);
+                });
+            }
+        });
+    }
+
     if (btnInstallPwa) {
         btnInstallPwa.addEventListener('click', async () => {
-            if (deferredPrompt) {
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            
+            if (isMobile && deferredPrompt) {
                 deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
                 if (outcome === 'accepted') {
@@ -3853,12 +4043,8 @@ function initApp() {
                 }
                 deferredPrompt = null;
             } else {
-                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-                if (isIOS) {
-                    alert("📱 iPhone / iPad Kurulumu:\n\nSafari tarayıcısının altındaki 'Paylaş (Share)' butonuna dokunun ve 'Ana Ekrana Ekle (Add to Home Screen)' seçeneğini seçin.");
-                } else {
-                    alert("📱 Telefona Uygulama Kurulumu:\n\nTarayıcınızın sağ üstündeki 3 noktaya (...) dokunup 'Uygulamayı Yükle' veya 'Ana Ekrana Ekle' seçeneğine basarak uygulamayı telefonunuza yükleyebilirsiniz.");
-                }
+                // Open step-by-step QR and installation modal
+                openMobileInstallModal();
             }
         });
     }

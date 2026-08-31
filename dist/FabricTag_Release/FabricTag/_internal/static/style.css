@@ -1229,13 +1229,81 @@ body {
     }
 }
 
+/* Mobile Language Selector */
+.mobile-lang-select-wrapper {
+    display: none;
+}
+
 @media screen and (max-width: 768px) {
     .mobile-header {
         display: flex;
+        padding: 0.65rem 1rem;
+    }
+    
+    .mobile-lang-select-wrapper {
+        display: flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        padding: 3px 8px;
+        gap: 6px;
+    }
+    
+    .mobile-lang-icon {
+        color: #38bdf8;
+        font-size: 0.8rem;
+    }
+    
+    .mobile-lang-select {
+        background: transparent;
+        border: none;
+        color: #ffffff;
+        font-size: 0.8rem;
+        font-weight: 700;
+        outline: none;
+        cursor: pointer;
+        font-family: inherit;
+    }
+    
+    .mobile-lang-select option {
+        background: #1e1b4b;
+        color: #ffffff;
     }
     
     .app-container {
         grid-template-columns: 1fr;
+    }
+    
+    .main-content {
+        padding: 1rem 0.75rem;
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+    
+    .card, .settings-card {
+        max-width: 100%;
+        overflow-x: hidden;
+        padding: 1rem;
+    }
+    
+    .input-with-button {
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+    }
+    
+    .input-with-button input,
+    .input-with-button select {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+    
+    .input-with-button .btn {
+        flex: 1 1 calc(50% - 4px) !important;
+        min-width: 110px !important;
+        justify-content: center !important;
+        padding: 9px !important;
+        font-size: 0.82rem !important;
     }
     
     .sidebar {
@@ -1258,10 +1326,6 @@ body {
     
     .sidebar-overlay.active {
         display: block;
-    }
-    
-    .main-content {
-        padding: 1.25rem;
     }
     
     .form-row {

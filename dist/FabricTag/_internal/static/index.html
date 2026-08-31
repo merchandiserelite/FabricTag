@@ -23,7 +23,7 @@
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     
-    <link rel="stylesheet" href="style.css?v=4.1.0">
+    <link rel="stylesheet" href="style.css?v=4.1.2">
 </head>
 <body>
     <!-- Toast Banner Notification for Alerts -->
@@ -41,16 +41,21 @@
             <i class="fa-solid fa-tags logo-icon"></i>
             <h2>FabricTag</h2>
         </div>
-        <div class="lang-pill-toggle" style="margin-left: auto; max-width: 320px; overflow-x: auto;">
-            <button type="button" class="lang-btn active" data-lang="tr" title="Türkçe">🇹🇷 TR</button>
-            <button type="button" class="lang-btn" data-lang="en" title="English">🇬🇧 EN</button>
-            <button type="button" class="lang-btn" data-lang="de" title="Deutsch">🇩🇪 DE</button>
-            <button type="button" class="lang-btn" data-lang="it" title="Italiano">🇮🇹 IT</button>
-            <button type="button" class="lang-btn" data-lang="es" title="Español">🇪🇸 ES</button>
-            <button type="button" class="lang-btn" data-lang="fr" title="Français">🇫🇷 FR</button>
-            <button type="button" class="lang-btn" data-lang="ar" title="العربية">🇸🇦 AR</button>
-            <button type="button" class="lang-btn" data-lang="zh" title="中文">🇨🇳 ZH</button>
-            <button type="button" class="lang-btn" data-lang="ja" title="日本語">🇯🇵 JA</button>
+        
+        <!-- Sleek Mobile Language Dropdown -->
+        <div class="mobile-lang-select-wrapper" style="margin-left: auto;">
+            <i class="fa-solid fa-globe mobile-lang-icon"></i>
+            <select id="mobile-app-lang-select" class="mobile-lang-select" onchange="window.applyAppLanguage && window.applyAppLanguage(this.value)">
+                <option value="tr" selected>🇹🇷 TR</option>
+                <option value="en">🇬🇧 EN</option>
+                <option value="de">🇩🇪 DE</option>
+                <option value="it">🇮🇹 IT</option>
+                <option value="es">🇪🇸 ES</option>
+                <option value="fr">🇫🇷 FR</option>
+                <option value="ar">🇸🇦 AR</option>
+                <option value="zh">🇨🇳 ZH</option>
+                <option value="ja">🇯🇵 JA</option>
+            </select>
         </div>
     </header>
 
@@ -1384,9 +1389,76 @@
         </div>
     </div>
 
+    <!-- Mobile Connect & PWA Install Modal -->
+    <div id="modal-mobile-install" class="modal-overlay">
+        <div class="modal-box" style="max-width: 580px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fa-solid fa-mobile-screen-button" style="color: #4f46e5;"></i>
+                    <span data-i18n="modal_mobile_title">Telefona Bağlan ve Uygulama Olarak Yükle</span>
+                </div>
+                <button class="modal-close-btn" id="btn-close-mobile-modal">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <p style="font-size: 0.88rem; color: #475569; margin: 0 0 16px 0;" data-i18n="modal_mobile_desc">
+                        Aynı Wi-Fi ağındaki herhangi bir akıllı telefonun kamerasıyla aşağıdaki QR kodu okutarak FabricTag'e bağlanabilir ve telefonunuza uygulama olarak yükleyebilirsiniz.
+                    </p>
+                    
+                    <!-- High-Res QR Code Container -->
+                    <div style="display: inline-block; background: #ffffff; padding: 14px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 2px solid #e2e8f0; margin-bottom: 12px;">
+                        <img id="modal-qr-img" src="" alt="QR Code" style="width: 170px; height: 170px; display: block; border-radius: 8px;">
+                    </div>
+                    
+                    <div style="display: flex; justify-content: center; gap: 8px; align-items: center; margin-top: 6px;">
+                        <code id="modal-qr-link-text" style="background: #f1f5f9; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; color: #334155; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></code>
+                        <button type="button" class="btn btn-secondary" id="btn-copy-modal-link" style="padding: 6px 12px; font-size: 0.78rem;">
+                            <i class="fa-solid fa-copy"></i> <span data-i18n="btn_copy_link">Linki Kopyala</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- OS Installation Tabs / Steps -->
+                <div style="border-top: 1px solid #e2e8f0; padding-top: 16px;">
+                    <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                        <button type="button" class="preset-btn active" id="tab-btn-android" onclick="window.switchMobileGuideTab && window.switchMobileGuideTab('android')" style="flex: 1; text-align: center;">
+                            <i class="fa-brands fa-android" style="color: #10b981;"></i> Android
+                        </button>
+                        <button type="button" class="preset-btn" id="tab-btn-ios" onclick="window.switchMobileGuideTab && window.switchMobileGuideTab('ios')" style="flex: 1; text-align: center;">
+                            <i class="fa-brands fa-apple" style="color: #1e293b;"></i> iPhone (iOS)
+                        </button>
+                    </div>
+
+                    <!-- Android Steps -->
+                    <div id="guide-tab-android" style="background: #f8fafc; border-radius: 10px; padding: 14px; border: 1px solid #e2e8f0; font-size: 0.83rem; color: #334155;">
+                        <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
+                            <li data-i18n="android_step1">Telefonunuzun kamerasını açıp yukarıdaki QR kodu okutun.</li>
+                            <li data-i18n="android_step2">Chrome tarayıcısında sağ üstteki <strong>3 nokta (⋮)</strong> simgesine dokunun.</li>
+                            <li data-i18n="android_step3">Menüden <strong>"Uygulamayı Yükle"</strong> veya <strong>"Ana Ekrana Ekle"</strong> butonuna basın.</li>
+                            <li data-i18n="android_step4">Telefonunuzun ana ekranında <strong>FabricTag</strong> logosunu göreceksiniz.</li>
+                        </ol>
+                    </div>
+
+                    <!-- iOS Steps -->
+                    <div id="guide-tab-ios" style="display: none; background: #f8fafc; border-radius: 10px; padding: 14px; border: 1px solid #e2e8f0; font-size: 0.83rem; color: #334155;">
+                        <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
+                            <li data-i18n="ios_step1">iPhone kamerasını açıp QR kodu okutun ve <strong>Safari</strong>'de açın.</li>
+                            <li data-i18n="ios_step2">Safari'nin alt menüsündeki <strong>Paylaş (Share <i class="fa-solid fa-arrow-up-from-bracket"></i>)</strong> simgesine dokunun.</li>
+                            <li data-i18n="ios_step3">Aşağı kaydırıp <strong>"Ana Ekrana Ekle (Add to Home Screen)"</strong> seçeneğini seçin.</li>
+                            <li data-i18n="ios_step4">Sağ üstteki <strong>"Ekle"</strong>ye basın. FabricTag artık telefonunuzda tam ekran bir uygulama olarak açılır!</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; background: #f8fafc;">
+                <button type="button" class="btn btn-primary" id="btn-close-mobile-footer" data-i18n="btn_understood">Anladım</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Hidden Print Area -->
     <div id="print-section"></div>
 
-    <script src="app.js?v=4.1.0"></script>
+    <script src="app.js?v=4.1.2"></script>
 </body>
 </html>
