@@ -906,6 +906,11 @@ function initApp() {
         }
 };
 
+    let currentLang = "tr";
+    try {
+        currentLang = localStorage.getItem("fabrictag_lang") || "tr";
+    } catch(e) {}
+
     function applyLanguage(lang) {
         currentLang = lang;
         try { localStorage.setItem("fabrictag_lang", lang); } catch (e) {}
@@ -973,6 +978,16 @@ function initApp() {
     let capturedPhotoQueue = [];
     let editingInternalCode = null;
     let hasApiKeyConfigured = false;
+
+    // Helper for safe uppercase conversion
+    function toAppUpper(val) {
+        if (val === null || val === undefined) return "";
+        return String(val)
+            .replace(/i/g, "I")
+            .replace(/ı/g, "I")
+            .replace(/İ/g, "I")
+            .toUpperCase();
+    }
 
     // Helper for safe number parsing (preserving 0)
     function parseNum(val, fallback) {
@@ -1271,6 +1286,7 @@ function initApp() {
         fetch("/api/logos")
             .then(res => res.json())
             .then(logos => {
+                if (!Array.isArray(logos)) return;
                 desLogoSelect.innerHTML = "";
                 logos.forEach(logo => {
                     const opt = document.createElement("option");
