@@ -1,0 +1,28 @@
+﻿================================================================================
+       FabricTag - Akıllı Kumaş Kartela & Etiket Yönetim Sistemi (v4.1.0)
+================================================================================
+
+1. HIZLI BAŞLANGIÇ & KURULUM:
+--------------------------------------------------------------------------------
+- "Setup_Wizard.bat" dosyasına çift tıklayarak dilinizi seçebilir, yedekleme 
+  klasörünüzü belirleyebilir ve masaüstünüze şık FabricTag simgesini ekleyebilirsiniz.
+- Veya doğrudan "Start_FabricTag.bat" ile anında başlatabilirsiniz.
+
+2. GEMINI YAPAY ZEKA API KURULUMU:
+--------------------------------------------------------------------------------
+- Kartelaları yapay zeka ile otomatik okutmak için:
+  1. https://aistudio.google.com/app/apikey adresinden Ücretsiz Google API anahtarınızı alın.
+  2. Sol menüden "Ayarlar & Tasarım" sekmesine girip anahtarı yapıştırın ve "Kaydet"e basın.
+  3. Sol alttaki gösterge yeşile döndüğünde sistem yapay zeka ile okumaya hazırdır.
+
+3. MOBİL VE TELEFONDAN KABLOSUZ KULLANIM:
+--------------------------------------------------------------------------------
+- Sol menüdeki "Mobil & QR Bağlantı" kutusundaki QR kodu telefonunuzun kamerasıyla 
+  okutarak aynı ağdaki tüm cep telefonlarından kumaş tarayabilirsiniz.
+
+4. YEDEKLEME VE GÜNCELLEME MERKEZİ:
+--------------------------------------------------------------------------------
+- Yedekleme klasörünüzü "Ayarlar & Tasarım" sekmesinden istediğiniz zaman değiştirebilir 
+  veya "Klasörü Aç" butonuyla anında görüntüleyebilirsiniz.
+- Yeni bir güncelleme çıktığında sistem sizi otomatik olarak uyaracaktır.
+================================================================================

@@ -141,6 +141,7 @@ class SettingsRequest(BaseModel):
     auto_backup_enabled: Optional[bool] = None
     auto_backup_frequency: Optional[str] = None
     auto_backup_time: Optional[str] = None
+    custom_backup_dir: Optional[str] = None
     # Internal Code Format Attributes
     code_prefix_type: Optional[str] = None
     code_prefix_text: Optional[str] = None
@@ -392,6 +393,8 @@ def update_settings(req: SettingsRequest):
         new_settings["auto_backup_frequency"] = req.auto_backup_frequency
     if req.auto_backup_time is not None:
         new_settings["auto_backup_time"] = req.auto_backup_time
+    if req.custom_backup_dir is not None:
+        new_settings["custom_backup_dir"] = req.custom_backup_dir.strip()
         
     # Internal Code Format
     if req.code_prefix_type is not None:
@@ -407,6 +410,43 @@ def update_settings(req: SettingsRequest):
 
     save_settings(new_settings)
     return {"success": True}
+
+APP_VERSION = "4.1.0"
+
+@app.get("/api/check-update")
+def check_update_endpoint():
+    return {
+        "current_version": APP_VERSION,
+        "latest_version": "4.1.0",
+        "has_update": False,
+        "release_date": "2026-08-31",
+        "changelog": [
+            "Global 9-Language Setup Wizard (EN, TR, DE, IT, ES, FR, AR, ZH, JA)",
+            "Custom backup directory path support",
+            "Automatic update notification center",
+            "Instant live Gemini AI API validation"
+        ],
+        "download_url": "https://github.com/fabrictag/releases/latest"
+    }
+
+class OpenFolderRequest(BaseModel):
+    folder_path: Optional[str] = None
+
+@app.post("/api/open-folder")
+def open_folder_endpoint(req: OpenFolderRequest):
+    import subprocess
+    target_path = req.folder_path.strip() if req.folder_path else ""
+    if not target_path or not os.path.exists(target_path):
+        target_path = BACKUPS_DIR
+    
+    try:
+        if os.name == 'nt':
+            subprocess.Popen(['explorer.exe', os.path.normpath(target_path)])
+            return {"success": True, "message": f"Folder opened: {target_path}"}
+        else:
+            return {"success": False, "message": "Only supported on Windows"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 class TestKeyRequest(BaseModel):
     api_key: Optional[str] = None

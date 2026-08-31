@@ -138,7 +138,19 @@
         "lbl_hardware_id": "Bilgisayarınızın Donanım Kimliği (Hardware ID):",
         "hardware_id_help": "Lisans anahtarı satın alırken bu kodu bize iletmeniz yeterlidir.",
         "lbl_enter_license_key": "Aktivasyon / Lisans Anahtarı:",
-        "btn_activate_now": "Lisansı Aktive Et"
+        "btn_activate_now": "Lisansı Aktive Et",
+        "backup_dir_title": "Özel Yedekleme Klasörü ve Otomatik Senkronizasyon",
+        "backup_dir_desc": "FabricTag her yedek aldığında verilerinizi otomatik olarak bu klasöre de kopyalar (Örn: Harici Disk, D:\\Sürücüsü, Google Drive veya Dropbox klasörü).",
+        "lbl_backup_folder_path": "Yedekleme Klasör Yolu (Klasör Dizini):",
+        "btn_open_folder": "Klasörü Aç",
+        "update_center_title": "Sistem Sürümü & Güncelleme Merkezi",
+        "update_center_desc": "FabricTag sisteminizin güncelliğini denetleyin ve en son kararlı yapay zeka modellerine erişin.",
+        "lbl_current_version": "Kurulu Sistem Sürümü:",
+        "status_latest_version": "Güncel Sürüm",
+        "btn_check_update": "Güncellemeleri Denetle",
+        "update_banner_title": "Yeni FabricTag Güncellemesi Mevcut!",
+        "update_banner_desc": "Daha yüksek yapay zeka performansı ve yeni özellikler için güncelleyin.",
+        "btn_download_update": "Güncellemeyi İndir"
     },
     "en": {
         "lang_label": "Language:",
@@ -279,7 +291,19 @@
         "lbl_hardware_id": "Your Machine Hardware ID:",
         "hardware_id_help": "Simply send this code when purchasing a commercial license key.",
         "lbl_enter_license_key": "Activation / License Key:",
-        "btn_activate_now": "Activate License"
+        "btn_activate_now": "Activate License",
+        "backup_dir_title": "Custom Backup Directory & Auto-Sync",
+        "backup_dir_desc": "FabricTag automatically mirrors your database and Excel archives to this directory on every backup (e.g. USB Drive, D:\\Drive, Google Drive or Dropbox folder).",
+        "lbl_backup_folder_path": "Backup Folder Path (Directory):",
+        "btn_open_folder": "Open Folder",
+        "update_center_title": "System Version & Update Center",
+        "update_center_desc": "Check system update status and access latest stable AI vision models.",
+        "lbl_current_version": "Installed System Version:",
+        "status_latest_version": "Latest Version",
+        "btn_check_update": "Check for Updates",
+        "update_banner_title": "New FabricTag Update Available!",
+        "update_banner_desc": "Update now for enhanced AI accuracy and latest performance improvements.",
+        "btn_download_update": "Download Update"
     },
     "de": {
         "lang_label": "Sprache:",
@@ -313,7 +337,19 @@
         "guide_step3_title": "3. Visuelles Etikettendesign & Barcode-Druck",
         "guide_step3_desc": "Laden Sie Ihr Logo hoch, ordnen Sie Etikettenzeilen per Drag-and-Drop an und passen Sie Schriftarten/Farben in der Live-Vorschau an. Kompatibel mit A4-Bögen und Zebra/Argox-Rollendruckern.",
         "guide_step4_title": "4. Excel-Import/Export & Cloud-Backup",
-        "guide_step4_desc": "Importieren Sie vorhandene Excel-Listen mit einem Klick oder exportieren Sie gefilterte Daten. Automatische tägliche Sicherung mit OneDrive Cloud-Schutz."
+        "guide_step4_desc": "Importieren Sie vorhandene Excel-Listen mit einem Klick oder exportieren Sie gefilterte Daten. Automatische tägliche Sicherung mit OneDrive Cloud-Schutz.",
+        "backup_dir_title": "Benutzerdefinierter Sicherungsordner & Auto-Sync",
+        "backup_dir_desc": "FabricTag spiegelt Ihre Datenbank- und Excel-Archive bei jeder Sicherung automatisch in diesen Ordner (z. B. USB-Laufwerk, D:\\, Google Drive).",
+        "lbl_backup_folder_path": "Sicherungsordnerpfad:",
+        "btn_open_folder": "Ordner Öffnen",
+        "update_center_title": "Systemversion & Update-Zentrum",
+        "update_center_desc": "Überprüfen Sie den Update-Status und nutzen Sie die neuesten KI-Modelle.",
+        "lbl_current_version": "Installierte Version:",
+        "status_latest_version": "Neueste Version",
+        "btn_check_update": "Nach Updates Suchen",
+        "update_banner_title": "Neues FabricTag-Update Verfügbar!",
+        "update_banner_desc": "Aktualisieren Sie jetzt für verbesserte KI-Leistung und neue Funktionen.",
+        "btn_download_update": "Update Herunterladen"
     },
     "it": {
         "lang_label": "Lingua:",
@@ -347,7 +383,19 @@
         "guide_step3_title": "3. Design Visivo Etichetta & Stampa Codici a Barre",
         "guide_step3_desc": "Carica il tuo logo, ordina gli elementi tramite drag & drop e visualizza l'anteprima in tempo reale. Compatibile con fogli A4 e stampanti a rotolo Zebra/Argox.",
         "guide_step4_title": "4. Import/Export Excel & Backup su Cloud",
-        "guide_step4_desc": "Importa il tuo archivio Excel esistente con un clic o esporta i dati filtrati. Backup giornaliero automatico con protezione cloud OneDrive."
+        "guide_step4_desc": "Importa il tuo archivio Excel esistente con un clic o esporta i dati filtrati. Backup giornaliero automatico con protezione cloud OneDrive.",
+        "backup_dir_title": "Cartella di Backup Personalizzata & Sincronizzazione",
+        "backup_dir_desc": "FabricTag copia automaticamente i database e i file Excel in questa cartella (es. Unità USB, D:\\, Google Drive o Dropbox).",
+        "lbl_backup_folder_path": "Percorso Cartella di Backup:",
+        "btn_open_folder": "Apri Cartella",
+        "update_center_title": "Versione di Sistema & Centro Aggiornamenti",
+        "update_center_desc": "Verifica la disponibilità di aggiornamenti e accedi ai modelli AI più recenti.",
+        "lbl_current_version": "Versione Installata:",
+        "status_latest_version": "Versione Più Recente",
+        "btn_check_update": "Controlla Aggiornamenti",
+        "update_banner_title": "Nuovo Aggiornamento FabricTag Disponibile!",
+        "update_banner_desc": "Aggiorna ora per una maggiore precisione dell'IA e nuove funzionalità.",
+        "btn_download_update": "Scarica Aggiornamento"
     },
     "es": {
         "lang_label": "Idioma:",
@@ -381,7 +429,19 @@
         "guide_step3_title": "3. Diseño Visual de Etiquetas e Impresión de Códigos",
         "guide_step3_desc": "Suba su logotipo, ordene los campos arrastrando y soltando, y previsualice en tiempo real. Compatible con hojas A4 e impresoras térmicas Zebra/Argox.",
         "guide_step4_title": "4. Importar/Exportar Excel y Copia en la Nube",
-        "guide_step4_desc": "Importe su archivo Excel existente con un clic o exporte datos filtrados. Copias de seguridad automáticas diarias con protección en la nube OneDrive."
+        "guide_step4_desc": "Importe su archivo Excel existente con un clic o exporte datos filtrados. Copias de seguridad automáticas diarias con protección en la nube OneDrive.",
+        "backup_dir_title": "Carpeta de Copia de Seguridad Personalizada y Sincronización",
+        "backup_dir_desc": "FabricTag copia automáticamente la base de datos y archivos Excel en esta carpeta (ej. Disco USB, D:\\, Google Drive o Dropbox).",
+        "lbl_backup_folder_path": "Ruta de la Carpeta de Copia:",
+        "btn_open_folder": "Abrir Carpeta",
+        "update_center_title": "Versión del Sistema y Centro de Actualizaciones",
+        "update_center_desc": "Compruebe las actualizaciones del sistema y acceda a los últimos modelos de IA.",
+        "lbl_current_version": "Versión Instalada:",
+        "status_latest_version": "Última Versión",
+        "btn_check_update": "Buscar Actualizaciones",
+        "update_banner_title": "¡Nueva Actualización de FabricTag Disponible!",
+        "update_banner_desc": "Actualice ahora para mejorar el rendimiento de la IA y nuevas funciones.",
+        "btn_download_update": "Descargar Actualización"
     },
     "fr": {
         "lang_label": "Langue:",
@@ -415,7 +475,19 @@
         "guide_step3_title": "3. Conception Visuelle d'Étiquettes & Code-Barres",
         "guide_step3_desc": "Ajoutez votre logo, organisez les lignes par glisser-déposer et prévisualisez en direct. Compatible planches A4 et imprimantes d'étiquettes Zebra/Argox.",
         "guide_step4_title": "4. Import/Export Excel & Sauvegarde Cloud",
-        "guide_step4_desc": "Importez votre fichier Excel existant en un clic ou exportez vos fiches filtrées. Sauvegarde quotidienne automatique avec protection cloud OneDrive."
+        "guide_step4_desc": "Importez votre fichier Excel existant en un clic ou exportez vos fiches filtrées. Sauvegarde quotidienne automatique avec protection cloud OneDrive.",
+        "backup_dir_title": "Dossier de Sauvegarde Personnalisé & Synchronisation",
+        "backup_dir_desc": "FabricTag duplique automatiquement vos données et archives Excel dans ce dossier (ex. Clé USB, D:\\, Google Drive ou Dropbox).",
+        "lbl_backup_folder_path": "Chemin du Dossier de Sauvegarde :",
+        "btn_open_folder": "Ouvrir le Dossier",
+        "update_center_title": "Version Système & Centre de Mises à Jour",
+        "update_center_desc": "Vérifiez les mises à jour et bénéficiez des derniers modèles d'IA.",
+        "lbl_current_version": "Version Installée :",
+        "status_latest_version": "Dernière Version",
+        "btn_check_update": "Rechercher des Mises à Jour",
+        "update_banner_title": "Nouvelle Mise à Jour FabricTag Disponible !",
+        "update_banner_desc": "Mettez à jour maintenant pour des performances IA accrues.",
+        "btn_download_update": "Télécharger la Mise à Jour"
     },
     "ar": {
         "lang_label": "اللغة:",
@@ -517,7 +589,19 @@
         "lbl_hardware_id": "معرف أجهزة الكمبيوتر الخاص بك (Hardware ID):",
         "hardware_id_help": "أرسل هذا الرمز إلينا عند شراء مفتاح الترخيص.",
         "lbl_enter_license_key": "مفتاح التفعيل / الترخيص:",
-        "btn_activate_now": "تفعيل الترخيص الآن"
+        "btn_activate_now": "تفعيل الترخيص الآن",
+        "backup_dir_title": "مجلد النسخ الاحتياطي المخصص والمزامنة التلقائية",
+        "backup_dir_desc": "يقوم FabricTag بنسخ قاعدة البيانات وملفات Excel تلقائياً إلى هذا المجلد (مثل قرص USB، أو محرك D:\\، أو Google Drive).",
+        "lbl_backup_folder_path": "مسار مجلد النسخ الاحتياطي:",
+        "btn_open_folder": "فتح المجلد",
+        "update_center_title": "إصدار النظام ومركز التحديثات",
+        "update_center_desc": "تحقق من حالة تحديث النظام واستفد من أحدث نماذج الذكاء الاصطناعي.",
+        "lbl_current_version": "إصدار النظام المثبت:",
+        "status_latest_version": "أحدث إصدار",
+        "btn_check_update": "التحقق من وجود تحديثات",
+        "update_banner_title": "يتوفر تحديث جديد لـ FabricTag!",
+        "update_banner_desc": "قم بالتحديث الآن للحصول على أداء أعلى وميزات جديدة.",
+        "btn_download_update": "تحميل التحديث"
     },
     "zh": {
         "lang_label": "语言:",
@@ -619,7 +703,19 @@
         "lbl_hardware_id": "当前电脑硬件识别码 (Hardware ID):",
         "hardware_id_help": "购买商业授权时，只需将此硬件码提供给我们即可。",
         "lbl_enter_license_key": "激活 / 授权密钥:",
-        "btn_activate_now": "立即激活授权"
+        "btn_activate_now": "立即激活授权",
+        "backup_dir_title": "自定义备份文件夹与自动同步",
+        "backup_dir_desc": "FabricTag 每次备份时都会自动将数据库和 Excel 归档复制到此目录（如 USB 驱动器、D 盘、Google Drive 或 Dropbox）。",
+        "lbl_backup_folder_path": "备份文件夹路径：",
+        "btn_open_folder": "打开文件夹",
+        "update_center_title": "系统版本与更新中心",
+        "update_center_desc": "检查系统更新状态并获取最新的稳定 AI 视觉识别模型。",
+        "lbl_current_version": "当前安装版本：",
+        "status_latest_version": "最新版本",
+        "btn_check_update": "检查更新",
+        "update_banner_title": "发现 FabricTag 新版本！",
+        "update_banner_desc": "立即更新以体验更强大的 AI 识别能力与新功能。",
+        "btn_download_update": "下载更新"
     },
     "ja": {
         "lang_label": "言語:",
@@ -721,6 +817,18 @@
         "lbl_hardware_id": "マシンハードウェア識別ID (Hardware ID):",
         "hardware_id_help": "ライセンス購入時にこのコードをお知らせください。",
         "lbl_enter_license_key": "アクティベーション / ライセンスキー:",
-        "btn_activate_now": "今すぐライセンス認証"
+        "btn_activate_now": "今すぐライセンス認証",
+        "backup_dir_title": "カスタムバックアップフォルダ＆自動同期",
+        "backup_dir_desc": "バックアップ実行時、データベースとExcel台帳をこのフォルダにも自動複製します（USBドライブ、Dドライブ、Google Driveなど）。",
+        "lbl_backup_folder_path": "バックアップフォルダのパス:",
+        "btn_open_folder": "フォルダを開く",
+        "update_center_title": "システムバージョン＆アップデートセンター",
+        "update_center_desc": "システムの更新状況を確認し、最新のAIモデルを利用できます。",
+        "lbl_current_version": "インストール済みバージョン:",
+        "status_latest_version": "最新バージョン",
+        "btn_check_update": "更新を確認",
+        "update_banner_title": "FabricTagの新しいアップデートがあります！",
+        "update_banner_desc": "最新のAI精度向上と新機能をご利用いただくために更新してください。",
+        "btn_download_update": "更新をダウンロード"
     }
 }

@@ -387,19 +387,43 @@ def export_to_csv(filepath):
                 row["created_at"]
             ])
 
+def get_custom_backup_dir():
+    try:
+        settings_file = os.path.join(BASE_DIR, "settings.json")
+        if os.path.exists(settings_file):
+            import json
+            with open(settings_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                custom_dir = data.get("custom_backup_dir", "").strip()
+                if custom_dir and os.path.exists(custom_dir):
+                    return custom_dir
+    except Exception:
+        pass
+    return None
+
 def create_timestamped_backup(start_date=None, end_date=None, label_prefix="MANUEL_YEDEK"):
     now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"ELITE_Kumas_{label_prefix}_{now_str}.xlsx"
+    filename = f"FabricTag_{label_prefix}_{now_str}.xlsx"
     filepath = os.path.join(BACKUPS_DIR, filename)
     count = export_to_xlsx(filepath, start_date=start_date, end_date=end_date)
     
+    # Auto-mirror to Custom Backup Directory if specified
+    custom_dir = get_custom_backup_dir()
+    if custom_dir and os.path.exists(filepath):
+        try:
+            shutil.copy2(filepath, os.path.join(custom_dir, filename))
+            if os.path.exists(DB_FILE):
+                shutil.copy2(DB_FILE, os.path.join(custom_dir, "FabricTag_database_backup.db"))
+        except Exception:
+            pass
+
     # Auto-mirror to OneDrive Cloud Backup if active
     if ONEDRIVE_BACKUP_DIR and os.path.exists(filepath):
         try:
             shutil.copy2(filepath, os.path.join(ONEDRIVE_BACKUP_DIR, filename))
             # Also backup database file
             if os.path.exists(DB_FILE):
-                shutil.copy2(DB_FILE, os.path.join(ONEDRIVE_BACKUP_DIR, "database_backup.db"))
+                shutil.copy2(DB_FILE, os.path.join(ONEDRIVE_BACKUP_DIR, "FabricTag_database_backup.db"))
         except Exception:
             pass
             

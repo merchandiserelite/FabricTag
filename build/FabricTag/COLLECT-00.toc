@@ -2217,6 +2217,10 @@
    'C:\\Users\\ASLI '
    'CELIK\\.gemini\\antigravity\\scratch\\fabric-label-system\\static\\logo.png',
    'DATA'),
+  ('static\\logos\\Çalışma_Yüzeyi_1_cfdbf2.png',
+   'C:\\Users\\ASLI '
+   'CELIK\\.gemini\\antigravity\\scratch\\fabric-label-system\\static\\logos\\Çalışma_Yüzeyi_1_cfdbf2.png',
+   'DATA'),
   ('static\\manifest.json',
    'C:\\Users\\ASLI '
    'CELIK\\.gemini\\antigravity\\scratch\\fabric-label-system\\static\\manifest.json',
