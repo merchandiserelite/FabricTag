@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import json
 import uuid
@@ -12,7 +12,11 @@ import database
 MASTER_SECRET_SALT = b"FABRICTAG_AI_SWATCH_SYSTEM_PRO_2026_DEEPMIND_TURKEY_SECRET_KEY"
 FREE_RECORDS_LIMIT = 20
 
-BASE_DIR = os.path.dirname(__file__)
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 LICENSE_FILE = os.path.join(BASE_DIR, "license.dat")
 
 def get_hardware_id() -> str:

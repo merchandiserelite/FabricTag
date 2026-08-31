@@ -8,7 +8,13 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-BASE_DIR = os.path.dirname(__file__)
+import sys
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 DB_FILE = os.path.join(BASE_DIR, "database.db")
 BACKUPS_DIR = os.path.join(BASE_DIR, "backups")
 

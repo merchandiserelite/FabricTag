@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FabricTag - Smart Fabric Hanger & Swatch Scanner</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@400;600;700&family=Montserrat:wght@400;600;700&family=Outfit:wght@300;400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- JsBarcode Library for Barcode Rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    
+    <!-- PWA Manifest & Mobile App Capabilities -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FabricTag">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    
+    <link rel="stylesheet" href="style.css?v=4.0.6">
+</head>
+<body>
+    <!-- Toast Banner Notification for Alerts -->
+    <div id="toast-banner" class="toast-banner">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span id="toast-message">Islem Basarili</span>
+    </div>
+
+    <!-- Mobile Top Navigation Header -->
+    <header class="mobile-header">
+        <button class="menu-toggle-btn" id="mobile-menu-toggle" aria-label="Menü">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+        <div class="mobile-logo">
+            <i class="fa-solid fa-tags logo-icon"></i>
+            <h2>FabricTag</h2>
+        </div>
+        <div class="lang-pill-toggle" style="margin-left: auto; max-width: 320px; overflow-x: auto;">
+            <button type="button" class="lang-btn active" data-lang="tr" title="Türkçe">🇹🇷 TR</button>
+            <button type="button" class="lang-btn" data-lang="en" title="English">🇬🇧 EN</button>
+            <button type="button" class="lang-btn" data-lang="de" title="Deutsch">🇩🇪 DE</button>
+            <button type="button" class="lang-btn" data-lang="it" title="Italiano">🇮🇹 IT</button>
+            <button type="button" class="lang-btn" data-lang="es" title="Español">🇪🇸 ES</button>
+            <button type="button" class="lang-btn" data-lang="fr" title="Français">🇫🇷 FR</button>
+            <button type="button" class="lang-btn" data-lang="ar" title="العربية">🇸🇦 AR</button>
+            <button type="button" class="lang-btn" data-lang="zh" title="中文">🇨🇳 ZH</button>
+            <button type="button" class="lang-btn" data-lang="ja" title="日本語">🇯🇵 JA</button>
+        </div>
+    </header>
+
+    <!-- App Container -->
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="app-sidebar">
+            <div class="sidebar-top-section">
+                <div class="logo-area">
+                    <i class="fa-solid fa-tags logo-icon"></i>
+                    <div class="logo-text">
+                        <h2>FabricTag</h2>
+                        <span style="font-size: 0.68rem; letter-spacing: 0.5px; opacity: 0.85;" data-i18n="sidebar_subtitle">Swatch & Hanger AI</span>
+                    </div>
+                    <button class="btn-sidebar-collapse" id="btn-toggle-sidebar-collapse" title="Menüyü Gizle"><i class="fa-solid fa-chevron-left"></i></button>
+                    <button class="sidebar-close-btn" id="sidebar-close-btn">&times;</button>
+                </div>
+
+                <!-- Modern Language Dropdown Selector (9 Languages) -->
+                <div class="lang-switcher-container">
+                    <div class="lang-select-wrapper">
+                        <i class="fa-solid fa-globe lang-select-icon"></i>
+                        <select id="app-lang-select" class="lang-select-dropdown" onchange="window.applyAppLanguage && window.applyAppLanguage(this.value)">
+                            <option value="tr" selected>🇹🇷 Türkçe (TR)</option>
+                            <option value="en">🇬🇧 English (EN)</option>
+                            <option value="de">🇩🇪 Deutsch (DE)</option>
+                            <option value="it">🇮🇹 Italiano (IT)</option>
+                            <option value="es">🇪🇸 Español (ES)</option>
+                            <option value="fr">🇫🇷 Français (FR)</option>
+                            <option value="ar">🇸🇦 العربية (AR)</option>
+                            <option value="zh">🇨🇳 中文 (ZH)</option>
+                            <option value="ja">🇯🇵 日本語 (JA)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <nav class="nav-menu">
+                    <button class="nav-btn active" data-tab="scan-tab" onclick="window.switchAppTab && window.switchAppTab('scan-tab', this)">
+                        <i class="fa-solid fa-camera"></i> <span data-i18n="nav_scan">Kartela Tara</span>
+                    </button>
+                    <button class="nav-btn" data-tab="database-tab" onclick="window.switchAppTab && window.switchAppTab('database-tab', this)">
+                        <i class="fa-solid fa-database"></i> <span data-i18n="nav_database">Veritabanı / Geçmiş</span>
+                    </button>
+                    <button class="nav-btn" data-tab="settings-tab" onclick="window.switchAppTab && window.switchAppTab('settings-tab', this)">
+                        <i class="fa-solid fa-gear"></i> <span data-i18n="nav_settings">Ayarlar & Tasarım</span>
+                    </button>
+                    <button type="button" class="btn-guide-nav" id="btn-open-user-guide" onclick="window.openUserGuideModal && window.openUserGuideModal()">
+                        <i class="fa-solid fa-book-open"></i> <span data-i18n="nav_user_guide">Kullanım Rehberi</span>
+                    </button>
+                </nav>
+
+                <!-- PWA Mobile App Install Button -->
+                <div class="sidebar-pwa-install" id="sidebar-pwa-container" style="margin-top: 0.85rem; margin-bottom: 0.75rem; width: 100%;">
+                    <button type="button" class="btn btn-primary" id="btn-install-pwa" style="width: 100%; font-size: 0.82rem; padding: 10px 12px; border-radius: var(--radius-sm); background: linear-gradient(135deg, #4f46e5, #06b6d4); border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;">
+                        <i class="fa-solid fa-mobile-screen-button"></i> <span data-i18n="btn_install_pwa">Telefona Uygulama Olarak Yukle</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- License Status Card -->
+            <div class="sidebar-license-card" id="sidebar-license-card">
+                <div class="sidebar-license-badge free" id="license-badge-status">
+                    <i class="fa-solid fa-gift"></i>
+                    <span id="license-badge-text">Ücretsiz: 20/20 Kalan</span>
+                </div>
+                <button type="button" class="btn-license-trigger" id="btn-open-license-modal">
+                    <i class="fa-solid fa-key"></i> <span data-i18n="btn_license_activate">Lisansla / Satın Al</span>
+                </button>
+            </div>
+
+            <!-- Left Sidebar Collapsible Mobile Connection & QR Box -->
+            <div class="sidebar-network-card">
+                <div class="sidebar-network-header" id="sidebar-network-toggle">
+                    <span class="sidebar-net-title"><i class="fa-solid fa-mobile-screen-button"></i> <span data-i18n="mobile_qr_title">Mobil & QR Baglanti</span></span>
+                    <i class="fa-solid fa-chevron-down" id="sidebar-network-chevron"></i>
+                </div>
+                <div class="sidebar-network-content" id="sidebar-network-content">
+                    <div id="network-access-url" class="sidebar-network-info">
+                        <span style="font-size: 0.8rem; color: #94a3b8;">Baglanti aliniyor...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="api-status-indicator" id="api-status-bar">
+                <span class="status-dot red" id="status-dot"></span>
+                <span class="status-text" id="status-text">Gemini API Bagli Degil</span>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Floating Sidebar Open Button (Visible when sidebar collapsed) -->
+            <button class="btn-floating-open-sidebar" id="btn-floating-open-sidebar" title="Menüyü Göster">
+                <i class="fa-solid fa-bars"></i> <span>Menüyü Göster</span>
+            </button>
+            <!-- Scan Tab -->
+            <section id="scan-tab" class="tab-content active">
+                <div class="tab-header">
+                    <h1 data-i18n="scan_header_title">Kartela Tarama Ekrani</h1>
+                    <p data-i18n="scan_header_desc">Kumas kartelasi fotograflarini cekin veya yukleyin.</p>
+                </div>
+
+                <div class="scan-grid">
+                    <!-- Scan Left: Upload / Capture -->
+                    <div class="card upload-card">
+                        <!-- Hidden Inputs for Native Actions -->
+                        <input type="file" id="file-input" accept="image/jpeg, image/png, image/jpg" multiple style="display:none;">
+                        <input type="file" id="mobile-gallery-input" accept="image/*" multiple style="display:none;">
+                        <input type="file" id="camera-file-input" accept="image/*" capture="environment" style="display:none;">
+
+                        <div class="drag-drop-area" id="drag-drop-zone">
+                            <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                            <h3 data-i18n="drag_drop_title">Kartela Resimlerini Yukleyin / Cekin</h3>
+                            <p><span data-i18n="drag_drop_subtitle">Tiklayarak veya surukleyerek</span> <span>dosya secin</span></p>
+                            <span class="file-limits" data-i18n="drag_drop_limits">JPEG, JPG, PNG (Coklu Fotograf Secebilirsiniz)</span>
+                        </div>
+
+                        <!-- Camera Action Bar with Smart Device Detection -->
+                        <div class="camera-action-bar" style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem;">
+                            <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-secondary" id="btn-normal-camera">
+                                    <i class="fa-solid fa-camera"></i> <span data-i18n="btn_normal_camera">Kamera ile Cek</span>
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="btn-choose-files">
+                                    <i class="fa-solid fa-images"></i> <span data-i18n="btn_choose_files">Galeriden / Dosyadan Sec</span>
+                                </button>
+                                <button class="btn btn-primary" id="webcam-btn" type="button">
+                                    <i class="fa-solid fa-video"></i> <span data-i18n="btn_live_camera">Canli Kamera (Seri Cekim)</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Live In-Page Video Container for Continuous Rapid Fire Snap -->
+                        <div class="video-container" id="video-container" style="display: none; flex-direction: column; align-items: center; gap: 10px; margin-top: 1rem;">
+                            <video id="cameraStream" autoplay playsinline muted style="width: 100%; max-width: 480px; border-radius: 8px; border: 2px solid #4f46e5; background: #000;"></video>
+                            
+                            <button id="captureBtn" class="btn btn-success" type="button" style="padding: 12px 24px; font-size: 16px; width: 100%; max-width: 480px; font-weight: 700;">
+                                📷 <span data-i18n="btn_capture_now">Kartela Fotografi Cek & Oku</span>
+                            </button>
+
+                            <div id="statusLog" style="font-size: 14px; font-weight: 600; color: #4f46e5; text-align:center;">Kamera hazir.</div>
+                            
+                            <button id="close-webcam-btn" class="btn btn-secondary" type="button" style="padding: 6px 16px; font-size: 0.85rem;">
+                                <i class="fa-solid fa-xmark"></i> <span data-i18n="btn_close_camera">Kamerayi Kapat</span>
+                            </button>
+                        </div>
+
+                        <!-- Multi-Photo Queue Gallery Preview -->
+                        <div class="queue-container" id="queue-box" style="display: none; margin-top: 1.25rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <h4 style="font-size: 0.9rem; font-weight: 600; color: #334155;">
+                                    <i class="fa-solid fa-layer-group"></i> <span data-i18n="queue_title">Fotograf Kuyrugu</span> (<span id="queue-count">0</span>)
+                                </h4>
+                                <button class="btn btn-secondary" id="btn-clear-queue" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">
+                                    <i class="fa-solid fa-trash-can"></i> <span data-i18n="btn_clear_queue">Kuyrugu Temizle</span>
+                                </button>
+                            </div>
+                            <div class="queue-grid" id="queue-grid"></div>
+                            
+                            <button class="btn btn-success" id="btn-process-queue" style="width: 100%; margin-top: 0.75rem;">
+                                <i class="fa-solid fa-bolt"></i> <span data-i18n="btn_process_queue">Kuyruktaki Tum Kartelalari Oku & Kaydet</span>
+                            </button>
+                        </div>
+
+                        <!-- Image Preview -->
+                        <div class="preview-container" id="preview-box" style="display: none;">
+                            <img id="image-preview" src="" alt="Kartela onizleme">
+                            <button class="btn-remove-preview" id="btn-clear-image" title="Resmi Kaldir">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+
+                        <!-- Analysis Loading State -->
+                        <div class="analysis-loader" id="analysis-loader" style="display: none;">
+                            <div class="spinner"></div>
+                            <h4 id="loader-title" data-i18n="loader_title">Yapay Zeka Kartelayi Cozumluor...</h4>
+                            <p id="loader-subtitle" data-i18n="loader_subtitle">Yazilar okunuyor, resim sikistiriliyor ve veriler gruplaniyor.</p>
+                            <div class="progress-bar-container" id="progress-bar-box" style="display:none; margin-top:10px;">
+                                <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-bar-fill"></div></div>
+                                <span class="progress-text" id="progress-text">1 / 1</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scan Right: Extracted Fields Form -->
+                    <div class="card result-card" id="result-card" style="opacity: 0.6; pointer-events: none;">
+                        <div class="card-header">
+                            <h2><i class="fa-solid fa-square-poll-horizontal"></i> <span data-i18n="form_title">Okunan Kartela Bilgileri</span></h2>
+                            <span class="badge" id="duplicate-warning" style="display: none;"><i class="fa-solid fa-clock-rotate-left"></i> Kayitli Kumas Duzenleniyor</span>
+                        </div>
+                        
+                        <form id="fabric-form" class="fabric-form">
+                            <!-- Internal Code Display -->
+                            <div class="form-group full-width" id="internal-code-group" style="display: none;">
+                                <label for="form-internal-code" data-i18n="lbl_internal_code">Atanan Ic Kod (Internal Code)</label>
+                                <div class="input-with-icon">
+                                    <i class="fa-solid fa-key input-icon"></i>
+                                    <input type="text" id="form-internal-code" readonly placeholder="Sisteme kaydedildiginde atanacaktir." class="uppercase-input">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="form-company-name" data-i18n="lbl_company">Kumasci / Uretici Firma</label>
+                                    <input type="text" id="form-company-name" required placeholder="Orn: BEZTAS TEKSTIL" class="uppercase-input">
+                                </div>
+                                <div class="form-group">
+                                    <label for="form-quality-code" data-i18n="lbl_quality_code">Kalite Kodu (Article)</label>
+                                    <input type="text" id="form-quality-code" required placeholder="Orn: K2072" class="uppercase-input">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="form-quality-name" data-i18n="lbl_quality_name">Kalite Adi (Name)</label>
+                                    <input type="text" id="form-quality-name" placeholder="Orn: SPINOZA RECYCLE" class="uppercase-input">
+                                </div>
+                                <div class="form-group">
+                                    <label for="form-design-code" data-i18n="lbl_design_code">Desen / Varyant Kodu (Design)</label>
+                                    <input type="text" id="form-design-code" placeholder="Orn: 66461-D" class="uppercase-input">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="form-width" data-i18n="lbl_width">En (Width)</label>
+                                    <input type="text" id="form-width" placeholder="Orn: 150 CM ±3" class="uppercase-input">
+                                </div>
+                                <div class="form-group">
+                                    <label for="form-weight" data-i18n="lbl_weight">Gramaj (Weight)</label>
+                                    <input type="text" id="form-weight" placeholder="Orn: 83 GR/M² ±5" class="uppercase-input">
+                                </div>
+                            </div>
+
+                            <div class="form-group full-width">
+                                <label for="form-composition" data-i18n="lbl_composition">Karisim / Yapi (Composition - Sembolsuz)</label>
+                                <textarea id="form-composition" rows="2" placeholder="Orn: %31 POLYESTER RECYCLE %69 POLYESTER" class="uppercase-input"></textarea>
+                            </div>
+
+                            <div class="form-group full-width">
+                                <label for="form-barcode" data-i18n="lbl_barcode">Barkod / QR Degeri</label>
+                                <input type="text" id="form-barcode" placeholder="Orn: 02004197" class="uppercase-input">
+                            </div>
+                        </form>
+
+                        <div class="action-divider"></div>
+
+                        <!-- Printing Actions -->
+                        <div class="print-actions">
+                            <div class="template-selector">
+                                <label data-i18n="template_select_title">Yazici Sablonu Secin:</label>
+                                <div class="radio-group">
+                                    <label class="radio-label">
+                                        <input type="radio" name="print-option" value="option-a" id="radio-opt-a" checked>
+                                        <span class="custom-radio"></span>
+                                        <strong data-i18n="opt_a_name">Secenek A</strong> (<span data-i18n="opt_a_desc">Gizli / Sir Etiket</span>)
+                                    </label>
+                                    <label class="radio-label">
+                                        <input type="radio" name="print-option" value="option-b" id="radio-opt-b">
+                                        <span class="custom-radio"></span>
+                                        <strong data-i18n="opt_b_name">Secenek B</strong> (<span data-i18n="opt_b_desc">Acik Detayli Etiket</span>)
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="button-group button-group-3">
+                                <button class="btn btn-success" id="btn-save-only">
+                                    <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btn_save_only">Yalnizca Kaydet</span>
+                                </button>
+                                <button class="btn btn-primary" id="btn-save-print">
+                                    <i class="fa-solid fa-print"></i> <span data-i18n="btn_save_print">Kaydet & Yazdir</span>
+                                </button>
+                                <button class="btn btn-secondary" id="btn-print-only">
+                                    <i class="fa-solid fa-print"></i> <span data-i18n="btn_print_only">Yalnizca Yazdir</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Database Tab -->
+            <section id="database-tab" class="tab-content">
+                <div class="tab-header">
+                    <div class="header-main">
+                        <div>
+                            <h1 data-i18n="db_header_title">Kumas Veritabani ve Gecmisi</h1>
+                            <p data-i18n="db_header_desc">Su ana kadar taranan ve kaydedilen tum etiketler burada tutulur.</p>
+                        </div>
+                        <div class="header-buttons" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-secondary" id="btn-download-excel-template" title="Örnek Boş Excel Formatı İndir">
+                                <i class="fa-solid fa-file-arrow-down"></i> <span data-i18n="btn_download_template">Şablon İndir (.xlsx)</span>
+                            </button>
+                            <button class="btn btn-primary" id="btn-open-import-modal">
+                                <i class="fa-solid fa-file-import"></i> <span data-i18n="btn_import_excel">Excel'den İçe Aktar</span>
+                            </button>
+                            <button class="btn btn-success" id="btn-open-backup-modal">
+                                <i class="fa-solid fa-file-excel"></i> <span data-i18n="btn_excel_backup_modal">Excel (.xlsx) & Yedekleme</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card table-card">
+                    <div class="table-actions">
+                        <div class="search-bar">
+                            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                            <input type="text" id="db-search" data-i18n-placeholder="search_placeholder" placeholder="Ic kod, firma, kalite veya desen ara..." class="uppercase-input">
+                        </div>
+                        <div class="batch-action-bar">
+                            <!-- Dual View Mode Switcher -->
+                            <div class="db-view-toggle">
+                                <button type="button" class="btn-view-toggle active" id="btn-view-cards" title="Kart Görünümü (Okunaklı & Mobil Uyumlu)">
+                                    <i class="fa-solid fa-table-cells-large"></i> <span data-i18n="view_cards">Kartlar</span>
+                                </button>
+                                <button type="button" class="btn-view-toggle" id="btn-view-table" title="Tablo Görünümü">
+                                    <i class="fa-solid fa-table-list"></i> <span data-i18n="view_table">Tablo</span>
+                                </button>
+                            </div>
+
+                            <select id="batch-template-select" class="select-input">
+                                <option value="option-a" data-i18n="opt_a_full">Secenek A (Gizli Kodlu)</option>
+                                <option value="option-b" data-i18n="opt_b_full">Secenek B (Detayli Acik)</option>
+                            </select>
+                            <button class="btn btn-primary" id="btn-batch-print">
+                                <i class="fa-solid fa-print"></i> <span data-i18n="btn_batch_print">Secilenleri Toplu Yazdir (A4)</span>
+                            </button>
+                            <button class="btn btn-secondary" id="btn-refresh-db" title="Yenile">
+                                <i class="fa-solid fa-arrows-rotate"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 1. Table View -->
+                    <div class="table-container" id="db-table-container" style="display: none;">
+                        <table class="db-table" id="db-table">
+                            <thead>
+                                <tr>
+                                    <th width="45"><input type="checkbox" id="select-all-db" title="Tumunu Sec"></th>
+                                    <th data-i18n="th_code">Ic Kod</th>
+                                    <th data-i18n="th_company">Firma</th>
+                                    <th data-i18n="th_quality_code">Kalite Kodu</th>
+                                    <th data-i18n="th_quality_name">Kalite Adi</th>
+                                    <th data-i18n="th_design_code">Desen Kodu</th>
+                                    <th data-i18n="th_composition">Karisim</th>
+                                    <th data-i18n="th_width">En</th>
+                                    <th data-i18n="th_weight">Gramaj</th>
+                                    <th data-i18n="th_actions">Islemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="db-table-body">
+                                <tr>
+                                    <td colspan="10" class="empty-state">
+                                        <i class="fa-solid fa-database"></i>
+                                        <p data-i18n="db_loading">Veritabani yukleniyor...</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 2. Mobile & Rich Card View -->
+                    <div class="fabric-cards-grid" id="db-cards-container">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings & Visual Designer Tab -->
+            <section id="settings-tab" class="tab-content">
+                <div class="tab-header">
+                    <h1 data-i18n="settings_header_title">Sistem Ayarlari & Gorsel Etiket Tasarimcisi</h1>
+                    <p data-i18n="settings_header_desc">Etiket tasarimi, logo secimi, yazi tipi (font), ozel boyutlar ve alan hizalamalari.</p>
+                </div>
+
+                <!-- 1. Visual Label Designer Studio Card -->
+                <div class="card settings-card" style="margin-bottom: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 1.25rem;">
+                        <div>
+                            <h2><i class="fa-solid fa-palette"></i> <span data-i18n="studio_title">Canli Gorsel Etiket Tasarim Studyosu</span></h2>
+                            <p class="settings-desc" data-i18n="studio_desc">Etiket uzerindeki verilerin konumunu, boyutunu, hizalamasini ve logoyu canli taslak uzerinden duzenleyin. <strong>Mavi kesikli cizgiler</strong> etiket sinirini temsil eder.</p>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-secondary" id="btn-reset-default-design" type="button" style="padding: 10px 18px; font-weight: 600; font-size: 0.9rem;" title="Orijinal FabricTag etiket tasarımına geri dön">
+                                <i class="fa-solid fa-rotate-left"></i> <span data-i18n="btn_reset_default">Varsayılana Sıfırla</span>
+                            </button>
+                            <button class="btn btn-success" id="btn-save-visual-design" type="button" style="padding: 10px 22px; font-weight: 700; font-size: 0.95rem;">
+                                <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btn_save_design">Tasarim Ayarlarini Kaydet</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="designer-studio-grid">
+                        <!-- Left: Live Dashed Preview Box -->
+                        <div class="designer-preview-pane">
+                            <div class="preview-header-bar">
+                                <span class="preview-title"><i class="fa-solid fa-eye"></i> <span data-i18n="preview_title">Canli Taslak Onizleme</span></span>
+                                <span class="label-dim-badge" id="preview-dim-badge">63.5mm × 46.6mm</span>
+                            </div>
+                            
+                            <div class="preview-canvas-wrapper" id="preview-canvas-wrapper">
+                                <!-- Exact Dashed Bounding Box -->
+                                <div class="dashed-label-boundary" id="dashed-label-boundary">
+                                    <div id="designer-live-label" class="designer-live-label">
+                                        <!-- Dynamically Rendered by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="boundary-help-text">
+                                <i class="fa-solid fa-circle-info"></i> <strong data-i18n="dashed_help_strong">Kesikli Cizgiler:</strong> <span data-i18n="dashed_help_text">Etiketinizin fiziksel kesim siniridir. Logo veya yazilarin bu sinirin disina tasmadigindan emin olun.</span>
+                            </div>
+                        </div>
+
+                        <!-- Right: Interactive Controls -->
+                        <div class="designer-controls-pane">
+                            <!-- 1. Quick Presets Bar -->
+                            <div class="control-group-box">
+                                <label class="control-group-title"><i class="fa-solid fa-wand-magic-sparkles"></i> <span data-i18n="ctrl_presets_title">Hazir Tasarim Sablonlari & Renk Temalari</span></label>
+                                <div class="presets-grid">
+                                    <button type="button" class="preset-chip-btn active" data-preset="classic-black">
+                                        <span class="preset-dot" style="background: #000000;"></span>
+                                        <span>Klasik Siyah Bar</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="corporate-navy">
+                                        <span class="preset-dot" style="background: #1e3a8a;"></span>
+                                        <span>Kurumsal Lacivert</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="emerald-green">
+                                        <span class="preset-dot" style="background: #065f46;"></span>
+                                        <span>Zumrut Yesili</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="luxury-burgundy">
+                                        <span class="preset-dot" style="background: #991b1b;"></span>
+                                        <span>Bordo Luks</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="minimalist-white">
+                                        <span class="preset-dot" style="background: #f8fafc; border: 1px solid #94a3b8;"></span>
+                                        <span>Minimalist Beyaz</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="secret-code-a">
+                                        <span class="preset-dot" style="background: #6366f1;"></span>
+                                        <span>Gizli Kod (Op. A)</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- 2. Global Etiket Zemin & Cerceve Ayarlari -->
+                            <div class="control-group-box">
+                                <span class="control-group-title"><i class="fa-solid fa-palette"></i> <span data-i18n="ctrl_theme_title">Etiket Zemini & Kenarlik Stili</span></span>
+                                
+                                <div class="modular-controls-row" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Etiket Zemin Rengi:</label>
+                                    <div class="color-picker-group">
+                                        <input type="color" id="des-label-bg-color" value="#ffffff" class="color-input-styled">
+                                        <div class="color-swatch-list">
+                                            <button type="button" class="color-swatch-btn" style="background: #ffffff;" data-target="des-label-bg-color" data-color="#ffffff" title="Beyaz"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #f8fafc;" data-target="des-label-bg-color" data-color="#f8fafc" title="Acik Gri"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #fffbeb;" data-target="des-label-bg-color" data-color="#fffbeb" title="Krem"></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="modular-controls-row" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Etiket Kenarligi:</label>
+                                    <select id="des-label-border-style" class="select-input-sm" style="width: 140px;">
+                                        <option value="none">Yok (Duz)</option>
+                                        <option value="solid">Ince Duz Cizgi</option>
+                                        <option value="dashed">Kesikli Cizgi</option>
+                                        <option value="double">Cift Cizgi</option>
+                                    </select>
+                                </div>
+
+                                <div class="modular-controls-row" id="group-label-border-color" style="margin-bottom: 8px; display: none;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Kenarlik Rengi:</label>
+                                    <input type="color" id="des-label-border-color" value="#000000" class="color-input-styled">
+                                </div>
+
+                                <!-- Font Family Selection Dropdown -->
+                                <div style="margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 8px;">
+                                    <label style="font-size: 0.8rem; font-weight: 600; color: #475569; display:block; margin-bottom:4px;" data-i18n="lbl_font_family">Yazi Font Ailesi (Yazi Tipi):</label>
+                                    <select id="des-font-family" class="select-input-sm">
+                                        <option value="'Outfit', sans-serif" data-i18n="opt_font_outfit">Outfit (Modern & Temiz - Varsayilan)</option>
+                                        <option value="Arial, sans-serif" data-i18n="opt_font_arial">Arial / Helvetica (Klasik & Keskin)</option>
+                                        <option value="'Inter', sans-serif" data-i18n="opt_font_inter">Inter (Kurumsal & Duzgun)</option>
+                                        <option value="'Roboto', sans-serif" data-i18n="opt_font_roboto">Roboto (Dengeli & Okunakli)</option>
+                                        <option value="'Montserrat', sans-serif" data-i18n="opt_font_montserrat">Montserrat (Sik & Geometrik)</option>
+                                        <option value="'Courier Prime', 'Courier New', monospace" data-i18n="opt_font_courier">Courier / Monospace (Teknik / Daktilo)</option>
+                                    </select>
+                                </div>
+
+                                <!-- International Fiber Abbreviation Toggle -->
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; margin-top: 8px;">
+                                    <div class="control-title-with-toggle" style="margin-bottom: 2px;">
+                                        <span style="font-size: 0.82rem; font-weight: 700; color: #334155;">
+                                            <i class="fa-solid fa-globe"></i> <span data-i18n="ctrl_fiber_abbr_title">Uluslararasi Elyaf Kisaltmasi (ISO/BISFA)</span>
+                                        </span>
+                                        <label class="switch-toggle">
+                                            <input type="checkbox" id="des-use-fiber-abbr">
+                                            <span class="slider-round"></span>
+                                        </label>
+                                    </div>
+                                    <span style="font-size: 0.72rem; color: #64748b; display: block;" data-i18n="ctrl_fiber_abbr_desc">
+                                        Orn: Pamuk ➔ CO, Polyester ➔ PES, Elastan ➔ EA, Viskon ➔ CV
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- 3. Vurgu Cubugu (Bar) Renk & Stil Ekipmanlari -->
+                            <div class="control-group-box">
+                                <span class="control-group-title"><i class="fa-solid fa-paintbrush"></i> <span data-i18n="ctrl_bar_style_title">Vurgu Cubugu (Varyant / Kod Satiri) Stili</span></span>
+                                
+                                <div class="modular-controls-row" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Cubuk Formati:</label>
+                                    <select id="des-bar-style" class="select-input-sm" style="width: 140px;">
+                                        <option value="filled">Dolu Renkli Zemin</option>
+                                        <option value="outline">Ince Cerceveli</option>
+                                        <option value="plain">Zeminsiz / Sade Metin</option>
+                                    </select>
+                                </div>
+
+                                <div class="modular-controls-row" id="row-bar-bg-color" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Zemin Rengi:</label>
+                                    <div class="color-picker-group">
+                                        <input type="color" id="des-bar-bg-color" value="#000000" class="color-input-styled">
+                                        <div class="color-swatch-list">
+                                            <button type="button" class="color-swatch-btn" style="background: #000000;" data-target="des-bar-bg-color" data-color="#000000" title="Siyah"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #1e3a8a;" data-target="des-bar-bg-color" data-color="#1e3a8a" title="Lacivert"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #065f46;" data-target="des-bar-bg-color" data-color="#065f46" title="Koyu Yesil"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #991b1b;" data-target="des-bar-bg-color" data-color="#991b1b" title="Bordo"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #581c87;" data-target="des-bar-bg-color" data-color="#581c87" title="Mor"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #475569;" data-target="des-bar-bg-color" data-color="#475569" title="Antrasit"></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="modular-controls-row" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Metin Rengi:</label>
+                                    <div class="color-picker-group">
+                                        <input type="color" id="des-bar-text-color" value="#ffffff" class="color-input-styled">
+                                        <div class="color-swatch-list">
+                                            <button type="button" class="color-swatch-btn" style="background: #ffffff;" data-target="des-bar-text-color" data-color="#ffffff" title="Beyaz"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #000000;" data-target="des-bar-text-color" data-color="#000000" title="Siyah"></button>
+                                            <button type="button" class="color-swatch-btn" style="background: #facc15;" data-target="des-bar-text-color" data-color="#facc15" title="Sari Altin"></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="modular-controls-row">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Kose Yuvarlama:</label>
+                                    <select id="des-bar-radius" class="select-input-sm" style="width: 140px;">
+                                        <option value="0">0mm (Keskin Kose)</option>
+                                        <option value="1.0" selected>1.0mm (Hafif Yuvarlak)</option>
+                                        <option value="2.5">2.5mm (Modern Yuvarlak)</option>
+                                        <option value="5.0">5.0mm (Oval / Pill)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- 4. Moduler Alanlar & Siralama Listesi -->
+                            <div class="control-group-box">
+                                <span class="control-group-title"><i class="fa-solid fa-arrows-up-down"></i> <span data-i18n="ctrl_modular_title">Moduler Alan Siralamasi & Bilgi Ekipmanlari</span></span>
+                                <p style="font-size: 0.76rem; color: #64748b; margin-bottom: 10px;">
+                                    Yukari (▲) ve Asagi (▼) butonlariyla alanlarin yerlerini degistirebilir, goz ikonuyla gizleyebilir/acabilirsiniz:
+                                </p>
+
+                                <div class="modular-elements-list" id="modular-elements-list">
+                                    <!-- A. Logo & Firma Adı -->
+                                    <div class="modular-element-card" data-element-id="logo_row">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-image"></i> Logo & Firma Adi</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-logo-visible" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body" id="logo-controls-content">
+                                            <div style="display: flex; gap: 6px; align-items: center;">
+                                                <select id="des-logo-select" class="select-input-sm" style="flex: 1;">
+                                                    <option value="/logo.png" data-i18n="opt_default_logo">Varsayilan FabricTag Logo</option>
+                                                </select>
+                                                <input type="file" id="logo-file-input" accept="image/png, image/jpeg, image/svg+xml, image/webp" style="display:none;">
+                                                <button type="button" class="btn btn-secondary" id="btn-upload-logo" style="padding: 4px 8px; font-size: 0.75rem; white-space: nowrap; font-weight: 600;">
+                                                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                                                </button>
+                                            </div>
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">Logo Boyutu:</span>
+                                                    <strong id="val-logo-height" style="font-size: 0.78rem; color: #4f46e5;">6.0mm</strong>
+                                                </div>
+                                                <input type="range" id="des-logo-height" min="3" max="14" step="0.5" value="6.0" class="range-slider" style="width: 110px;">
+                                            </div>
+                                            <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                <label class="checkbox-pill" style="padding: 2px 4px; font-size: 0.75rem; border: none; background: transparent;">
+                                                    <input type="checkbox" id="des-show-company" checked> <span>Firma Adini Bas</span>
+                                                </label>
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <select id="des-align-company" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left">Sol</option>
+                                                        <option value="center">Orta</option>
+                                                        <option value="right" selected>Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-company" style="font-size: 0.75rem; color: #4f46e5;">8.5pt</strong>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- B. Kalite Kodu & Kalite Adı -->
+                                    <div class="modular-element-card" data-element-id="quality_name">
+                                         <div class="modular-card-header">
+                                             <div class="modular-card-left">
+                                                 <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                 <span class="modular-card-title"><i class="fa-solid fa-tag"></i> Kalite Kodu & Kalite Adi</span>
+                                             </div>
+                                             <div class="modular-order-actions">
+                                                 <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                     <input type="checkbox" id="des-show-quality-name" checked>
+                                                     <span class="slider-round"></span>
+                                                 </label>
+                                                 <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                 <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                             </div>
+                                         </div>
+                                         <div class="modular-card-body">
+                                             <div class="modular-controls-row">
+                                                 <div style="display: flex; align-items: center; gap: 4px;">
+                                                     <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                     <input type="text" id="des-prefix-quality-name" placeholder="Bos / Orn: KALITE:" class="prefix-input-sm">
+                                                 </div>
+                                                 <div style="display: flex; align-items: center; gap: 6px;">
+                                                     <select id="des-align-quality-name" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                         <option value="left">Sol</option>
+                                                         <option value="center" selected>Orta</option>
+                                                         <option value="right">Sag</option>
+                                                     </select>
+                                                     <strong id="val-font-quality-name" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
+                                                 </div>
+                                             </div>
+                                             <input type="range" id="des-font-quality-name" min="5" max="14" step="0.5" value="7.5" class="range-slider">
+                                         </div>
+                                     </div>
+
+                                     <!-- C. Desen / Varyant Kodu (Siyah Zemin Bar) -->
+                                     <div class="modular-element-card" data-element-id="code_bar">
+                                         <div class="modular-card-header">
+                                             <div class="modular-card-left">
+                                                 <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                 <span class="modular-card-title"><i class="fa-solid fa-palette"></i> Desen / Varyant Kodu Bari (Siyah Zemin)</span>
+                                             </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-show-quality-code" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body">
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                    <input type="text" id="des-prefix-quality-code" placeholder="Bos / Orn: ART:" class="prefix-input-sm">
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    <select id="des-align-quality-code" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left">Sol</option>
+                                                        <option value="center" selected>Orta</option>
+                                                        <option value="right">Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-header" style="font-size: 0.75rem; color: #4f46e5;">8.5pt</strong>
+                                                </div>
+                                            </div>
+                                            <input type="range" id="des-font-header" min="6" max="14" step="0.5" value="8.5" class="range-slider">
+                                        </div>
+                                    </div>
+
+                                    <!-- D. Karışım (Composition) -->
+                                    <div class="modular-element-card" data-element-id="composition">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-scroll"></i> Kumas Karisimi</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-show-comp" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body">
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                    <input type="text" id="des-prefix-composition" placeholder="Bos / Orn: COMP.:" class="prefix-input-sm">
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    <select id="des-align-comp" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left" selected>Sol</option>
+                                                        <option value="center">Orta</option>
+                                                        <option value="right">Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-comp" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
+                                                </div>
+                                            </div>
+                                            <input type="range" id="des-font-comp" min="5" max="14" step="0.5" value="7.5" class="range-slider">
+                                        </div>
+                                    </div>
+
+                                    <!-- E. Gramaj (Weight) -->
+                                    <div class="modular-element-card" data-element-id="weight">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-weight-scale"></i> Gramaj / Agirlik</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-show-weight" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body">
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                    <input type="text" id="des-prefix-weight" placeholder="Bos / Orn: WEIGHT:" class="prefix-input-sm">
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    <select id="des-align-weight" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left" selected>Sol</option>
+                                                        <option value="center">Orta</option>
+                                                        <option value="right">Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-weight" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
+                                                </div>
+                                            </div>
+                                            <input type="range" id="des-font-weight" min="5" max="14" step="0.5" value="7.5" class="range-slider">
+                                        </div>
+                                    </div>
+
+                                    <!-- F. Barkod / QR Çizgisi -->
+                                    <div class="modular-element-card" data-element-id="barcode">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-barcode"></i> Barkod / QR Cizgisi</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-barcode-visible" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body" id="barcode-controls-content">
+                                            <div class="modular-controls-row">
+                                                <span style="font-size: 0.75rem; color: #64748b;">Barkod Yuksekligi:</span>
+                                                <strong id="val-barcode-height" style="font-size: 0.78rem; color: #4f46e5;">8.0mm</strong>
+                                            </div>
+                                            <input type="range" id="des-barcode-height" min="4" max="18" step="0.5" value="8.0" class="range-slider">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Printer Preferences Card -->
+                <div class="card settings-card" style="margin-bottom: 2rem;">
+                    <h2><i class="fa-solid fa-print"></i> <span data-i18n="page_dimensions_title">Sayfa ve Kagit Olculeri (A4 / Argox Rulo)</span></h2>
+                    <p class="settings-desc" data-i18n="page_dimensions_desc">Etiketinizin fiziksel milimetre olculerini ve bosluklarini belirleyin.</p>
+
+                    <div class="settings-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="pref-default-template" data-i18n="lbl_default_template">Varsayilan Yazdirma Sablonu</label>
+                                <select id="pref-default-template" class="select-input">
+                                    <option value="option-a" data-i18n="opt_a_desc_full">Secenek A (Gizli / Sir Etiket)</option>
+                                    <option value="option-b" data-i18n="opt_b_desc_full">Secenek B (Acik Detayli Etiket)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="pref-printer-type" data-i18n="lbl_printer_type">Yazici Turu</label>
+                                <select id="pref-printer-type" class="select-input">
+                                    <option value="a4" data-i18n="opt_printer_a4">A4 Lazer Yazici (3x6 Izgara Sayfa)</option>
+                                    <option value="argox" data-i18n="opt_printer_argox">Argox / Rulo Termal Yazici (Tekli Surekli)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row" style="margin-top: 1rem;">
+                            <div class="form-group">
+                                <label for="pref-label-width" data-i18n="lbl_label_width">Etiket Genisligi (mm)</label>
+                                <input type="number" step="0.1" id="pref-label-width" value="63.5">
+                            </div>
+                            <div class="form-group">
+                                <label for="pref-label-height" data-i18n="lbl_label_height">Etiket Yuksekligi (mm)</label>
+                                <input type="number" step="0.1" id="pref-label-height" value="46.6">
+                            </div>
+                        </div>
+
+                        <div class="form-row" style="margin-top: 1rem;">
+                            <div class="form-group">
+                                <label for="pref-col-gap" data-i18n="lbl_col_gap">Sutun Arasi Bosluk (mm)</label>
+                                <input type="number" step="0.1" id="pref-col-gap" value="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label for="pref-row-gap" data-i18n="lbl_row_gap">Satir Arasi Bosluk (mm)</label>
+                                <input type="number" step="0.1" id="pref-row-gap" value="0.1">
+                            </div>
+                        </div>
+
+                        <div class="form-row" style="margin-top: 1rem;">
+                            <div class="form-group">
+                                <label for="pref-margin-top" data-i18n="lbl_margin_top">Sayfa Ust Kenar Boslugu (mm)</label>
+                                <input type="number" step="0.1" id="pref-margin-top" value="8.0">
+                            </div>
+                            <div class="form-group">
+                                <label for="pref-margin-left" data-i18n="lbl_margin_left">Sayfa Sol Kenar Boslugu (mm)</label>
+                                <input type="number" step="0.1" id="pref-margin-left" value="6.0">
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 1.25rem;">
+                            <button class="btn btn-primary" id="btn-save-print-prefs">
+                                <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btn_save_paper">Kagit Olculerini Kaydet</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Internal Code Generator & Prefix Preferences Card -->
+                <div class="card settings-card" style="margin-bottom: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 1rem;">
+                        <div>
+                            <h2><i class="fa-solid fa-barcode"></i> <span data-i18n="code_settings_title">Ic Kod Bicimlendirme & Otomatik Sayac</span></h2>
+                            <p class="settings-desc" data-i18n="code_settings_desc">Taranan her yeni kumasa otomatik atanacak ic kodun harf on ekini, basamak sayisini ve baslangic numarasini belirleyin.</p>
+                        </div>
+                        <div class="code-preview-badge-container">
+                            <span style="font-size: 0.78rem; color: #64748b; font-weight: 600;" data-i18n="lbl_code_preview">Olusturulacak Ornek Kod:</span>
+                            <span class="code-preview-badge" id="code-preview-badge">ELT0000001</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label data-i18n="lbl_code_type">Kod Yapisi Turu</label>
+                                <div class="radio-pill-group" style="margin-top: 4px;">
+                                    <label class="pill-label">
+                                        <input type="radio" name="code-prefix-type" value="letters" id="code-type-letters" checked>
+                                        <span data-i18n="opt_code_letters">Harf On Ekli (Orn: ELT, FT)</span>
+                                    </label>
+                                    <label class="pill-label">
+                                        <input type="radio" name="code-prefix-type" value="numbers_only" id="code-type-numbers">
+                                        <span data-i18n="opt_code_numbers">Sadece Sayi (Harfsiz Direkt Numara)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group" id="group-code-prefix-text">
+                                <label for="code-prefix-text" data-i18n="lbl_code_prefix">On Ek Metni (Harfler)</label>
+                                <input type="text" id="code-prefix-text" value="ELT" placeholder="Orn: ELT, FT, FABRIC" class="uppercase-input">
+                            </div>
+                        </div>
+
+                        <div class="form-row" style="margin-top: 1rem;">
+                            <div class="form-group" id="group-code-separator">
+                                <label for="code-separator" data-i18n="lbl_code_separator">Ayrac / Cizgi</label>
+                                <select id="code-separator" class="select-input">
+                                    <option value="" data-i18n="opt_sep_none">Yok (Bitisik: ELT0000001)</option>
+                                    <option value="-" data-i18n="opt_sep_dash">Tire ( - : ELT-0000001)</option>
+                                    <option value="_" data-i18n="opt_sep_underscore">Alt Cizgi ( _ : ELT_0000001)</option>
+                                    <option value="." data-i18n="opt_sep_dot">Nokta ( . : ELT.0000001)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="code-digits" data-i18n="lbl_code_digits">Hane / Basamak Sayisi</label>
+                                <select id="code-digits" class="select-input">
+                                    <option value="7" data-i18n="opt_digits_7" selected>7 Hane (0000001 - Standart)</option>
+                                    <option value="6" data-i18n="opt_digits_6">6 Hane (000001)</option>
+                                    <option value="5" data-i18n="opt_digits_5">5 Hane (00001)</option>
+                                    <option value="4" data-i18n="opt_digits_4">4 Hane (0001)</option>
+                                    <option value="0" data-i18n="opt_digits_dynamic">Dinamik (Sifirsiz: 1, 2, 3...)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="code-start-number" data-i18n="lbl_code_start">Baslangic Numarasi</label>
+                                <input type="number" id="code-start-number" min="1" step="1" value="1">
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 1.25rem;">
+                            <button class="btn btn-primary" id="btn-save-code-settings">
+                                <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btn_save_code_settings">Ic Kod Ayarlarini Kaydet</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Gemini API Card -->
+                <div class="card settings-card">
+                    <h2><i class="fa-solid fa-key"></i> <span data-i18n="api_config_title">Gemini API Yapilandirmasi</span></h2>
+                    <p class="settings-desc" data-i18n="api_config_desc">Karteladaki metinleri yuksek dogrulukla okuyabilmek icin Google Gemini yapay zekasina ihtiyac duyulmaktadir.</p>
+                    
+                    <div class="settings-form">
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <label for="settings-api-key" data-i18n="lbl_api_key" style="margin: 0; font-weight: 700;">Gemini API Key (Anahtari)</label>
+                                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="btn btn-secondary" style="font-size: 0.75rem; padding: 4px 10px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                                    <i class="fa-solid fa-arrow-up-right-from-square"></i> <span data-i18n="guide_step1_btn">Ucretsiz Google API Anahtari Al</span>
+                                </a>
+                            </div>
+                            <div class="input-with-button" style="display: flex; gap: 8px;">
+                                <input type="text" id="settings-api-key" placeholder="AIzaSy..." class="text-input" style="font-family: monospace; flex-grow: 1;">
+                                <button class="btn btn-primary" id="btn-save-settings" style="padding: 10px 18px;">
+                                    <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btn_save">Kaydet</span>
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="btn-test-api-key" style="padding: 10px 18px; font-weight: 600;">
+                                    <i class="fa-solid fa-bolt"></i> Test Et
+                                </button>
+                            </div>
+                            <span class="help-text" id="api-key-saved-text" style="display: block; margin-top: 6px;"></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Sidebar Mobile Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Excel (.xlsx) & Backup Studio Modal -->
+    <div id="backup-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fa-solid fa-file-excel"></i>
+                    <span data-i18n="modal_backup_title">Excel (.xlsx) Disa Aktarma & Yedekleme Merkezi</span>
+                </div>
+                <button class="modal-close-btn" id="btn-close-backup-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- 1. Hızlı Tam Yedek / Excel İndir -->
+                <div class="backup-option-card">
+                    <div class="backup-card-header">
+                        <div class="backup-card-title">
+                            <i class="fa-solid fa-bolt" style="color: #f59e0b;"></i>
+                            <span data-i18n="modal_card1_title">1. Hizli Excel Calisma Kitabi (*.xlsx) Indir</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 0.82rem; color: #64748b; margin-bottom: 0.75rem;" data-i18n="modal_card1_desc">
+                        Veritabaninizdaki tum kumas kayitlarini bicimlendirilmis, renkli ve otomatik sutun genislikli Microsoft Excel (*.xlsx) tablosu olarak hemen bilgisayariniza indirin.
+                    </p>
+                    <button class="btn btn-success" id="btn-quick-export-xlsx" style="font-weight: 700;">
+                        <i class="fa-solid fa-file-arrow-down"></i> <span data-i18n="btn_quick_export">Tum Veritabanini Excel (.xlsx) Olarak Indir</span>
+                    </button>
+                </div>
+
+                <!-- 2. Tarih ve Saat Seçimli Özel Yedekleme -->
+                <div class="backup-option-card">
+                    <div class="backup-card-header">
+                        <div class="backup-card-title">
+                            <i class="fa-solid fa-calendar-days" style="color: #4f46e5;"></i>
+                            <span data-i18n="modal_card2_title">2. Gun & Saat Secimli Ozel Excel / Yedek Alma</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 0.82rem; color: #64748b; margin-bottom: 0.5rem;" data-i18n="modal_card2_desc">
+                        Belirli bir tarih ve saat araliginda eklenen/taranan kumaslari filtreleyerek Excel olarak indirin veya sunucuda yedekleyin.
+                    </p>
+                    
+                    <!-- Quick Date Range Presets -->
+                    <div class="date-filter-presets">
+                        <button type="button" class="preset-btn" data-range="today" data-i18n="preset_today">Bugun</button>
+                        <button type="button" class="preset-btn" data-range="yesterday" data-i18n="preset_yesterday">Dun</button>
+                        <button type="button" class="preset-btn" data-range="this_week" data-i18n="preset_7days">Son 7 Gun</button>
+                        <button type="button" class="preset-btn" data-range="this_month" data-i18n="preset_30days">Son 30 Gun</button>
+                        <button type="button" class="preset-btn active" data-range="all" data-i18n="preset_all">Tum Zamanlar</button>
+                    </div>
+
+                    <div class="backup-date-grid">
+                        <div class="form-group">
+                            <label for="export-start-date" style="font-size: 0.8rem; font-weight: 600; color: #475569; display:block; margin-bottom: 4px;" data-i18n="lbl_start_dt">Baslangic Tarihi & Saati:</label>
+                            <input type="datetime-local" id="export-start-date" class="select-input" style="padding: 6px 10px; font-size: 0.85rem;">
+                        </div>
+                        <div class="form-group">
+                            <label for="export-end-date" style="font-size: 0.8rem; font-weight: 600; color: #475569; display:block; margin-bottom: 4px;" data-i18n="lbl_end_dt">Bitis Tarihi & Saati:</label>
+                            <input type="datetime-local" id="export-end-date" class="select-input" style="padding: 6px 10px; font-size: 0.85rem;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 0.75rem;">
+                        <button class="btn btn-primary" id="btn-range-export-xlsx" style="font-weight: 600;">
+                            <i class="fa-solid fa-file-excel"></i> <span data-i18n="btn_range_export">Secilen Tarihleri Excel (.xlsx) Indir</span>
+                        </button>
+                        <button class="btn btn-secondary" id="btn-range-create-backup" style="font-weight: 600;">
+                            <i class="fa-solid fa-shield-halved"></i> <span data-i18n="btn_range_backup">Sunucuya Manuel Yedek Al</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. Otomatik Zamanlanmış Günlük Yedekleme Ayarı -->
+                <div class="backup-option-card">
+                    <div class="backup-card-header">
+                        <div class="backup-card-title">
+                            <i class="fa-solid fa-clock" style="color: #0284c7;"></i>
+                            <span data-i18n="modal_card3_title">3. Otomatik Gunluk Yedekleme Ayari</span>
+                        </div>
+                        <label class="switch-toggle">
+                            <input type="checkbox" id="backup-auto-toggle" checked>
+                            <span class="slider-round"></span>
+                        </label>
+                    </div>
+                    <div id="auto-backup-controls" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.82rem; color: #475569; font-weight: 600;" data-i18n="lbl_auto_backup_time">Her Gun Otomatik Yedek Alma Saati:</span>
+                            <input type="time" id="backup-auto-time" value="18:00" class="select-input" style="width: 110px; padding: 4px 8px; font-size: 0.85rem;">
+                        </div>
+                        <button class="btn btn-secondary" id="btn-save-auto-backup" style="padding: 6px 14px; font-size: 0.82rem;">
+                            <i class="fa-solid fa-check"></i> <span data-i18n="btn_save_timing">Zamanlamayi Kaydet</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 4. Alınan Son Yedekler Listesi -->
+                <div class="backup-option-card">
+                    <div class="backup-card-header">
+                        <div class="backup-card-title">
+                            <i class="fa-solid fa-folder-open" style="color: #8b5cf6;"></i>
+                            <span data-i18n="modal_card4_title">4. Sunucudaki Yedek Dosyalari</span>
+                        </div>
+                        <button class="btn btn-secondary" id="btn-refresh-backups" style="padding: 4px 8px; font-size: 0.75rem;">
+                            <i class="fa-solid fa-arrows-rotate"></i> <span data-i18n="btn_refresh">Yenile</span>
+                        </button>
+                    </div>
+                    <div style="max-height: 180px; overflow-y: auto;">
+                        <table class="backups-history-table">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="th_bk_file">Dosya Adi</th>
+                                    <th data-i18n="th_bk_date">Yedek Tarihi</th>
+                                    <th data-i18n="th_bk_size">Boyut</th>
+                                    <th data-i18n="th_bk_action">Islem</th>
+                                </tr>
+                            </thead>
+                            <tbody id="backups-list-body">
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: #94a3b8; padding: 1rem;">Yedekler yukleniyor...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Excel Import & Smart Column Matcher Modal -->
+    <div class="modal-overlay" id="excel-import-modal">
+        <div class="modal-box" style="max-width: 760px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fa-solid fa-file-import" style="color: #4f46e5;"></i>
+                    <h2 data-i18n="modal_import_title" style="font-size: 1.15rem; font-weight: 700; margin: 0; color: #1e293b;">Excel'den Kumas Ice Aktarma</h2>
+                </div>
+                <button type="button" class="modal-close-btn" id="btn-close-import-modal">&times;</button>
+            </div>
+            
+            <div class="modal-body" style="overflow-y: auto; padding-right: 8px;">
+                <!-- Step 1: Upload File -->
+                <div id="import-step-upload">
+                    <div style="margin-bottom: 1rem; color: #475569; font-size: 0.9rem;" data-i18n="import_step1_desc">
+                        Firmanizin mevcut Excel tablosunu (*.xlsx veya *.csv) yukleyin. Sistem sutunlari otomatik eslestirecektir.
+                    </div>
+                    
+                    <div class="drag-drop-area" id="import-drop-area" style="padding: 2.5rem 1.5rem; margin-bottom: 1.25rem;">
+                        <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                        <h3 data-i18n="import_drop_title">Excel Dosyanizi Buraya Surukleyin veya Secin</h3>
+                        <p><span data-i18n="import_choose_file">Dosya Secin</span> (.xlsx, .xls, .csv)</p>
+                        <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 8px;">
+                        <div>
+                            <strong style="font-size: 0.85rem; color: #1e293b;" data-i18n="import_need_template_title">Formatınız Yok mu?</strong>
+                            <p style="font-size: 0.78rem; color: #64748b; margin: 0;" data-i18n="import_need_template_desc">Hazir standart bos kumas aktarim sablonunu indirin.</p>
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="btn-modal-download-template" style="padding: 6px 12px; font-size: 0.8rem;">
+                            <i class="fa-solid fa-download"></i> <span data-i18n="btn_download_template">Sablon Indir (.xlsx)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Smart Column Matcher (Hidden initially) -->
+                <div id="import-step-matcher" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; background: #eef2ff; border: 1px solid #c7d2fe; padding: 10px 14px; border-radius: 8px;">
+                        <div>
+                            <span style="font-size: 0.85rem; color: #3730a3; font-weight: 700;" id="import-file-name-badge">dosya.xlsx</span>
+                            <span style="font-size: 0.8rem; color: #4338ca; margin-left: 8px;">(<span id="import-total-rows-badge">0</span> <span data-i18n="lbl_rows_detected">Kumas Kaydi Algilandi</span>)</span>
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="btn-import-rechoose" style="padding: 4px 10px; font-size: 0.75rem;">
+                            <i class="fa-solid fa-arrow-rotate-left"></i> <span data-i18n="btn_rechoose">Farkli Dosya Sec</span>
+                        </button>
+                    </div>
+
+                    <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.75rem;" data-i18n="matcher_instruction">
+                        Excel sutunlariniz ile sistem alanlari asagida otomatik eslestirildi. Ihtiyac halinde degistirebilirsiniz:
+                    </p>
+
+                    <div style="max-height: 280px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 1rem;">
+                        <table class="backups-history-table" style="font-size: 0.85rem;">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="th_excel_header">Excel Sutun Basligi</th>
+                                    <th data-i18n="th_sample_data">Ornek Veri</th>
+                                    <th data-i18n="th_system_field">Eslesecek Sistem Alani</th>
+                                </tr>
+                            </thead>
+                            <tbody id="import-matcher-table-body">
+                                <!-- Populated dynamically by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="code-preview-badge-container" style="margin-top: 0.75rem; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 14px; border-radius: 8px;">
+                        <div style="font-size: 0.82rem; color: #475569; line-height: 1.4;">
+                            <i class="fa-solid fa-circle-check" style="color: #10b981;"></i> <strong data-i18n="lbl_code_behavior_title">Ic Kod Mantigi:</strong> <span data-i18n="lbl_code_behavior_desc">Excel dosyanizda ic kod varsa korunur ve sayaciniz kaldigi yerden devam eder. Ic kod sutunu bos veya eslestirilmemisse, sistem otomatik siradaki sayac kodunu atar.</span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.25rem;">
+                        <button type="button" class="btn btn-secondary" id="btn-cancel-import" data-i18n="btn_cancel">Iptal</button>
+                        <button type="button" class="btn btn-success" id="btn-confirm-import" style="padding: 10px 24px; font-weight: 700;">
+                            <i class="fa-solid fa-check-double"></i> <span data-i18n="btn_confirm_import">Kumaslari Ice Aktar</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- License & Activation Modal -->
+    <div class="modal-overlay" id="modal-license-overlay">
+        <div class="modal-card" style="max-width: 540px;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #1e1b4b, #312e81); color: #ffffff;">
+                <h3 style="color: #ffffff;"><i class="fa-solid fa-shield-halved" style="color: #6366f1;"></i> <span data-i18n="license_modal_title">FabricTag Lisans Aktivasyonu</span></h3>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <div class="license-status-banner" id="modal-license-status-box" style="margin-bottom: 1.25rem; padding: 14px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 0.85rem; font-weight: 700; color: #1e293b;" id="modal-license-status-title">Durum: Ücretsiz Deneme Sürümü</span>
+                        <span class="badge badge-warning" id="modal-license-status-badge" style="padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; background: #fef3c7; color: #92400e;">20/20 Kullanım</span>
+                    </div>
+                    <p style="font-size: 0.8rem; color: #64748b; margin-top: 6px; line-height: 1.4;" data-i18n="license_trial_desc">
+                        İlk 20 kumaş kaydını ücretsiz olarak deneyebilirsiniz. Sınırsız kullanım ve ticari lisans için lütfen aktivasyon anahtarınızı girin.
+                    </p>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: #334155; display: flex; justify-content: space-between;">
+                        <span data-i18n="lbl_hardware_id">Bilgisayarınızın Donanım Kimliği (Hardware ID):</span>
+                        <span style="font-size: 0.75rem; color: #6366f1; cursor: pointer;" id="btn-copy-hardware-id"><i class="fa-regular fa-copy"></i> Kopyala</span>
+                    </label>
+                    <div style="display: flex; gap: 8px; margin-top: 4px;">
+                        <input type="text" id="license-hardware-id-input" readonly class="text-input" style="font-family: monospace; font-weight: 700; background: #f1f5f9; color: #0f172a;" value="FT-XXXX-XXXX-XXXX">
+                        <button type="button" class="btn btn-secondary" id="btn-copy-hw-action" style="padding: 8px 14px;" title="Kopyala">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                    </div>
+                    <small style="color: #64748b; font-size: 0.75rem; margin-top: 4px; display: block;" data-i18n="hardware_id_help">
+                        Lisans anahtarı satın alırken bu kodu bize iletmeniz yeterlidir.
+                    </small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-size: 0.85rem; font-weight: 700; color: #334155;" data-i18n="lbl_enter_license_key">Aktivasyon / Lisans Anahtarı:</label>
+                    <input type="text" id="license-key-input" placeholder="FTLIC-XXXX-XXXX-XXXX-XXXX-XXXX" class="text-input" style="font-family: monospace; text-transform: uppercase; margin-top: 4px;">
+                </div>
+
+                <div id="license-activation-alert" style="display: none; padding: 10px 14px; border-radius: 6px; font-size: 0.82rem; margin-bottom: 1rem;"></div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-license" data-i18n="btn_cancel">Kapat</button>
+                    <button type="button" class="btn btn-primary" id="btn-submit-license-activate" style="padding: 10px 24px; font-weight: 700; background: linear-gradient(135deg, #4f46e5, #06b6d4);">
+                        <i class="fa-solid fa-shield-check"></i> <span data-i18n="btn_activate_now">Lisansı Aktive Et</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interactive Step-by-Step User Guide Modal -->
+    <div class="modal-overlay" id="modal-user-guide-overlay">
+        <div class="modal-card" style="max-width: 720px; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #1e1b4b, #4338ca); color: #ffffff;">
+                <h3 style="color: #ffffff;"><i class="fa-solid fa-book-open" style="color: #38bdf8;"></i> <span data-i18n="guide_modal_title">FabricTag Hızlı Başlangıç & Kullanım Rehberi</span></h3>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem; overflow-y: auto; flex-grow: 1;">
+                <div class="guide-steps-container">
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #4f46e5; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">1</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step1_title">Gemini Yapay Zeka API Anahtarı Kurulumu</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 10px 36px; line-height: 1.5;" data-i18n="guide_step1_desc">
+                            FabricTag kartelaları okumak için Google Gemini AI modelini kullanır. Google AI Studio üzerinden ücretsiz API anahtarınızı alıp <strong>Ayarlar</strong> sekmesine girmeniz yeterlidir.
+                        </p>
+                        <div style="margin-left: 36px;">
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" class="btn btn-secondary" style="font-size: 0.75rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px;">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> <span data-i18n="guide_step1_btn">Ücretsiz Google API Anahtarı Al</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #06b6d4; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">2</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step2_title">Kartela Tarama ve Otomatik Okuma</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step2_desc">
+                            Kartela fotoğrafını 3 şekilde yükleyebilirsiniz: <strong>Webcam/Kamera</strong> ile seri çekim, <strong>Telefondan QR ile Kablosuz</strong> tarama veya <strong>Fotoğraf Yükleyerek</strong>. Yapay zeka tüm kumaş bilgilerini saniyeler içinde ayrıştırır.
+                        </p>
+                    </div>
+
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #10b981; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">3</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step3_title">Görsel Etiket Tasarımı & Barkod Baskısı</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step3_desc">
+                            <strong>Ayarlar & Tasarım</strong> bölümünden logonuzu yükleyebilir, etiket satırlarını sürükle-bırak ile dilediğiniz gibi sıralayabilir ve font/renkleri canlı önizleyebilirsiniz. A4 tabaka veya Argox/Zebra rulo yazıcılara tam uyumludur.
+                        </p>
+                    </div>
+
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #8b5cf6; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">4</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step4_title">Excel İçe/Dışa Aktarma ve Bulut Yedekleme</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step4_desc">
+                            Mevcut Excel arşivinizi tek tıkla sisteme aktarabilir veya kayıtlarınızı filtreleyip Excel olarak dışa aktarabilirsiniz. OneDrive bulut yedekleme sistemiyle verileriniz her gün otomatik korunur.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; background: #f8fafc;">
+                <button type="button" class="btn btn-primary" id="btn-close-guide-footer" data-i18n="btn_understood">Anladım, Başla</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Print Area -->
+    <div id="print-section"></div>
+
+    <script src="app.js?v=4.0.6"></script>
+</body>
+</html>

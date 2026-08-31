@@ -42,12 +42,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR = os.path.dirname(__file__)
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+import sys
+
+if getattr(sys, 'frozen', False):
+    APP_DIR = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    DATA_DIR = os.path.dirname(sys.executable)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = APP_DIR
+
+STATIC_DIR = os.path.join(APP_DIR, "static")
+if not os.path.exists(STATIC_DIR):
+    STATIC_DIR = os.path.join(DATA_DIR, "static")
+
+UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 LOGOS_DIR = os.path.join(STATIC_DIR, "logos")
-BACKUPS_DIR = os.path.join(BASE_DIR, "backups")
-SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+BACKUPS_DIR = os.path.join(DATA_DIR, "backups")
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
