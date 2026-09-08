@@ -125,6 +125,12 @@ class SettingsRequest(BaseModel):
     font_size_weight: Optional[float] = None
     font_size_body: Optional[float] = None
     header_black_bar: Optional[bool] = None
+    bar_target: Optional[str] = "code_bar"
+    show_field_prefixes: Optional[bool] = True
+    font_size_quality_code_elem: Optional[float] = None
+    font_size_color: Optional[float] = None
+    prefix_quality_code_elem: Optional[str] = None
+    prefix_color: Optional[str] = None
     barcode_height: Optional[float] = None
     barcode_visible: Optional[bool] = None
     show_company: Optional[bool] = None
@@ -155,6 +161,7 @@ class FabricSaveRequest(BaseModel):
     quality_code: str
     quality_name: Optional[str] = ""
     design_code: Optional[str] = ""
+    color: Optional[str] = ""
     width: Optional[str] = ""
     weight: Optional[str] = ""
     composition: Optional[str] = ""
@@ -197,12 +204,16 @@ def load_settings():
         "active_logo_url": "/logo.png",
         "font_family": "'Outfit', sans-serif",
         "use_fiber_abbreviations": False,
-        "font_size_header": 8.5,
-        "font_size_company": 8.5,
-        "font_size_quality_name": 7.5,
-        "font_size_composition": 7.5,
-        "font_size_weight": 7.5,
-        "font_size_body": 7.5,
+        "font_size_header": 9.0,
+        "font_size_company": 9.0,
+        "font_size_quality_name": 9.0,
+        "font_size_quality_code_elem": 9.0,
+        "font_size_color": 9.0,
+        "font_size_composition": 9.0,
+        "font_size_weight": 9.0,
+        "font_size_body": 9.0,
+        "show_field_prefixes": True,
+        "bar_target": "code_bar",
         "header_black_bar": True,
         "barcode_height": 8.0,
         "barcode_visible": True,
@@ -273,6 +284,13 @@ def startup_event():
     get_ngrok_url()
     t = threading.Thread(target=auto_backup_worker, daemon=True)
     t.start()
+    try:
+        import telemetry
+        hw_id = licensing.get_hardware_id()
+        lic_info = licensing.get_license_status()
+        telemetry.notify_startup_async(hw_id, lic_info, "v4.3.0")
+    except Exception as e:
+        logger.debug(f"Telemetry startup skipped: {e}")
 
 # Endpoints
 @app.get("/api/server-info")
@@ -297,7 +315,14 @@ def get_license_status():
 
 @app.post("/api/license/activate")
 def activate_license_endpoint(req: LicenseActivateRequest):
-    return licensing.activate_license(req.license_key, req.company or "COMMERCIAL")
+    res = licensing.activate_license(req.license_key, req.company or "COMMERCIAL")
+    try:
+        import telemetry
+        hw_id = licensing.get_hardware_id()
+        telemetry.notify_activation_async(hw_id, req.license_key, res)
+    except Exception as e:
+        logger.debug(f"Telemetry activation skipped: {e}")
+    return res
 
 @app.get("/api/settings")
 def get_settings():
@@ -408,25 +433,63 @@ def update_settings(req: SettingsRequest):
     if req.code_start_number is not None:
         new_settings["code_start_number"] = req.code_start_number
 
+    # Also save any extra visual studio keys
+    for k in ["bar_target", "show_field_prefixes", "font_size_quality_code_elem", "font_size_color", "prefix_quality_code_elem", "prefix_color", "element_offsets", "element_order", "label_bg_color", "label_border_style", "label_border_color", "bar_style", "bar_bg_color", "bar_text_color", "bar_border_radius"]:
+        if hasattr(req, k) and getattr(req, k) is not None:
+            new_settings[k] = getattr(req, k)
     save_settings(new_settings)
     return {"success": True}
 
-APP_VERSION = "4.1.0"
+APP_VERSION = "4.3.3"
+GITHUB_REPO = "merchandiserelite/FabricTag"
+VERSION_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/version.json"
 
 @app.get("/api/check-update")
 def check_update_endpoint():
+    latest_version = APP_VERSION
+    has_update = False
+    release_date = "2026-09-08"
+    changelog = [
+        "Ayrı Kalite Kodu ve Renk / Varyant alanı eklendi",
+        "Tüm yazılar standart 9.0pt puntoya eşitlendi",
+        "Alan Başlıklarını Göster / Gizle onay kutusu eklendi",
+        "Vurgu çubuğunu istenen alana (Kalite Adı, Kod, Renk vb.) uygulama seçeneği eklendi",
+        "Canlı önizlemede yön tuşlarıyla (↑ / ↓) 0.5mm milimetrik kaydırma eklendi"
+    ]
+    download_url = f"https://github.com/{GITHUB_REPO}/releases/latest"
+
+    # Attempt to query GitHub for newer version
+    try:
+        import urllib.request
+        import json as json_lib
+        req = urllib.request.Request(
+            VERSION_URL,
+            headers={"User-Agent": f"FabricTag-Updater/{APP_VERSION}"}
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            if resp.status == 200:
+                remote_data = json_lib.loads(resp.read().decode("utf-8"))
+                remote_ver = str(remote_data.get("version", APP_VERSION)).strip()
+
+                def parse_v(v_str):
+                    return [int(x) for x in re.sub(r'[^0-9.]', '', v_str).split('.') if x]
+
+                if parse_v(remote_ver) > parse_v(APP_VERSION):
+                    has_update = True
+                    latest_version = remote_ver
+                    release_date = remote_data.get("release_date", release_date)
+                    changelog = remote_data.get("changelog", changelog)
+                    download_url = remote_data.get("download_url", download_url)
+    except Exception:
+        pass
+
     return {
         "current_version": APP_VERSION,
-        "latest_version": "4.1.0",
-        "has_update": False,
-        "release_date": "2026-08-31",
-        "changelog": [
-            "Global 9-Language Setup Wizard (EN, TR, DE, IT, ES, FR, AR, ZH, JA)",
-            "Custom backup directory path support",
-            "Automatic update notification center",
-            "Instant live Gemini AI API validation"
-        ],
-        "download_url": "https://github.com/fabrictag/releases/latest"
+        "latest_version": latest_version,
+        "has_update": has_update,
+        "release_date": release_date,
+        "changelog": changelog,
+        "download_url": download_url
     }
 
 class OpenFolderRequest(BaseModel):
@@ -461,7 +524,7 @@ def test_gemini_key(req: TestKeyRequest):
         from google import genai
         client = genai.Client(api_key=key)
         response = client.models.generate_content(
-            model='gemini-3.6-flash',
+            model='gemini-3.5-flash-lite',
             contents='Hi',
         )
         return {"valid": True, "message": "Google Gemini API bağlantısı başarılı ve aktif!"}
@@ -588,6 +651,7 @@ async def scan_kartela_base64(req: Base64ScanRequest):
             quality_code=extracted_data.get("quality_code", ""),
             quality_name=extracted_data.get("quality_name", ""),
             design_code=extracted_data.get("design_code", ""),
+            color=extracted_data.get("color", ""),
             width=extracted_data.get("width", ""),
             weight=extracted_data.get("weight", ""),
             composition=extracted_data.get("composition", ""),
@@ -618,6 +682,7 @@ def save_fabric(req: FabricSaveRequest):
             quality_code=req.quality_code,
             quality_name=req.quality_name,
             design_code=req.design_code,
+            color=req.color,
             width=req.width,
             weight=req.weight,
             composition=req.composition,

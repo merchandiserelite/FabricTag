@@ -2474,6 +2474,158 @@ html[dir="rtl"] .designer-layout-grid {
     direction: rtl;
 }
 
+/* Interactive Label Designer Selection & Millimeter Nudge Styles */
+.interactive-designer-elem {
+    cursor: pointer !important;
+    position: relative;
+    border-radius: 2px;
+    transition: outline 0.15s ease, background-color 0.15s ease;
+    flex-shrink: 0;
+    line-height: 1.25;
+    min-height: fit-content;
+    box-sizing: border-box;
+}
+
+.interactive-designer-elem[data-element-id="barcode"] {
+    flex-shrink: 1 !important;
+    margin-top: auto !important;
+}
+
+.designer-live-label .print-label {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    gap: 0.35mm !important;
+    overflow: hidden !important;
+    padding: 1.8mm 2.5mm !important;
+    box-sizing: border-box !important;
+}
+
+.designer-live-label .print-quality-code,
+.designer-live-label .print-name,
+.designer-live-label .print-color,
+.designer-live-label .print-code-line,
+.designer-live-label .print-comp,
+.designer-live-label .print-weight {
+    flex-shrink: 0 !important;
+    line-height: 1.25 !important;
+    min-height: 1.25em !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+.interactive-designer-elem:hover {
+    outline: 1.5px dashed #6366f1 !important;
+    background-color: rgba(99, 102, 241, 0.05) !important;
+}
+
+.interactive-designer-elem.selected-element {
+    outline: 2px solid #2563eb !important;
+    background-color: rgba(37, 99, 235, 0.09) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25) !important;
+}
+
+.preview-nudge-toolbar {
+    background: #0f172a;
+    color: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.8rem;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    border: 1px solid #334155;
+    animation: fadeIn 0.18s ease;
+}
+
+.nudge-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.nudge-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-tb-nudge {
+    background: #3b82f6;
+    color: #ffffff;
+    border: none;
+    padding: 3px 9px;
+    border-radius: 5px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-tb-nudge:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+}
+
+.nudge-toolbar-tip {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.nudge-toolbar-tip kbd {
+    background: #1e293b;
+    border: 1px solid #475569;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: #38bdf8;
+    font-weight: 700;
+}
+
+.btn-nudge {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-weight: 700;
+    transition: all 0.12s;
+    user-select: none;
+}
+
+.btn-nudge:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    border-color: #94a3b8;
+}
+
+.btn-nudge:active {
+    transform: scale(0.92);
+}
+
+.modular-element-card.active-selected-card {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+    background: #f8faff !important;
+}
+
 
 
 

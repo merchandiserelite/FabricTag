@@ -1,0 +1,12 @@
+{
+  "version": "4.3.3",
+  "release_date": "2026-09-08",
+  "changelog": [
+    "Ayrı Kalite Kodu ve Renk/Varyant alanı eklendi",
+    "Tüm yazılar standart 9.0pt puntoya eşitlendi",
+    "Alan Başlıklarını Göster / Gizle onay kutusu eklendi",
+    "Vurgu çubuğunu istenen alana (Kalite Adı, Kod, Renk vb.) uygulama seçeneği eklendi",
+    "Canlı önizlemede yön tuşlarıyla (↑ / ↓) 0.5mm milimetrik kaydırma eklendi"
+  ],
+  "download_url": "https://github.com/merchandiserelite/FabricTag/releases/latest"
+}

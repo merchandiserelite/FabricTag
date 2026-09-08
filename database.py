@@ -57,9 +57,14 @@ def init_db():
             weight TEXT,
             composition TEXT,
             barcode_or_qr TEXT,
+            color TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    try:
+        cursor.execute("ALTER TABLE fabrics ADD COLUMN color TEXT")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -147,7 +152,7 @@ def get_next_internal_code(conn, code_settings=None):
         
     return f"{full_prefix}{formatted_num}"
 
-def add_fabric(company_name, quality_code, quality_name, design_code, width, weight, composition, barcode_or_qr, internal_code=None):
+def add_fabric(company_name, quality_code, quality_name, design_code, width, weight, composition, barcode_or_qr, internal_code=None, color=None):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -155,6 +160,7 @@ def add_fabric(company_name, quality_code, quality_name, design_code, width, wei
     quality_code = quality_code.strip().upper() if quality_code else "KODSUZ"
     quality_name = quality_name.strip().upper() if quality_name else ""
     design_code = design_code.strip().upper() if design_code else ""
+    color = color.strip().upper() if color else ""
     width = width.strip().upper() if width else ""
     weight = weight.strip().upper() if weight else ""
     barcode_or_qr = barcode_or_qr.strip().upper() if barcode_or_qr else ""
@@ -179,10 +185,11 @@ def add_fabric(company_name, quality_code, quality_name, design_code, width, wei
                     width = ?,
                     weight = ?,
                     composition = ?,
-                    barcode_or_qr = ?
+                    barcode_or_qr = ?,
+                    color = ?
                 WHERE internal_code = ?
             """, (company_name, quality_code, quality_name, design_code,
-                  width, weight, composition, barcode_or_qr, internal_code.strip().upper()))
+                  width, weight, composition, barcode_or_qr, color, internal_code.strip().upper()))
             conn.commit()
             cursor.execute("SELECT * FROM fabrics WHERE internal_code = ?", (internal_code.strip().upper(),))
             updated_row = dict(cursor.fetchone())
@@ -210,10 +217,10 @@ def add_fabric(company_name, quality_code, quality_name, design_code, width, wei
     cursor.execute("""
         INSERT INTO fabrics (
             internal_code, company_name, quality_code, quality_name, 
-            design_code, width, weight, composition, barcode_or_qr
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            design_code, width, weight, composition, barcode_or_qr, color
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (new_code, company_name, quality_code, quality_name, 
-          design_code, width, weight, composition, barcode_or_qr))
+          design_code, width, weight, composition, barcode_or_qr, color))
     
     conn.commit()
     cursor.execute("SELECT * FROM fabrics WHERE id = ?", (cursor.lastrowid,))
@@ -232,8 +239,8 @@ def get_all_fabrics(search_query=None, start_date=None, end_date=None):
     
     if search_query:
         query = f"%{search_query}%"
-        conditions.append("(internal_code LIKE ? OR company_name LIKE ? OR quality_code LIKE ? OR quality_name LIKE ? OR design_code LIKE ? OR composition LIKE ?)")
-        params.extend([query, query, query, query, query, query])
+        conditions.append("(internal_code LIKE ? OR company_name LIKE ? OR quality_code LIKE ? OR quality_name LIKE ? OR design_code LIKE ? OR composition LIKE ? OR color LIKE ?)")
+        params.extend([query, query, query, query, query, query, query])
         
     if start_date:
         conditions.append("created_at >= ?")
@@ -267,6 +274,7 @@ def export_to_xlsx(filepath, start_date=None, end_date=None):
         "Firma Adı (Company)",
         "Kalite Kodu (Article)",
         "Kalite Adı (Name)",
+        "Renk / Varyant (Color)",
         "Desen Kodu (Design)",
         "Karışım / Yapı (Composition)",
         "En (Width)",
@@ -311,6 +319,7 @@ def export_to_xlsx(filepath, start_date=None, end_date=None):
             row["company_name"],
             row["quality_code"],
             row["quality_name"] or "-",
+            (row["color"] if "color" in row.keys() else "") or "-",
             row["design_code"] or "-",
             row["composition"] or "-",
             row["width"] or "-",

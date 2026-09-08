@@ -18,6 +18,12 @@ else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 LICENSE_FILE = os.path.join(BASE_DIR, "license.dat")
+SHARED_LICENSE_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FabricTag")
+SHARED_LICENSE_FILE = os.path.join(SHARED_LICENSE_DIR, "license.dat")
+
+def get_persisted_license_paths():
+    paths = [LICENSE_FILE, SHARED_LICENSE_FILE]
+    return paths
 
 def get_hardware_id() -> str:
     components = []
@@ -72,14 +78,17 @@ def verify_license(key: str, hw_id: str) -> dict:
 
     possible_companies = ["COMMERCIAL", "FABRICTAG_USER", "ENTERPRISE", "PRO", "STANDART"]
     
-    if os.path.exists(LICENSE_FILE):
-        try:
-            with open(LICENSE_FILE, "r", encoding="utf-8") as f:
-                saved_data = json.load(f)
-                if "company" in saved_data:
-                    possible_companies.insert(0, saved_data["company"].strip().upper())
-        except Exception:
-            pass
+    for p in get_persisted_license_paths():
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    saved_data = json.load(f)
+                    if "company" in saved_data:
+                        comp_name = saved_data["company"].strip().upper()
+                        if comp_name not in possible_companies:
+                            possible_companies.insert(0, comp_name)
+            except Exception:
+                pass
 
     for company in possible_companies:
         for expiry in [0, 365, 730, 1095]:
@@ -101,21 +110,30 @@ def get_license_status() -> dict:
     is_licensed = False
     license_info = None
 
-    if os.path.exists(LICENSE_FILE):
-        try:
-            with open(LICENSE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                saved_key = data.get("license_key", "")
-                result = verify_license(saved_key, hw_id)
-                if result.get("valid"):
-                    is_licensed = True
-                    license_info = {
-                        "company": result.get("company", "LISANSLI MUSTERI"),
-                        "type": result.get("type", "Omur Boyu Sinirsiz"),
-                        "activated_at": data.get("activated_at", "")
-                    }
-        except Exception:
-            pass
+    for p in get_persisted_license_paths():
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    saved_key = data.get("license_key", "")
+                    result = verify_license(saved_key, hw_id)
+                    if result.get("valid"):
+                        is_licensed = True
+                        license_info = {
+                            "company": result.get("company", "LISANSLI MUSTERI"),
+                            "type": result.get("type", "Omur Boyu Sinirsiz"),
+                            "activated_at": data.get("activated_at", "")
+                        }
+                        # If found in shared but not local, sync to local
+                        if p != LICENSE_FILE and not os.path.exists(LICENSE_FILE):
+                            try:
+                                with open(LICENSE_FILE, "w", encoding="utf-8") as lf:
+                                    json.dump(data, lf, indent=4)
+                            except Exception:
+                                pass
+                        break
+            except Exception:
+                pass
 
     remaining_free = max(0, FREE_RECORDS_LIMIT - records_count)
     can_create_new = is_licensed or (records_count < FREE_RECORDS_LIMIT)
@@ -144,13 +162,20 @@ def activate_license(key: str, company: str = "COMMERCIAL") -> dict:
         "activated_at": datetime.now(timezone.utc).isoformat()
     }
 
-    try:
-        with open(LICENSE_FILE, "w", encoding="utf-8") as f:
-            json.dump(save_payload, f, indent=4)
+    errors = []
+    for p in get_persisted_license_paths():
+        try:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(save_payload, f, indent=4)
+        except Exception as e:
+            errors.append(str(e))
+
+    if len(errors) < len(get_persisted_license_paths()):
         return {
             "success": True,
             "message": "Lisans basariyla aktive edildi! Sinirsiz kullanim acildi.",
             "license_info": result
         }
-    except Exception as e:
-        return {"success": False, "message": f"Lisans dosyasi kaydedilemedi: {e}"}
+    else:
+        return {"success": False, "message": f"Lisans dosyasi kaydedilemedi: {errors}"}

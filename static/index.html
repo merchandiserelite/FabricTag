@@ -23,7 +23,7 @@
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     
-    <link rel="stylesheet" href="style.css?v=4.1.2">
+    <link rel="stylesheet" href="style.css?v=4.3.3">
 </head>
 <body>
     <!-- Toast Banner Notification for Alerts -->
@@ -203,6 +203,9 @@
                                 <button class="btn btn-primary" id="webcam-btn" type="button">
                                     <i class="fa-solid fa-video"></i> <span data-i18n="btn_live_camera">Canli Kamera (Seri Cekim)</span>
                                 </button>
+                                <button type="button" class="btn btn-secondary" id="btn-manual-fabric-entry" style="font-weight: 700; border: 1px dashed #4f46e5; color: #4f46e5; background: rgba(79, 70, 229, 0.06);" title="Resim yüklemeden doğrudan elle kumaş bilgisi girin">
+                                    <i class="fa-solid fa-pen-to-square"></i> <span data-i18n="btn_manual_fabric_entry">✍️ Manuel Kumaş Girişi</span>
+                                </button>
                             </div>
                         </div>
 
@@ -262,7 +265,10 @@
                     <div class="card result-card" id="result-card" style="opacity: 0.6; pointer-events: none;">
                         <div class="card-header">
                             <h2><i class="fa-solid fa-square-poll-horizontal"></i> <span data-i18n="form_title">Okunan Kartela Bilgileri</span></h2>
-                            <span class="badge" id="duplicate-warning" style="display: none;"><i class="fa-solid fa-clock-rotate-left"></i> Kayitli Kumas Duzenleniyor</span>
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                <span class="badge" id="duplicate-warning" style="display: none;"><i class="fa-solid fa-clock-rotate-left"></i> Kayitli Kumas Duzenleniyor</span>
+                                <span class="badge" id="manual-mode-badge" style="display: none; background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;"><i class="fa-solid fa-pen-to-square"></i> <span data-i18n="manual_mode_badge">Manuel Giriş Modu</span></span>
+                            </div>
                         </div>
                         
                         <form id="fabric-form" class="fabric-form">
@@ -292,7 +298,11 @@
                                     <input type="text" id="form-quality-name" placeholder="Orn: SPINOZA RECYCLE" class="uppercase-input">
                                 </div>
                                 <div class="form-group">
-                                    <label for="form-design-code" data-i18n="lbl_design_code">Desen / Varyant Kodu (Design)</label>
+                                    <label for="form-color" data-i18n="lbl_color">Renk / Varyant (Color)</label>
+                                    <input type="text" id="form-color" placeholder="Orn: LACIVERT veya 04" class="uppercase-input">
+                                </div>
+                                <div class="form-group">
+                                    <label for="form-design-code" data-i18n="lbl_design_code">Desen Kodu (Design)</label>
                                     <input type="text" id="form-design-code" placeholder="Orn: 66461-D" class="uppercase-input">
                                 </div>
                             </div>
@@ -364,6 +374,9 @@
                             <p data-i18n="db_header_desc">Su ana kadar taranan ve kaydedilen tum etiketler burada tutulur.</p>
                         </div>
                         <div class="header-buttons" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-success" id="btn-db-manual-add" style="font-weight: 700; background: linear-gradient(135deg, #10b981, #059669);" title="Fotoğraf yüklemeden doğrudan elle yeni kumaş kartı oluşturun">
+                                <i class="fa-solid fa-plus-circle"></i> <span data-i18n="btn_manual_add_fabric">+ Manuel Kumaş Ekle</span>
+                            </button>
                             <button class="btn btn-secondary" id="btn-download-excel-template" title="Örnek Boş Excel Formatı İndir">
                                 <i class="fa-solid fa-file-arrow-down"></i> <span data-i18n="btn_download_template">Şablon İndir (.xlsx)</span>
                             </button>
@@ -473,6 +486,23 @@
                                 <span class="label-dim-badge" id="preview-dim-badge">63.5mm × 46.6mm</span>
                             </div>
                             
+                            <!-- Interactive Selection & Millimeter Nudge Toolbar -->
+                            <div id="preview-nudge-toolbar" class="preview-nudge-toolbar" style="display: none;">
+                                <div class="nudge-toolbar-left">
+                                    <i class="fa-solid fa-crosshairs" style="color: #60a5fa;"></i>
+                                    <span id="nudge-toolbar-target-name" style="font-weight: 700;">Eleman</span>
+                                    <span id="nudge-toolbar-val" style="font-weight: 700; color: #38bdf8; background: #1e293b; padding: 2px 6px; border-radius: 4px; margin-left: 4px;">0.0 mm</span>
+                                </div>
+                                <div class="nudge-toolbar-actions">
+                                    <button type="button" class="btn-tb-nudge" id="btn-tb-nudge-up" title="0.5mm Yukarı Kaydır (↑)">▲</button>
+                                    <button type="button" class="btn-tb-nudge" id="btn-tb-nudge-down" title="0.5mm Aşağı Kaydır (↓)">▼</button>
+                                    <button type="button" class="btn-tb-nudge" id="btn-tb-nudge-reset" title="Konumu Sıfırla" style="background: #475569;"><i class="fa-solid fa-rotate-left"></i></button>
+                                </div>
+                                <div class="nudge-toolbar-tip">
+                                    <i class="fa-solid fa-keyboard"></i> <kbd>↑</kbd> <kbd>↓</kbd> Tuşları
+                                </div>
+                            </div>
+
                             <div class="preview-canvas-wrapper" id="preview-canvas-wrapper">
                                 <!-- Exact Dashed Bounding Box -->
                                 <div class="dashed-label-boundary" id="dashed-label-boundary">
@@ -482,7 +512,7 @@
                                 </div>
                             </div>
                             <div class="boundary-help-text">
-                                <i class="fa-solid fa-circle-info"></i> <strong data-i18n="dashed_help_strong">Kesikli Cizgiler:</strong> <span data-i18n="dashed_help_text">Etiketinizin fiziksel kesim siniridir. Logo veya yazilarin bu sinirin disina tasmadigindan emin olun.</span>
+                                <i class="fa-solid fa-hand-pointer" style="color: #4f46e5;"></i> <strong>Hassas Kaydırma:</strong> Etiketteki herhangi bir yazıya tıklayarak seçebilir, <strong>klavyedeki ↑ / ↓ ok tuşlarıyla</strong> milimetrik (0.5 mm) olarak dikey konumunu ayarlayabilirsiniz.
                             </div>
                         </div>
 
@@ -508,6 +538,7 @@
                                         <span class="preset-dot" style="background: #991b1b;"></span>
                                         <span>Bordo Luks</span>
                                     </button>
+
                                     <button type="button" class="preset-chip-btn" data-preset="minimalist-white">
                                         <span class="preset-dot" style="background: #f8fafc; border: 1px solid #94a3b8;"></span>
                                         <span>Minimalist Beyaz</span>
@@ -516,6 +547,15 @@
                                         <span class="preset-dot" style="background: #6366f1;"></span>
                                         <span>Gizli Kod (Op. A)</span>
                                     </button>
+                                </div>
+
+                                <!-- Basliklari Goster / Gizle Onay Kutusu -->
+                                <div style="margin-top: 14px; background: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
+                                    <label for="des-show-prefixes" style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; font-size: 0.88rem; color: #1e40af; margin: 0; user-select: none;">
+                                        <input type="checkbox" id="des-show-prefixes" checked style="width: 20px; height: 20px; accent-color: #2563eb; cursor: pointer;">
+                                        <span><i class="fa-solid fa-tags"></i> Alan Başlıklarını Göster (Kalite Kodu:, Kalite Adı:, Renk:, Varyant:...)</span>
+                                    </label>
+                                    <span class="badge" style="background: #dbeafe; color: #1d4ed8; font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Başlıklar</span>
                                 </div>
                             </div>
 
@@ -582,8 +622,21 @@
 
                             <!-- 3. Vurgu Cubugu (Bar) Renk & Stil Ekipmanlari -->
                             <div class="control-group-box">
-                                <span class="control-group-title"><i class="fa-solid fa-paintbrush"></i> <span data-i18n="ctrl_bar_style_title">Vurgu Cubugu (Varyant / Kod Satiri) Stili</span></span>
+                                <span class="control-group-title"><i class="fa-solid fa-paintbrush"></i> <span data-i18n="ctrl_bar_style_title">Vurgu Çubuğu (Öne Çıkarma) Stili</span></span>
                                 
+                                <div class="modular-controls-row" style="margin-bottom: 8px;">
+                                    <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Vurgulanacak Alan:</label>
+                                    <select id="des-bar-target" class="select-input-sm" style="width: 160px; font-weight: 600;">
+                                        <option value="code_bar" selected>Desen / Varyant Barı</option>
+                                        <option value="quality_name">Kalite Adı</option>
+                                        <option value="quality_code">Kalite Kodu</option>
+                                        <option value="color">Renk / Varyant</option>
+                                        <option value="composition">Karışım</option>
+                                        <option value="weight">Gramaj</option>
+                                        <option value="none">Hiçbiri (Vurgusuz Düz)</option>
+                                    </select>
+                                </div>
+
                                 <div class="modular-controls-row" style="margin-bottom: 8px;">
                                     <label style="font-size: 0.8rem; color: #475569; font-weight: 600;">Cubuk Formati:</label>
                                     <select id="des-bar-style" class="select-input-sm" style="width: 140px;">
@@ -682,18 +735,71 @@
                                                         <option value="center">Orta</option>
                                                         <option value="right" selected>Sag</option>
                                                     </select>
-                                                    <strong id="val-font-company" style="font-size: 0.75rem; color: #4f46e5;">8.5pt</strong>
+                                                    <strong id="val-font-company" style="font-size: 0.75rem; color: #4f46e5;">9.0pt</strong>
+                                                </div>
+                                            </div>
+                                            <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                <span style="font-size: 0.72rem; color: #64748b;"><i class="fa-solid fa-arrows-up-down"></i> Konum Kaydırma:</span>
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <button type="button" class="btn-nudge btn-nudge-up" data-element="logo_row" title="0.5mm Yukarı">▲</button>
+                                                    <span class="nudge-val-badge" id="val-offset-logo_row">0.0 mm</span>
+                                                    <button type="button" class="btn-nudge btn-nudge-down" data-element="logo_row" title="0.5mm Aşağı">▼</button>
+                                                    <button type="button" class="btn-nudge-reset" data-element="logo_row" title="Sıfırla"><i class="fa-solid fa-rotate-left"></i></button>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- B. Kalite Kodu & Kalite Adı -->
+                                    <!-- B. Kalite Kodu (Article) -->
+                                    <div class="modular-element-card" data-element-id="quality_code">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-barcode"></i> Kalite Kodu (Article)</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-show-quality-code-elem" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body">
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                    <input type="text" id="des-prefix-quality-code-elem" placeholder="Bos / Orn: KALITE KODU:" class="prefix-input-sm">
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    <select id="des-align-quality-code-elem" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left">Sol</option>
+                                                        <option value="center" selected>Orta</option>
+                                                        <option value="right">Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-quality-code-elem" style="font-size: 0.75rem; color: #4f46e5;">9.0pt</strong>
+                                                </div>
+                                            </div>
+                                            <input type="range" id="des-font-quality-code-elem" min="5" max="14" step="0.5" value="9" class="range-slider">
+                                            <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                <span style="font-size: 0.72rem; color: #64748b;"><i class="fa-solid fa-arrows-up-down"></i> Konum Kaydırma:</span>
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <button type="button" class="btn-nudge btn-nudge-up" data-element="quality_code" title="0.5mm Yukarı">▲</button>
+                                                    <span class="nudge-val-badge" id="val-offset-quality_code">0.0 mm</span>
+                                                    <button type="button" class="btn-nudge btn-nudge-down" data-element="quality_code" title="0.5mm Aşağı">▼</button>
+                                                    <button type="button" class="btn-nudge-reset" data-element="quality_code" title="Sıfırla"><i class="fa-solid fa-rotate-left"></i></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- C. Kalite Adı (Name) -->
                                     <div class="modular-element-card" data-element-id="quality_name">
                                          <div class="modular-card-header">
                                              <div class="modular-card-left">
                                                  <i class="fa-solid fa-grip-vertical modular-handle"></i>
-                                                 <span class="modular-card-title"><i class="fa-solid fa-tag"></i> Kalite Kodu & Kalite Adi</span>
+                                                 <span class="modular-card-title"><i class="fa-solid fa-tag"></i> Kalite Adi (Name)</span>
                                              </div>
                                              <div class="modular-order-actions">
                                                  <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
@@ -708,7 +814,7 @@
                                              <div class="modular-controls-row">
                                                  <div style="display: flex; align-items: center; gap: 4px;">
                                                      <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
-                                                     <input type="text" id="des-prefix-quality-name" placeholder="Bos / Orn: KALITE:" class="prefix-input-sm">
+                                                     <input type="text" id="des-prefix-quality-name" placeholder="Bos / Orn: KALITE ADI:" class="prefix-input-sm">
                                                  </div>
                                                  <div style="display: flex; align-items: center; gap: 6px;">
                                                      <select id="des-align-quality-name" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
@@ -716,20 +822,73 @@
                                                          <option value="center" selected>Orta</option>
                                                          <option value="right">Sag</option>
                                                      </select>
-                                                     <strong id="val-font-quality-name" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
+                                                     <strong id="val-font-quality-name" style="font-size: 0.75rem; color: #4f46e5;">9.0pt</strong>
                                                  </div>
                                              </div>
-                                             <input type="range" id="des-font-quality-name" min="5" max="14" step="0.5" value="7.5" class="range-slider">
+                                             <input type="range" id="des-font-quality-name" min="5" max="14" step="0.5" value="9" class="range-slider">
+                                             <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                 <span style="font-size: 0.72rem; color: #64748b;"><i class="fa-solid fa-arrows-up-down"></i> Konum Kaydırma:</span>
+                                                 <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <button type="button" class="btn-nudge btn-nudge-up" data-element="quality_name" title="0.5mm Yukarı">▲</button>
+                                                    <span class="nudge-val-badge" id="val-offset-quality_name">0.0 mm</span>
+                                                    <button type="button" class="btn-nudge btn-nudge-down" data-element="quality_name" title="0.5mm Aşağı">▼</button>
+                                                    <button type="button" class="btn-nudge-reset" data-element="quality_name" title="Sıfırla"><i class="fa-solid fa-rotate-left"></i></button>
+                                                 </div>
+                                             </div>
                                          </div>
                                      </div>
 
-                                     <!-- C. Desen / Varyant Kodu (Siyah Zemin Bar) -->
-                                     <div class="modular-element-card" data-element-id="code_bar">
-                                         <div class="modular-card-header">
-                                             <div class="modular-card-left">
-                                                 <i class="fa-solid fa-grip-vertical modular-handle"></i>
-                                                 <span class="modular-card-title"><i class="fa-solid fa-palette"></i> Desen / Varyant Kodu Bari (Siyah Zemin)</span>
-                                             </div>
+                                    <!-- D. Renk Bilgisi (Color) -->
+                                    <div class="modular-element-card" data-element-id="color">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-eye-dropper"></i> Renk Bilgisi (Color)</span>
+                                            </div>
+                                            <div class="modular-order-actions">
+                                                <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
+                                                    <input type="checkbox" id="des-show-color" checked>
+                                                    <span class="slider-round"></span>
+                                                </label>
+                                                <button type="button" class="btn-order-move btn-move-up" title="Yukari Tasi">▲</button>
+                                                <button type="button" class="btn-order-move btn-move-down" title="Asagi Tasi">▼</button>
+                                            </div>
+                                        </div>
+                                        <div class="modular-card-body">
+                                            <div class="modular-controls-row">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
+                                                    <input type="text" id="des-prefix-color" placeholder="Bos / Orn: RENK:" class="prefix-input-sm">
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 6px;">
+                                                    <select id="des-align-color" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
+                                                        <option value="left" selected>Sol</option>
+                                                        <option value="center">Orta</option>
+                                                        <option value="right">Sag</option>
+                                                    </select>
+                                                    <strong id="val-font-color" style="font-size: 0.75rem; color: #4f46e5;">9.0pt</strong>
+                                                </div>
+                                            </div>
+                                            <input type="range" id="des-font-color" min="5" max="14" step="0.5" value="9" class="range-slider">
+                                            <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                <span style="font-size: 0.72rem; color: #64748b;"><i class="fa-solid fa-arrows-up-down"></i> Konum Kaydırma:</span>
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <button type="button" class="btn-nudge btn-nudge-up" data-element="color" title="0.5mm Yukarı">▲</button>
+                                                    <span class="nudge-val-badge" id="val-offset-color">0.0 mm</span>
+                                                    <button type="button" class="btn-nudge btn-nudge-down" data-element="color" title="0.5mm Aşağı">▼</button>
+                                                    <button type="button" class="btn-nudge-reset" data-element="color" title="Sıfırla"><i class="fa-solid fa-rotate-left"></i></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- E. Desen / Varyant Kodu (Siyah Zemin Bar) -->
+                                    <div class="modular-element-card" data-element-id="code_bar">
+                                        <div class="modular-card-header">
+                                            <div class="modular-card-left">
+                                                <i class="fa-solid fa-grip-vertical modular-handle"></i>
+                                                <span class="modular-card-title"><i class="fa-solid fa-palette"></i> Desen / Varyant Kodu Bari</span>
+                                            </div>
                                             <div class="modular-order-actions">
                                                 <label class="switch-toggle" title="Goster / Gizle" style="margin-right: 4px;">
                                                     <input type="checkbox" id="des-show-quality-code" checked>
@@ -743,7 +902,7 @@
                                             <div class="modular-controls-row">
                                                 <div style="display: flex; align-items: center; gap: 4px;">
                                                     <span style="font-size: 0.75rem; color: #64748b;">On Ek:</span>
-                                                    <input type="text" id="des-prefix-quality-code" placeholder="Bos / Orn: ART:" class="prefix-input-sm">
+                                                    <input type="text" id="des-prefix-quality-code" placeholder="Bos / Orn: VARYANT:" class="prefix-input-sm">
                                                 </div>
                                                 <div style="display: flex; align-items: center; gap: 6px;">
                                                     <select id="des-align-quality-code" class="select-input-sm" style="padding: 2px 4px; font-size: 0.75rem;">
@@ -751,14 +910,23 @@
                                                         <option value="center" selected>Orta</option>
                                                         <option value="right">Sag</option>
                                                     </select>
-                                                    <strong id="val-font-header" style="font-size: 0.75rem; color: #4f46e5;">8.5pt</strong>
+                                                    <strong id="val-font-header" style="font-size: 0.75rem; color: #4f46e5;">9.0pt</strong>
                                                 </div>
                                             </div>
-                                            <input type="range" id="des-font-header" min="6" max="14" step="0.5" value="8.5" class="range-slider">
+                                            <input type="range" id="des-font-header" min="6" max="14" step="0.5" value="9" class="range-slider">
+                                            <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                <span style="font-size: 0.72rem; color: #64748b;"><i class="fa-solid fa-arrows-up-down"></i> Konum Kaydırma:</span>
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <button type="button" class="btn-nudge btn-nudge-up" data-element="code_bar" title="0.5mm Yukarı">▲</button>
+                                                    <span class="nudge-val-badge" id="val-offset-code_bar">0.0 mm</span>
+                                                    <button type="button" class="btn-nudge btn-nudge-down" data-element="code_bar" title="0.5mm Aşağı">▼</button>
+                                                    <button type="button" class="btn-nudge-reset" data-element="code_bar" title="Sıfırla"><i class="fa-solid fa-rotate-left"></i></button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <!-- D. Karışım (Composition) -->
+                                    <!-- F. Karışım (Composition) -->
                                     <div class="modular-element-card" data-element-id="composition">
                                         <div class="modular-card-header">
                                             <div class="modular-card-left">
@@ -786,14 +954,23 @@
                                                         <option value="center">Orta</option>
                                                         <option value="right">Sag</option>
                                                     </select>
-                                                    <strong id="val-font-comp" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
+                                                    <strong id="val-font-comp" style="font-size: 0.75rem; color: #4f46e5;">9.0pt</strong>
                                                 </div>
                                             </div>
-                                            <input type="range" id="des-font-comp" min="5" max="14" step="0.5" value="7.5" class="range-slider">
+                                            <input type="range" id="des-font-comp" min="5" max="14" step="0.5" value="9" class="range-slider">
+                                            <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                <span style="font-size: 0.72rem; color: #64748b;"><i class="fa-solid fa-arrows-up-down"></i> Konum Kaydırma:</span>
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <button type="button" class="btn-nudge btn-nudge-up" data-element="composition" title="0.5mm Yukarı">▲</button>
+                                                    <span class="nudge-val-badge" id="val-offset-composition">0.0 mm</span>
+                                                    <button type="button" class="btn-nudge btn-nudge-down" data-element="composition" title="0.5mm Aşağı">▼</button>
+                                                    <button type="button" class="btn-nudge-reset" data-element="composition" title="Sıfırla"><i class="fa-solid fa-rotate-left"></i></button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <!-- E. Gramaj (Weight) -->
+                                    <!-- G. Gramaj (Weight) -->
                                     <div class="modular-element-card" data-element-id="weight">
                                         <div class="modular-card-header">
                                             <div class="modular-card-left">
@@ -821,14 +998,23 @@
                                                         <option value="center">Orta</option>
                                                         <option value="right">Sag</option>
                                                     </select>
-                                                    <strong id="val-font-weight" style="font-size: 0.75rem; color: #4f46e5;">7.5pt</strong>
+                                                    <strong id="val-font-weight" style="font-size: 0.75rem; color: #4f46e5;">9.0pt</strong>
                                                 </div>
                                             </div>
-                                            <input type="range" id="des-font-weight" min="5" max="14" step="0.5" value="7.5" class="range-slider">
+                                            <input type="range" id="des-font-weight" min="5" max="14" step="0.5" value="9" class="range-slider">
+                                            <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                <span style="font-size: 0.72rem; color: #64748b;"><i class="fa-solid fa-arrows-up-down"></i> Konum Kaydırma:</span>
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <button type="button" class="btn-nudge btn-nudge-up" data-element="weight" title="0.5mm Yukarı">▲</button>
+                                                    <span class="nudge-val-badge" id="val-offset-weight">0.0 mm</span>
+                                                    <button type="button" class="btn-nudge btn-nudge-down" data-element="weight" title="0.5mm Aşağı">▼</button>
+                                                    <button type="button" class="btn-nudge-reset" data-element="weight" title="Sıfırla"><i class="fa-solid fa-rotate-left"></i></button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <!-- F. Barkod / QR Çizgisi -->
+                                    <!-- H. Barkod / QR Çizgisi -->
                                     <div class="modular-element-card" data-element-id="barcode">
                                         <div class="modular-card-header">
                                             <div class="modular-card-left">
@@ -850,6 +1036,15 @@
                                                 <strong id="val-barcode-height" style="font-size: 0.78rem; color: #4f46e5;">8.0mm</strong>
                                             </div>
                                             <input type="range" id="des-barcode-height" min="4" max="18" step="0.5" value="8.0" class="range-slider">
+                                            <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
+                                                <span style="font-size: 0.72rem; color: #64748b;"><i class="fa-solid fa-arrows-up-down"></i> Konum Kaydırma:</span>
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <button type="button" class="btn-nudge btn-nudge-up" data-element="barcode" title="0.5mm Yukarı">▲</button>
+                                                    <span class="nudge-val-badge" id="val-offset-barcode">0.0 mm</span>
+                                                    <button type="button" class="btn-nudge btn-nudge-down" data-element="barcode" title="0.5mm Aşağı">▼</button>
+                                                    <button type="button" class="btn-nudge-reset" data-element="barcode" title="Sıfırla"><i class="fa-solid fa-rotate-left"></i></button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1296,6 +1491,25 @@
                     </p>
                 </div>
 
+                <!-- Purchase & Contact Information Banner -->
+                <div class="license-contact-banner" style="margin-bottom: 1.25rem; padding: 14px 16px; border-radius: 10px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(6, 182, 212, 0.08)); border: 1px solid rgba(79, 70, 229, 0.25); display: flex; align-items: center; gap: 14px;">
+                    <div style="width: 44px; height: 44px; border-radius: 50%; background: #4f46e5; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);">
+                        <i class="fa-solid fa-phone-volume"></i>
+                    </div>
+                    <div style="flex-grow: 1;">
+                        <div style="font-size: 0.86rem; font-weight: 700; color: #1e1b4b; margin-bottom: 3px;" data-i18n="license_contact_thanks">
+                            Beğenip programımızı almaya karar verdiğiniz için teşekkür ederiz.
+                        </div>
+                        <div style="font-size: 0.82rem; color: #475569;">
+                            <span data-i18n="license_contact_call">İletişim için</span> 
+                            <a href="tel:05321556151" style="color: #4f46e5; font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="fa-solid fa-phone"></i> 0532 155 6151
+                            </a> 
+                            <span data-i18n="license_contact_suffix">nolu telefon numaramızı arayabilirsiniz.</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label style="font-size: 0.85rem; font-weight: 700; color: #334155; display: flex; justify-content: space-between;">
                         <span data-i18n="lbl_hardware_id">Bilgisayarınızın Donanım Kimliği (Hardware ID):</span>
@@ -1339,7 +1553,17 @@
                 <div class="guide-steps-container">
                     <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="background: #4f46e5; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">1</span>
+                            <span style="background: #0ea5e9; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">1</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step0_title">Programı Başlatma ve Açılış</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step0_desc">
+                            Masaüstünüzdeki <strong>FabricTag</strong> kısayoluna veya program klasöründeki <strong>FabricTag.exe</strong> dosyasına çift tıklayın. Sistem tamamen arka planda sessizce başlar ve varsayılan internet tarayıcınızda otomatik olarak açılır.
+                        </p>
+                    </div>
+
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #4f46e5; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">2</span>
                             <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step1_title">Gemini Yapay Zeka API Anahtarı Kurulumu</h4>
                         </div>
                         <p style="font-size: 0.82rem; color: #475569; margin: 0 0 10px 36px; line-height: 1.5;" data-i18n="guide_step1_desc">
@@ -1354,17 +1578,17 @@
 
                     <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="background: #06b6d4; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">2</span>
+                            <span style="background: #06b6d4; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">3</span>
                             <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step2_title">Kartela Tarama ve Otomatik Okuma</h4>
                         </div>
                         <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step2_desc">
-                            Kartela fotoğrafını 3 şekilde yükleyebilirsiniz: <strong>Webcam/Kamera</strong> ile seri çekim, <strong>Telefondan QR ile Kablosuz</strong> tarama veya <strong>Fotoğraf Yükleyerek</strong>. Yapay zeka tüm kumaş bilgilerini saniyeler içinde ayrıştırır.
+                            Kartela fotoğrafını 3 şekilde yükleyebilirsiniz: <strong>Webcam/Kamera</strong> ile seri çekim, <strong>Telefondan QR ile Kablosuz</strong> tarama veya <strong>Fotoğraf Yükleyerek</strong>. Dilerseniz <strong>✍️ Manuel Kumaş Girişi</strong> butonuyla fotoğrafsız da doğrudan kayıt ekleyebilirsiniz.
                         </p>
                     </div>
 
                     <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="background: #10b981; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">3</span>
+                            <span style="background: #10b981; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">4</span>
                             <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step3_title">Görsel Etiket Tasarımı & Barkod Baskısı</h4>
                         </div>
                         <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step3_desc">
@@ -1374,7 +1598,7 @@
 
                     <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="background: #8b5cf6; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">4</span>
+                            <span style="background: #8b5cf6; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">5</span>
                             <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step4_title">Excel İçe/Dışa Aktarma ve Bulut Yedekleme</h4>
                         </div>
                         <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step4_desc">
@@ -1459,6 +1683,6 @@
     <!-- Hidden Print Area -->
     <div id="print-section"></div>
 
-    <script src="app.js?v=4.1.2"></script>
+    <script src="app.js?v=4.3.3"></script>
 </body>
 </html>

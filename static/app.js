@@ -81,6 +81,7 @@ function initApp() {
     const inputCompany = document.getElementById("form-company-name");
     const inputQualityCode = document.getElementById("form-quality-code");
     const inputQualityName = document.getElementById("form-quality-name");
+    const inputColor = document.getElementById("form-color");
     const inputDesign = document.getElementById("form-design-code");
     const inputWidth = document.getElementById("form-width");
     const inputWeight = document.getElementById("form-weight");
@@ -137,6 +138,8 @@ function initApp() {
     const groupLabelBorderColor = document.getElementById("group-label-border-color");
 
     // Bar Styles & Colors
+    const desShowPrefixes = document.getElementById("des-show-prefixes");
+    const desBarTarget = document.getElementById("des-bar-target");
     const desBarStyle = document.getElementById("des-bar-style");
     const desBarBgColor = document.getElementById("des-bar-bg-color");
     const desBarTextColor = document.getElementById("des-bar-text-color");
@@ -156,19 +159,41 @@ function initApp() {
     const valFontCompany = document.getElementById("val-font-company");
     const desAlignCompany = document.getElementById("des-align-company");
 
-    // 2. Kalite Adı (Quality Name)
+    // 2. Kalite Kodu (Quality Code - Ayrı Eleman)
+    const desShowQualityCodeElem = document.getElementById("des-show-quality-code-elem");
+    const desFontQualityCodeElem = document.getElementById("des-font-quality-code-elem");
+    const valFontQualityCodeElem = document.getElementById("val-font-quality-code-elem");
+    const desAlignQualityCodeElem = document.getElementById("des-align-quality-code-elem");
+    const desPrefixQualityCodeElem = document.getElementById("des-prefix-quality-code-elem");
+
+    // 3. Kalite Adı (Quality Name)
     const desShowQualityName = document.getElementById("des-show-quality-name");
     const desFontQualityName = document.getElementById("des-font-quality-name");
     const valFontQualityName = document.getElementById("val-font-quality-name");
     const desAlignQualityName = document.getElementById("des-align-quality-name");
     const desPrefixQualityName = document.getElementById("des-prefix-quality-name");
 
-    // 3. Varyant ve Renk Kodu Barı (Header / Quality Code Bar)
+    // 4. Renk Bilgisi (Color)
+    const desShowColor = document.getElementById("des-show-color");
+    const desFontColor = document.getElementById("des-font-color");
+    const valFontColor = document.getElementById("val-font-color");
+    const desAlignColor = document.getElementById("des-align-color");
+    const desPrefixColor = document.getElementById("des-prefix-color");
+
+    // 5. Varyant ve Desen Kodu Barı (Header / Quality Code Bar)
     const desShowQualityCode = document.getElementById("des-show-quality-code");
     const desFontHeader = document.getElementById("des-font-header");
     const valFontHeader = document.getElementById("val-font-header");
     const desAlignQualityCode = document.getElementById("des-align-quality-code");
     const desPrefixQualityCode = document.getElementById("des-prefix-quality-code");
+
+    // Interactive Preview Nudge Toolbar
+    const previewNudgeToolbar = document.getElementById("preview-nudge-toolbar");
+    const nudgeToolbarTargetName = document.getElementById("nudge-toolbar-target-name");
+    const nudgeToolbarVal = document.getElementById("nudge-toolbar-val");
+    const btnTbNudgeUp = document.getElementById("btn-tb-nudge-up");
+    const btnTbNudgeDown = document.getElementById("btn-tb-nudge-down");
+    const btnTbNudgeReset = document.getElementById("btn-tb-nudge-reset");
 
     // 4. Karışım (Composition)
     const desShowComp = document.getElementById("des-show-comp");
@@ -217,6 +242,16 @@ function initApp() {
     // ==========================================
     const i18n = {
         "tr": {
+            "guide_step0_title": "Programı Başlatma ve Açılış",
+            "guide_step0_desc": "Masaüstünüzdeki FabricTag kısayoluna veya program klasöründeki FabricTag.exe dosyasına çift tıklayın. Sistem tamamen arka planda sessizce başlar ve varsayılan internet tarayıcınızda otomatik olarak açılır.",
+
+            "btn_manual_fabric_entry": "✍️ Manuel Kumaş Girişi",
+            "btn_manual_add_fabric": "+ Manuel Kumaş Ekle",
+            "manual_mode_badge": "Manuel Giriş Modu",
+            "license_contact_thanks": "Beğenip programımızı almaya karar verdiğiniz için teşekkür ederiz.",
+            "license_contact_call": "İletişim için",
+            "license_contact_suffix": "nolu telefon numaramızı arayabilirsiniz.",
+
                 "lang_label": "Dil / Language:",
                 "nav_scan": "Kartela Tara",
                 "nav_database": "Veritabanı / Geçmiş",
@@ -381,6 +416,16 @@ function initApp() {
                 "ios_step4": "Sağ üstteki \"Ekle\"ye basın. FabricTag artık telefonunuzda tam ekran bir uygulama olarak açılır!"
         },
         "en": {
+            "guide_step0_title": "Launching and Starting the Program",
+            "guide_step0_desc": "Double-click the FabricTag desktop shortcut or FabricTag.exe in the folder. The system starts silently in the background and opens automatically in your browser.",
+
+            "btn_manual_fabric_entry": "✍️ Manual Fabric Entry",
+            "btn_manual_add_fabric": "+ Add Fabric Manually",
+            "manual_mode_badge": "Manual Entry Mode",
+            "license_contact_thanks": "Thank you for choosing to purchase our software.",
+            "license_contact_call": "For contact and support",
+            "license_contact_suffix": "you can call our phone number.",
+
                 "lang_label": "Language:",
                 "nav_scan": "Scan Swatch",
                 "nav_database": "Database / History",
@@ -545,6 +590,16 @@ function initApp() {
                 "ios_step4": "Tap \"Add\" in the top right. FabricTag will open as a full-screen app!"
         },
         "de": {
+            "guide_step0_title": "Starten des Programms",
+            "guide_step0_desc": "Doppelklicken Sie auf die FabricTag-Verknüpfung oder FabricTag.exe. Das System startet lautlos im Hintergrund und öffnet sich im Browser.",
+
+            "btn_manual_fabric_entry": "✍️ Manuelle Stoffeingabe",
+            "btn_manual_add_fabric": "+ Stoff Manuell Hinzufügen",
+            "manual_mode_badge": "Manueller Eingabemodus",
+            "license_contact_thanks": "Vielen Dank, dass Sie sich für unsere Software entschieden haben.",
+            "license_contact_call": "Für Kontakt",
+            "license_contact_suffix": "können Sie uns anrufen.",
+
                 "lang_label": "Sprache:",
                 "nav_scan": "Muster Scannen",
                 "nav_database": "Datenbank / Historie",
@@ -602,6 +657,16 @@ function initApp() {
                 "ios_step4": "Tippen Sie oben rechts auf \"Hinzufügen\"."
         },
         "it": {
+            "guide_step0_title": "Avvio del Programma",
+            "guide_step0_desc": "Fare doppio clic sul collegamento FabricTag o su FabricTag.exe. Il sistema si avvia in background e si apre nel browser.",
+
+            "btn_manual_fabric_entry": "✍️ Inserimento Manuale Tessuto",
+            "btn_manual_add_fabric": "+ Aggiungi Tessuto Manualmente",
+            "manual_mode_badge": "Modalità Inserimento Manuale",
+            "license_contact_thanks": "Grazie per aver scelto di acquistare il nostro programma.",
+            "license_contact_call": "Per contatti",
+            "license_contact_suffix": "puoi chiamare il nostro numero.",
+
                 "lang_label": "Lingua:",
                 "nav_scan": "Scansiona Cartella",
                 "nav_database": "Database / Storico",
@@ -659,6 +724,16 @@ function initApp() {
                 "ios_step4": "Tocca \"Aggiungi\" in alto a destra."
         },
         "es": {
+            "guide_step0_title": "Iniciar el Programa",
+            "guide_step0_desc": "Haga doble clic en el acceso directo de FabricTag o en FabricTag.exe. El sistema se inicia en segundo plano y se abre en su navegador.",
+
+            "btn_manual_fabric_entry": "✍️ Entrada Manual de Tela",
+            "btn_manual_add_fabric": "+ Agregar Tela Manualmente",
+            "manual_mode_badge": "Modo de Entrada Manual",
+            "license_contact_thanks": "Gracias por decidir comprar nuestro software.",
+            "license_contact_call": "Para contacto",
+            "license_contact_suffix": "puede llamar a nuestro número.",
+
                 "lang_label": "Idioma:",
                 "nav_scan": "Escanear Muestra",
                 "nav_database": "Base de Datos / Historial",
@@ -716,6 +791,16 @@ function initApp() {
                 "ios_step4": "Toque \"Añadir\" en la esquina superior derecha."
         },
         "fr": {
+            "guide_step0_title": "Lancement du Programme",
+            "guide_step0_desc": "Double-cliquez sur le raccourci FabricTag ou FabricTag.exe. Le système démarre silencieusement en arrière-plan et s'ouvre dans votre navigateur.",
+
+            "btn_manual_fabric_entry": "✍️ Entrée Manuelle du Tissu",
+            "btn_manual_add_fabric": "+ Ajouter Tissu Manuellement",
+            "manual_mode_badge": "Mode Saisie Manuelle",
+            "license_contact_thanks": "Merci d'avoir choisi d'acheter notre logiciel.",
+            "license_contact_call": "Pour nous contacter",
+            "license_contact_suffix": "vous pouvez nous appeler.",
+
                 "lang_label": "Langue:",
                 "nav_scan": "Scanner Échantillon",
                 "nav_database": "Base de Données / Historique",
@@ -773,6 +858,16 @@ function initApp() {
                 "ios_step4": "Appuyez sur \"Ajouter\" en haut à droite."
         },
         "ar": {
+            "guide_step0_title": "تشغيل البرنامج والبدء",
+            "guide_step0_desc": "انقر نقراً مزدوجاً فوق اختصار FabricTag أو ملف FabricTag.exe. يبدأ البرنامج في الخلفية ويفتح تلقائياً في المتصفح.",
+
+            "btn_manual_fabric_entry": "✍️ إدخال يدوي للقماش",
+            "btn_manual_add_fabric": "+ إضافة قماش يدوياً",
+            "manual_mode_badge": "وضع الإدخال اليدوي",
+            "license_contact_thanks": "شكراً لاختيارك شراء برنامجنا.",
+            "license_contact_call": "للتواصل",
+            "license_contact_suffix": "يمكنكم الاتصال برقمنا.",
+
                 "lang_label": "اللغة:",
                 "nav_scan": "مسح البطاقة",
                 "nav_database": "قاعدة البيانات / السجل",
@@ -898,6 +993,16 @@ function initApp() {
                 "ios_step4": "اضغط على \"إضافة\" في أعلى اليسار."
         },
         "zh": {
+            "guide_step0_title": "启动程序",
+            "guide_step0_desc": "双击桌面上的FabricTag快捷方式或文件夹中的FabricTag.exe。系统将在后台静默启动并在浏览器中自动打开。",
+
+            "btn_manual_fabric_entry": "✍️ 手动面料录入",
+            "btn_manual_add_fabric": "+ 手动添加面料",
+            "manual_mode_badge": "手动输入模式",
+            "license_contact_thanks": "感谢您决定购买我们的软件。",
+            "license_contact_call": "联系方式",
+            "license_contact_suffix": "欢迎致电我们的电话。",
+
                 "lang_label": "语言:",
                 "nav_scan": "扫描色卡",
                 "nav_database": "数据库 / 历史",
@@ -1023,6 +1128,16 @@ function initApp() {
                 "ios_step4": "点击右上角的 \"添加\" 即可。"
         },
         "ja": {
+            "guide_step0_title": "プログラムの起動と開始",
+            "guide_step0_desc": "デスクトップのFabricTagショートカットまたはFabricTag.exeをダブルクリックします。システムはバックグラウンドで静かに起動しブラウザで自動的に開きます。",
+
+            "btn_manual_fabric_entry": "✍️ 生地の直接手動入力",
+            "btn_manual_add_fabric": "+ 手動で生地を追加",
+            "manual_mode_badge": "手動入力モード",
+            "license_contact_thanks": "ソフトウェアのご購入を決めていただき誠にありがとうございます。",
+            "license_contact_call": "お問い合わせ",
+            "license_contact_suffix": "お電話でお問い合わせください。",
+
                 "lang_label": "言語:",
                 "nav_scan": "スワッチスキャン",
                 "nav_database": "データベース / 履歴",
@@ -1314,40 +1429,54 @@ function initApp() {
         label_border_style: "none",
         label_border_color: "#000000",
         
-        // Bar styles
+        // Bar styles & Highlight Target
+        bar_target: "code_bar", // which element gets the bar style: code_bar, quality_name, quality_code, color, composition, weight, none
         bar_style: "filled", // filled, outline, plain
         bar_bg_color: "#000000",
         bar_text_color: "#ffffff",
         bar_border_radius: "1.0",
 
+        // Show / Hide Field Prefixes Toggle
+        show_field_prefixes: true,
+
         // Element Order
-        element_order: ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"],
+        element_order: ["logo_row", "quality_code", "quality_name", "color", "code_bar", "composition", "weight", "barcode"],
 
         // Prefixes
-        prefix_quality_name: "",
-        prefix_quality_code: "",
-        prefix_composition: "",
-        prefix_weight: "",
+        prefix_quality_code_elem: "KALİTE KODU:",
+        prefix_quality_name: "KALİTE ADI:",
+        prefix_color: "RENK:",
+        prefix_quality_code: "VARYANT:",
+        prefix_composition: "KARIŞIM:",
+        prefix_weight: "GRAMAJ:",
 
-        font_size_header: 8.5,
-        font_size_company: 8.5,
-        font_size_quality_name: 7.5,
-        font_size_composition: 7.5,
-        font_size_weight: 7.5,
-        font_size_body: 7.5,
+        // All Fonts Uniform 9.0pt by Default
+        font_size_quality_code_elem: 9.0,
+        font_size_quality_name: 9.0,
+        font_size_color: 9.0,
+        font_size_header: 9.0,
+        font_size_company: 9.0,
+        font_size_composition: 9.0,
+        font_size_weight: 9.0,
+        font_size_body: 9.0,
         header_black_bar: true,
         barcode_height: 8.0,
         barcode_visible: true,
         show_company: true,
+        show_quality_code_elem: true,
         show_quality_name: true,
+        show_color: true,
         show_quality_code: true,
         show_composition: true,
         show_weight: true,
         align_company: "right",
+        align_quality_code_elem: "center",
         align_quality_name: "center",
+        align_color: "left",
         align_quality_code: "center",
         align_composition: "left",
-        align_weight: "left"
+        align_weight: "left",
+        element_offsets: {}
     };
 
     let currentDesignConfig = Object.assign({}, DEFAULT_DESIGN_CONFIG);
@@ -1370,6 +1499,7 @@ function initApp() {
         company_name: "BEZTAS TEKSTIL SAN.",
         quality_code: "K2072",
         quality_name: "SPINOZA RECYCLE",
+        color: "04 LACİVERT",
         design_code: "66461-D",
         composition: "%31 POLYESTER RECYCLE %69 POLYESTER",
         weight: "83 GR/M² ±5"
@@ -1763,6 +1893,10 @@ function initApp() {
         }
         if (desLabelBorderColor) desLabelBorderColor.value = cfg.label_border_color || "#000000";
 
+        // Field Prefixes Toggle & Highlight Target Element
+        if (desShowPrefixes) desShowPrefixes.checked = cfg.show_field_prefixes !== false;
+        if (desBarTarget) desBarTarget.value = cfg.bar_target || "code_bar";
+
         // Global Bar settings (if used)
         if (desBarStyle) {
             desBarStyle.value = cfg.bar_style || cfg.design_style || "filled";
@@ -1785,63 +1919,112 @@ function initApp() {
         if (desLogoAlign) desLogoAlign.value = cfg.logo_align || "left";
         if (desShowCompany) desShowCompany.checked = cfg.show_company !== false;
         if (desFontCompany) {
-            const compSize = cfg.font_size_company !== undefined ? cfg.font_size_company : 8.5;
+            const compSize = cfg.font_size_company !== undefined ? cfg.font_size_company : 9.0;
             desFontCompany.value = compSize;
             if (valFontCompany) valFontCompany.textContent = compSize + "pt";
         }
         if (desAlignCompany) desAlignCompany.value = cfg.align_company || "right";
 
-        // 2. Kalite Adı (Quality Name)
+        // 2. Kalite Kodu (Quality Code - Ayrı Eleman)
+        if (desShowQualityCodeElem) desShowQualityCodeElem.checked = cfg.show_quality_code_elem !== false;
+        if (desFontQualityCodeElem) {
+            const qcSize = cfg.font_size_quality_code_elem !== undefined ? cfg.font_size_quality_code_elem : 9.0;
+            desFontQualityCodeElem.value = qcSize;
+            if (valFontQualityCodeElem) valFontQualityCodeElem.textContent = qcSize + "pt";
+        }
+        if (desAlignQualityCodeElem) desAlignQualityCodeElem.value = cfg.align_quality_code_elem || "center";
+        if (desPrefixQualityCodeElem) desPrefixQualityCodeElem.value = cfg.prefix_quality_code_elem || "";
+
+        // 3. Kalite Adı (Quality Name)
         if (desShowQualityName) desShowQualityName.checked = cfg.show_quality_name !== false;
         if (desFontQualityName) {
-            const qSize = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 7.5;
+            const qSize = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 9.0;
             desFontQualityName.value = qSize;
             if (valFontQualityName) valFontQualityName.textContent = qSize + "pt";
         }
         if (desAlignQualityName) desAlignQualityName.value = cfg.align_quality_name || "center";
         if (desPrefixQualityName) desPrefixQualityName.value = cfg.prefix_quality_name || "";
 
-        // 3. Kalite & Varyant Kodu Barı (Header / Code Bar)
+        // 4. Renk Bilgisi (Color)
+        if (desShowColor) desShowColor.checked = cfg.show_color !== false;
+        if (desFontColor) {
+            const cSize = cfg.font_size_color !== undefined ? cfg.font_size_color : 9.0;
+            desFontColor.value = cSize;
+            if (valFontColor) valFontColor.textContent = cSize + "pt";
+        }
+        if (desAlignColor) desAlignColor.value = cfg.align_color || "left";
+        if (desPrefixColor) desPrefixColor.value = cfg.prefix_color || "";
+
+        // 5. Desen / Varyant Kodu Barı (Header / Code Bar)
         if (desShowQualityCode) desShowQualityCode.checked = cfg.show_quality_code !== false;
         if (desFontHeader) {
-            const hSize = cfg.font_size_header !== undefined ? cfg.font_size_header : 8.5;
+            const hSize = cfg.font_size_header !== undefined ? cfg.font_size_header : 9.0;
             desFontHeader.value = hSize;
             if (valFontHeader) valFontHeader.textContent = hSize + "pt";
         }
         if (desAlignQualityCode) desAlignQualityCode.value = cfg.align_quality_code || "center";
         if (desPrefixQualityCode) desPrefixQualityCode.value = cfg.prefix_quality_code || "";
 
-        // 4. Karışım
+        // 6. Karışım
         if (desShowComp) desShowComp.checked = cfg.show_composition !== false;
         if (desFontComp) {
-            const compTxtSize = cfg.font_size_composition !== undefined ? cfg.font_size_composition : 7.5;
+            const compTxtSize = cfg.font_size_composition !== undefined ? cfg.font_size_composition : 9.0;
             desFontComp.value = compTxtSize;
             if (valFontComp) valFontComp.textContent = compTxtSize + "pt";
         }
         if (desAlignComp) desAlignComp.value = cfg.align_composition || "left";
+        if (desPrefixComposition) desPrefixComposition.value = cfg.prefix_composition || "";
 
-        // 5. Gramaj
+        // 7. Gramaj
         if (desShowWeight) desShowWeight.checked = cfg.show_weight !== false;
         if (desFontWeight) {
-            const weightSize = cfg.font_size_weight !== undefined ? cfg.font_size_weight : 7.5;
+            const weightSize = cfg.font_size_weight !== undefined ? cfg.font_size_weight : 9.0;
             desFontWeight.value = weightSize;
             if (valFontWeight) valFontWeight.textContent = weightSize + "pt";
         }
         if (desAlignWeight) desAlignWeight.value = cfg.align_weight || "left";
+        if (desPrefixWeight) desPrefixWeight.value = cfg.prefix_weight || "";
 
-        // Barcode
+        // 8. Barcode
         if (desBarcodeVisible) desBarcodeVisible.checked = cfg.barcode_visible !== false;
         if (desBarcodeHeight) {
             desBarcodeHeight.value = cfg.barcode_height || 8.0;
             if (valBarcodeHeight) valBarcodeHeight.textContent = (cfg.barcode_height || 8.0) + "mm";
         }
 
+        // Element Offsets (Milimetrik Kaydırmalar)
+        const offsets = cfg.element_offsets || {};
+        ["logo_row", "quality_code", "quality_name", "color", "code_bar", "composition", "weight", "barcode"].forEach(elemId => {
+            const badge = document.getElementById("val-offset-" + elemId);
+            const val = parseFloat(offsets[elemId] || 0);
+            if (badge) badge.textContent = (val >= 0 ? "+" : "") + val.toFixed(1) + " mm";
+        });
+        if (nudgeToolbarVal && typeof activeSelectedElemId !== "undefined" && activeSelectedElemId) {
+            const val = parseFloat(offsets[activeSelectedElemId] || 0);
+            nudgeToolbarVal.textContent = (val >= 0 ? "+" : "") + val.toFixed(1) + " mm";
+        }
+
         // Reorder Modular DOM Cards
         let initialOrder = cfg.element_order;
         if (!initialOrder || !Array.isArray(initialOrder)) {
-            initialOrder = ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"];
+            initialOrder = ["logo_row", "quality_code", "quality_name", "color", "code_bar", "composition", "weight", "barcode"];
         }
         initialOrder = initialOrder.map(id => id === "quality_row" ? "quality_name" : (id === "design_bar" ? "code_bar" : id));
+        ["logo_row", "quality_code", "quality_name", "color", "code_bar", "composition", "weight", "barcode"].forEach(id => {
+            if (!initialOrder.includes(id)) {
+                if (id === "quality_code") {
+                    const qIdx = initialOrder.indexOf("quality_name");
+                    if (qIdx !== -1) initialOrder.splice(qIdx, 0, id);
+                    else initialOrder.push(id);
+                } else if (id === "color") {
+                    const cIdx = initialOrder.indexOf("code_bar");
+                    if (cIdx !== -1) initialOrder.splice(cIdx, 0, id);
+                    else initialOrder.push(id);
+                } else {
+                    initialOrder.push(id);
+                }
+            }
+        });
         reorderModularCardsInDOM(initialOrder);
 
         // Internal Code Generator Settings
@@ -1881,6 +2064,10 @@ function initApp() {
             label_border_style: desLabelBorderStyle ? desLabelBorderStyle.value : (currentDesignConfig.label_border_style || "none"),
             label_border_color: desLabelBorderColor ? desLabelBorderColor.value : (currentDesignConfig.label_border_color || "#000000"),
             
+            // Highlight Target & Prefixes Toggle
+            bar_target: desBarTarget ? desBarTarget.value : (currentDesignConfig.bar_target || "code_bar"),
+            show_field_prefixes: desShowPrefixes ? desShowPrefixes.checked : (currentDesignConfig.show_field_prefixes !== false),
+
             // Bar style & Colors
             bar_style: desBarStyle ? desBarStyle.value : (currentDesignConfig.bar_style || "filled"),
             bar_bg_color: desBarBgColor ? desBarBgColor.value : (currentDesignConfig.bar_bg_color || "#000000"),
@@ -1890,22 +2077,37 @@ function initApp() {
             // Modular Element Order
             element_order: currentOrder,
 
+            // Kalite Kodu (Ayrı Eleman)
+            show_quality_code_elem: desShowQualityCodeElem ? desShowQualityCodeElem.checked : (currentDesignConfig.show_quality_code_elem !== false),
+            prefix_quality_code_elem: desPrefixQualityCodeElem ? desPrefixQualityCodeElem.value.trim() : (currentDesignConfig.prefix_quality_code_elem || ""),
+            align_quality_code_elem: desAlignQualityCodeElem ? desAlignQualityCodeElem.value : (currentDesignConfig.align_quality_code_elem || "center"),
+            font_size_quality_code_elem: parseNum(desFontQualityCodeElem?.value, currentDesignConfig.font_size_quality_code_elem || 9.0),
+
             // Kalite Adı
             show_quality_name: desShowQualityName ? desShowQualityName.checked : (currentDesignConfig.show_quality_name !== false),
             prefix_quality_name: desPrefixQualityName ? desPrefixQualityName.value.trim() : (currentDesignConfig.prefix_quality_name || ""),
             align_quality_name: desAlignQualityName ? desAlignQualityName.value : (currentDesignConfig.align_quality_name || "center"),
-            font_size_quality_name: parseNum(desFontQualityName?.value, currentDesignConfig.font_size_quality_name || 7.5),
+            font_size_quality_name: parseNum(desFontQualityName?.value, currentDesignConfig.font_size_quality_name || 9.0),
+
+            // Renk Bilgisi
+            show_color: desShowColor ? desShowColor.checked : (currentDesignConfig.show_color !== false),
+            prefix_color: desPrefixColor ? desPrefixColor.value.trim() : (currentDesignConfig.prefix_color || ""),
+            align_color: desAlignColor ? desAlignColor.value : (currentDesignConfig.align_color || "left"),
+            font_size_color: parseNum(desFontColor?.value, currentDesignConfig.font_size_color || 9.0),
 
             // Kalite & Varyant Kodu Barı
             show_quality_code: desShowQualityCode ? desShowQualityCode.checked : (currentDesignConfig.show_quality_code !== false),
             prefix_quality_code: desPrefixQualityCode ? desPrefixQualityCode.value.trim() : (currentDesignConfig.prefix_quality_code || ""),
             align_quality_code: desAlignQualityCode ? desAlignQualityCode.value : (currentDesignConfig.align_quality_code || "center"),
-            font_size_header: parseNum(desFontHeader?.value, currentDesignConfig.font_size_header || 8.5),
+            font_size_header: parseNum(desFontHeader?.value, currentDesignConfig.font_size_header || 9.0),
             header_black_bar: true,
 
             // Prefixes
             prefix_composition: desPrefixComposition ? desPrefixComposition.value.trim() : "",
             prefix_weight: desPrefixWeight ? desPrefixWeight.value.trim() : "",
+
+            // Element Offsets (Milimetrik Kaydırmalar)
+            element_offsets: Object.assign({}, currentDesignConfig.element_offsets || {}),
 
             // Element settings
             logo_visible: desLogoVisible ? desLogoVisible.checked : currentDesignConfig.logo_visible,
@@ -1933,19 +2135,21 @@ function initApp() {
     }
 
     // Unified Modular Label Inner HTML Generator
-    function generateModularLabelInnerHtml(data, cfg, barcodeId = "live") {
-        let order = cfg.element_order || ["logo_row", "quality_name", "code_bar", "composition", "weight", "barcode"];
+    function generateModularLabelInnerHtml(data, cfg, barcodeId = "live", isInteractive = false) {
+        let order = cfg.element_order || ["logo_row", "quality_code", "quality_name", "color", "code_bar", "composition", "weight", "barcode"];
         order = order.map(id => id === "quality_row" ? "quality_name" : (id === "design_bar" ? "code_bar" : id));
 
         const compClean = formatCompositionDisplay(data.composition, cfg.use_fiber_abbreviations);
         const logoSrc = cfg.active_logo_url || "/logo.png";
         const fontFamily = cfg.font_family || "'Outfit', sans-serif";
 
-        const fCompany = cfg.font_size_company !== undefined ? cfg.font_size_company : 8.5;
-        const fQualityName = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 7.5;
-        const fHeader = cfg.font_size_header !== undefined ? cfg.font_size_header : 8.5;
-        const fComp = cfg.font_size_composition !== undefined ? cfg.font_size_composition : 7.5;
-        const fWeight = cfg.font_size_weight !== undefined ? cfg.font_size_weight : 7.5;
+        const fCompany = cfg.font_size_company !== undefined ? cfg.font_size_company : 9.0;
+        const fQualityCode = cfg.font_size_quality_code_elem !== undefined ? cfg.font_size_quality_code_elem : (cfg.font_size_quality_code || 9.0);
+        const fQualityName = cfg.font_size_quality_name !== undefined ? cfg.font_size_quality_name : 9.0;
+        const fColor = cfg.font_size_color !== undefined ? cfg.font_size_color : 9.0;
+        const fHeader = cfg.font_size_header !== undefined ? cfg.font_size_header : 9.0;
+        const fComp = cfg.font_size_composition !== undefined ? cfg.font_size_composition : 9.0;
+        const fWeight = cfg.font_size_weight !== undefined ? cfg.font_size_weight : 9.0;
 
         // Theme Background & Border
         const labelBg = cfg.label_bg_color || "#ffffff";
@@ -1956,6 +2160,37 @@ function initApp() {
             labelBorderCSS = `border: ${borderStyle === "double" ? "3px double" : "1px " + borderStyle} ${borderColor};`;
         }
 
+        const offsets = cfg.element_offsets || {};
+        const getOffsetStyle = (elemId) => {
+            const off = parseFloat(offsets[elemId] || 0);
+            return off !== 0 ? `position: relative; top: ${off}mm;` : "";
+        };
+
+        // Show / Hide Field Prefixes Logic
+        const showPrefixes = cfg.show_field_prefixes !== false;
+        const getPrefix = (customVal, defaultTitle) => {
+            if (!showPrefixes) return "";
+            const title = (customVal !== undefined && customVal !== "") ? customVal : defaultTitle;
+            return title ? `<span style="font-weight: 700; margin-right: 3px;">${title}</span>` : "";
+        };
+
+        // Highlight Bar Target Logic (which element gets the bar)
+        const barTarget = cfg.bar_target !== undefined ? cfg.bar_target : "code_bar";
+        const barStyle = cfg.bar_style || "filled";
+        const barBg = cfg.bar_bg_color || "#000000";
+        const barText = cfg.bar_text_color || "#ffffff";
+        const barRadius = (cfg.bar_border_radius !== undefined ? cfg.bar_border_radius : 1.0) + "mm";
+
+        const getBarCSS = (elemId) => {
+            if (barTarget !== elemId || barStyle === "plain") return "";
+            if (barStyle === "filled") {
+                return `background-color: ${barBg} !important; color: ${barText} !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; padding: 0.8mm 2mm; border-radius: ${barRadius}; margin: 0.2mm 0;`;
+            } else if (barStyle === "outline") {
+                return `background-color: transparent !important; color: #000000 !important; border: 1.2px solid ${barBg}; padding: 0.6mm 2mm; border-radius: ${barRadius}; margin: 0.2mm 0;`;
+            }
+            return "";
+        };
+
         const blocks = {};
 
         // 1. Logo Row
@@ -1964,27 +2199,52 @@ function initApp() {
             if (cfg.logo_align === "center") alignStyle = "justify-content: center;";
             if (cfg.logo_align === "right") alignStyle = "justify-content: flex-end;";
 
+            const intAttrs = isInteractive ? `data-element-id="logo_row" class="print-logo-row interactive-designer-elem ${activeSelectedElemId === 'logo_row' ? 'selected-element' : ''}"` : 'class="print-logo-row"';
+
             blocks.logo_row = `
-                <div class="print-logo-row" style="display: flex; align-items: center; ${alignStyle} margin-bottom: 1mm; width: 100%;">
-                    <img src="${logoSrc}" class="print-logo" style="height: ${cfg.logo_height || 6}mm; width: auto; max-width: 32mm; object-fit: contain; display: block;" alt="LOGO">
-                    ${cfg.show_company ? `<div class="print-company" style="font-size: ${fCompany}pt; font-weight: 700; text-align: ${cfg.align_company || 'right'}; flex-grow: 1; margin-left: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000;">${toAppUpper(data.company_name) || "-"}</div>` : ''}
+                <div ${intAttrs} style="display: flex; align-items: center; ${alignStyle} margin-bottom: 0.3mm; width: 100%; flex-shrink: 0; ${getOffsetStyle('logo_row')}">
+                    <img src="${logoSrc}" class="print-logo" style="height: ${cfg.logo_height || 5.5}mm; width: auto; max-width: 32mm; object-fit: contain; display: block;" alt="LOGO">
+                    ${cfg.show_company ? `<div class="print-company" style="font-size: ${fCompany}pt; font-weight: 700; line-height: 1.2; text-align: ${cfg.align_company || 'right'}; flex-grow: 1; margin-left: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000;">${toAppUpper(data.company_name) || "-"}</div>` : ''}
                 </div>
             `;
         }
 
-        // 2. Kalite Kodu & Kalite Adı Satırı (Düz / Açık Yazı)
+        // 2. Kalite Kodu (Ayrı Satır)
+        if (cfg.show_quality_code_elem !== false) {
+            const prefix = getPrefix(cfg.prefix_quality_code_elem, "KALİTE KODU:");
+            const qCodeText = toAppUpper(data.quality_code) || "-";
+            const intAttrs = isInteractive ? `data-element-id="quality_code" class="print-quality-code interactive-designer-elem ${activeSelectedElemId === 'quality_code' ? 'selected-element' : ''}"` : 'class="print-quality-code"';
+            const isHighlighted = barTarget === "quality_code" && barStyle !== "plain";
+            const barCSS = getBarCSS("quality_code");
+            const textColor = isHighlighted && barStyle === "filled" ? barText : "#000000";
+
+            blocks.quality_code = `
+                <div ${intAttrs} style="font-size: ${fQualityCode}pt; font-weight: 700; line-height: 1.25; min-height: 1.25em; text-align: ${cfg.align_quality_code_elem || 'center'}; width: 100%; color: ${textColor} !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; ${barCSS} ${getOffsetStyle('quality_code')}">
+                    ${prefix}${qCodeText}
+                </div>
+            `;
+        }
+
+        // 3. Kalite Adı Satırı
         if (cfg.show_quality_name !== false) {
             let qText = "";
             const qCode = toAppUpper(data.quality_code);
             const qName = toAppUpper(data.quality_name);
-            if (qCode && qName) {
+            if (order.includes("quality_code") && cfg.show_quality_code_elem !== false) {
+                qText = qName || "-";
+            } else if (qCode && qName) {
                 qText = `${qCode} ${qName}`;
             } else {
                 qText = qCode || qName || "-";
             }
-            const prefix = cfg.prefix_quality_name ? `<span style="font-weight: 700; margin-right: 3px;">${cfg.prefix_quality_name}</span>` : "";
+            const prefix = getPrefix(cfg.prefix_quality_name, "KALİTE ADI:");
+            const intAttrs = isInteractive ? `data-element-id="quality_name" class="print-name interactive-designer-elem ${activeSelectedElemId === 'quality_name' ? 'selected-element' : ''}"` : 'class="print-name"';
+            const isHighlighted = barTarget === "quality_name" && barStyle !== "plain";
+            const barCSS = getBarCSS("quality_name");
+            const textColor = isHighlighted && barStyle === "filled" ? barText : "#000000";
+
             const qHtml = `
-                <div class="print-name" style="font-size: ${fQualityName}pt; font-weight: 700; text-align: ${cfg.align_quality_name || 'center'}; width: 100%; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0.5mm 0;">
+                <div ${intAttrs} style="font-size: ${fQualityName}pt; font-weight: 700; line-height: 1.25; min-height: 1.25em; text-align: ${cfg.align_quality_name || 'center'}; width: 100%; color: ${textColor} !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; ${barCSS} ${getOffsetStyle('quality_name')}">
                     ${prefix}${qText}
                 </div>
             `;
@@ -1992,7 +2252,23 @@ function initApp() {
             blocks.quality_row = qHtml;
         }
 
-        // 3. Desen / Varyant Kodu Barı (Siyah Zeminli Bar)
+        // 4. Renk Bilgisi (Ayrı Satır)
+        if (cfg.show_color !== false) {
+            const prefix = getPrefix(cfg.prefix_color, "RENK:");
+            const colorText = toAppUpper(data.color) || "-";
+            const intAttrs = isInteractive ? `data-element-id="color" class="print-color interactive-designer-elem ${activeSelectedElemId === 'color' ? 'selected-element' : ''}"` : 'class="print-color"';
+            const isHighlighted = barTarget === "color" && barStyle !== "plain";
+            const barCSS = getBarCSS("color");
+            const textColor = isHighlighted && barStyle === "filled" ? barText : "#000000";
+
+            blocks.color = `
+                <div ${intAttrs} style="font-size: ${fColor}pt; font-weight: 700; line-height: 1.25; min-height: 1.25em; text-align: ${cfg.align_color || 'left'}; width: 100%; color: ${textColor} !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; ${barCSS} ${getOffsetStyle('color')}">
+                    ${prefix}${colorText}
+                </div>
+            `;
+        }
+
+        // 5. Desen / Varyant Kodu Barı
         if (cfg.show_quality_code !== false) {
             let barContent = "";
             if (cfg.default_template === "option-a") {
@@ -2000,24 +2276,14 @@ function initApp() {
             } else {
                 barContent = toAppUpper(data.design_code) || "-";
             }
-            const prefix = cfg.prefix_quality_code ? `<span style="font-weight: 700; margin-right: 3px;">${cfg.prefix_quality_code}</span>` : "";
-            
-            const barStyle = cfg.bar_style || "filled";
-            const barBg = cfg.bar_bg_color || "#000000";
-            const barText = cfg.bar_text_color || "#ffffff";
-            const barRadius = (cfg.bar_border_radius !== undefined ? cfg.bar_border_radius : 1.0) + "mm";
-
-            let codeBarCSS = "";
-            if (barStyle === "filled") {
-                codeBarCSS = `background-color: ${barBg} !important; color: ${barText} !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; padding: 1.5mm 3mm; border-radius: ${barRadius};`;
-            } else if (barStyle === "outline") {
-                codeBarCSS = `background-color: transparent !important; color: #000000 !important; border: 1.5px solid ${barBg}; padding: 1.2mm 3mm; border-radius: ${barRadius};`;
-            } else {
-                codeBarCSS = `background-color: transparent !important; color: #000000 !important; padding: 0.8mm 0;`;
-            }
+            const prefix = getPrefix(cfg.prefix_quality_code, "VARYANT:");
+            const intAttrs = isInteractive ? `data-element-id="code_bar" class="print-code-line interactive-designer-elem ${activeSelectedElemId === 'code_bar' ? 'selected-element' : ''}"` : 'class="print-code-line"';
+            const isHighlighted = barTarget === "code_bar" && barStyle !== "plain";
+            const barCSS = getBarCSS("code_bar");
+            const textColor = isHighlighted && barStyle === "filled" ? barText : "#000000";
 
             const dHtml = `
-                <div class="print-code-line" style="${codeBarCSS} text-align: ${cfg.align_quality_code || 'center'}; font-weight: 700; font-size: ${fHeader}pt; margin: 1mm 0; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <div ${intAttrs} style="font-size: ${fHeader}pt; font-weight: 700; line-height: 1.25; min-height: 1.25em; text-align: ${cfg.align_quality_code || 'center'}; width: 100%; color: ${textColor} !important; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; ${barCSS} ${getOffsetStyle('code_bar')}">
                     ${prefix}${barContent}
                 </div>
             `;
@@ -2025,31 +2291,45 @@ function initApp() {
             blocks.design_bar = dHtml;
         }
 
-        // 4. Composition
+        // 6. Composition
         if (cfg.show_composition !== false) {
-            const prefix = cfg.prefix_composition ? `<strong class="print-title" style="margin-right: 3px;">${cfg.prefix_composition}</strong>` : "";
+            const prefix = getPrefix(cfg.prefix_composition, "KARIŞIM:");
+            const intAttrs = isInteractive ? `data-element-id="composition" class="print-comp interactive-designer-elem ${activeSelectedElemId === 'composition' ? 'selected-element' : ''}"` : 'class="print-comp"';
+            const isHighlighted = barTarget === "composition" && barStyle !== "plain";
+            const barCSS = getBarCSS("composition");
+            const textColor = isHighlighted && barStyle === "filled" ? barText : "#000000";
+
             blocks.composition = `
-                <div class="print-comp" style="font-size: ${fComp}pt; font-weight: 500; text-align: ${cfg.align_composition || 'left'}; width: 100%; color: #000; line-height: 1.2; word-break: break-word;">
+                <div ${intAttrs} style="font-size: ${fComp}pt; font-weight: 500; line-height: 1.2; text-align: ${cfg.align_composition || 'left'}; width: 100%; color: ${textColor} !important; word-break: break-word; flex-shrink: 0; box-sizing: border-box; ${barCSS} ${getOffsetStyle('composition')}">
                     ${prefix}<span class="print-value">${compClean || "-"}</span>
                 </div>
             `;
         }
 
-        // 5. Weight
+        // 7. Weight
         if (cfg.show_weight !== false) {
-            const prefix = cfg.prefix_weight ? `<strong class="print-title" style="margin-right: 3px;">${cfg.prefix_weight}</strong>` : "";
+            const prefix = getPrefix(cfg.prefix_weight, "GRAMAJ:");
+            const intAttrs = isInteractive ? `data-element-id="weight" class="print-weight interactive-designer-elem ${activeSelectedElemId === 'weight' ? 'selected-element' : ''}"` : 'class="print-weight"';
+            const isHighlighted = barTarget === "weight" && barStyle !== "plain";
+            const barCSS = getBarCSS("weight");
+            const textColor = isHighlighted && barStyle === "filled" ? barText : "#000000";
+
             blocks.weight = `
-                <div class="print-weight" style="font-size: ${fWeight}pt; font-weight: 700; text-align: ${cfg.align_weight || 'left'}; width: 100%; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <div ${intAttrs} style="font-size: ${fWeight}pt; font-weight: 700; line-height: 1.25; min-height: 1.25em; text-align: ${cfg.align_weight || 'left'}; width: 100%; color: ${textColor} !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; ${barCSS} ${getOffsetStyle('weight')}">
                     ${prefix}<span class="print-value">${toAppUpper(data.weight) || "-"}</span>
                 </div>
             `;
         }
 
-        // 6. Barcode
+        // 8. Barcode
         if (cfg.barcode_visible !== false) {
+            const intAttrs = isInteractive ? `data-element-id="barcode" class="print-barcode-container interactive-designer-elem ${activeSelectedElemId === 'barcode' ? 'selected-element' : ''}"` : 'class="print-barcode-container"';
+
+            const barcH = Math.min(cfg.barcode_height || 6.5, 7.5);
+
             blocks.barcode = `
-                <div class="print-barcode-container" style="display: flex; justify-content: center; width: 100%; margin-top: auto; padding-top: 0.5mm;">
-                    <svg class="print-barcode-svg" id="barcode-${barcodeId}" style="max-width: 90%; height: ${cfg.barcode_height || 8}mm;"></svg>
+                <div ${intAttrs} style="display: flex; justify-content: center; align-items: center; width: 100%; margin-top: auto; padding-top: 0.2mm; flex-shrink: 1; ${getOffsetStyle('barcode')}">
+                    <svg class="print-barcode-svg" id="barcode-${barcodeId}" style="max-width: 90%; height: ${barcH}mm; display: block;"></svg>
                 </div>
             `;
         }
@@ -2063,14 +2343,101 @@ function initApp() {
         });
 
         if (!assembledHtml.trim()) {
-            assembledHtml = (blocks.logo_row || "") + (blocks.quality_name || "") + (blocks.code_bar || "") + (blocks.composition || "") + (blocks.weight || "") + (blocks.barcode || "");
+            assembledHtml = (blocks.logo_row || "") + (blocks.quality_code || "") + (blocks.quality_name || "") + (blocks.color || "") + (blocks.code_bar || "") + (blocks.composition || "") + (blocks.weight || "") + (blocks.barcode || "");
         }
 
         return `
-            <div class="print-label" style="font-family: ${fontFamily}; width: 100%; height: 100%; padding: 2.5mm 3.5mm; background-color: ${labelBg} !important; ${labelBorderCSS} box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;">
+            <div class="print-label" style="font-family: ${fontFamily}; width: 100%; height: 100%; padding: 1.8mm 2.5mm; background-color: ${labelBg} !important; ${labelBorderCSS} box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; gap: 0.35mm; overflow: hidden;">
                 ${assembledHtml}
             </div>
         `;
+    }
+
+    let activeSelectedElemId = null;
+
+    function selectDesignerElement(elemId) {
+        activeSelectedElemId = elemId;
+        // Update selection highlight in live preview
+        document.querySelectorAll(".interactive-designer-elem").forEach(el => {
+            if (el.dataset.elementId === elemId) {
+                el.classList.add("selected-element");
+            } else {
+                el.classList.remove("selected-element");
+            }
+        });
+
+        // Update selection highlight in modular element cards
+        document.querySelectorAll(".modular-element-card").forEach(card => {
+            if (card.dataset.elementId === elemId) {
+                card.classList.add("active-selected-card");
+            } else {
+                card.classList.remove("active-selected-card");
+            }
+        });
+
+        // Update nudge toolbar
+        const toolbar = document.getElementById("preview-nudge-toolbar");
+        const nameSpan = document.getElementById("nudge-toolbar-target-name");
+        const valSpan = document.getElementById("nudge-toolbar-val");
+        if (toolbar) {
+            if (elemId) {
+                toolbar.style.display = "flex";
+                const elemNames = {
+                    logo_row: "Logo & Firma",
+                    quality_code: "Kalite Kodu",
+                    quality_name: "Kalite Adı",
+                    color: "Renk / Varyant",
+                    code_bar: "Desen/Varyant Barı",
+                    composition: "Kumaş Karışımı",
+                    weight: "Gramaj",
+                    barcode: "Barkod"
+                };
+                if (nameSpan) nameSpan.textContent = elemNames[elemId] || elemId;
+                const offsets = currentDesignConfig.element_offsets || {};
+                const curVal = parseFloat(offsets[elemId] || 0);
+                if (valSpan) valSpan.textContent = (curVal >= 0 ? "+" : "") + curVal.toFixed(1) + " mm";
+            } else {
+                toolbar.style.display = "none";
+            }
+        }
+    }
+
+    function nudgeElement(elemId, delta) {
+        if (!elemId) return;
+        if (!currentDesignConfig.element_offsets) currentDesignConfig.element_offsets = {};
+        let cur = parseFloat(currentDesignConfig.element_offsets[elemId] || 0);
+        cur = Math.round((cur + delta) * 10) / 10;
+        if (cur > 20) cur = 20;
+        if (cur < -20) cur = -20;
+        currentDesignConfig.element_offsets[elemId] = cur;
+
+        const badge = document.getElementById("val-offset-" + elemId);
+        if (badge) badge.textContent = (cur >= 0 ? "+" : "") + cur.toFixed(1) + " mm";
+
+        const valSpan = document.getElementById("nudge-toolbar-val");
+        if (valSpan && activeSelectedElemId === elemId) {
+            valSpan.textContent = (cur >= 0 ? "+" : "") + cur.toFixed(1) + " mm";
+        }
+
+        renderDesignerPreview();
+        saveVisualDesignToAPI();
+    }
+
+    function resetElementOffset(elemId) {
+        if (!elemId) return;
+        if (!currentDesignConfig.element_offsets) currentDesignConfig.element_offsets = {};
+        currentDesignConfig.element_offsets[elemId] = 0.0;
+
+        const badge = document.getElementById("val-offset-" + elemId);
+        if (badge) badge.textContent = "0.0 mm";
+
+        const valSpan = document.getElementById("nudge-toolbar-val");
+        if (valSpan && activeSelectedElemId === elemId) {
+            valSpan.textContent = "0.0 mm";
+        }
+
+        renderDesignerPreview();
+        saveVisualDesignToAPI();
     }
 
     function renderDesignerPreview() {
@@ -2087,7 +2454,7 @@ function initApp() {
         if (previewDimBadge) previewDimBadge.textContent = `${w}mm × ${h}mm`;
 
         const data = sampleLabelData;
-        designerLiveLabel.innerHTML = generateModularLabelInnerHtml(data, cfg, "designer-live");
+        designerLiveLabel.innerHTML = generateModularLabelInnerHtml(data, cfg, "designer-live", true);
 
         // Render live barcode
         if (cfg.barcode_visible) {
@@ -2108,7 +2475,7 @@ function initApp() {
         }
     }
 
-    // Modular Move Up & Move Down Event Handlers
+    // Modular Move Up, Down & Selection Handlers
     if (modularElementsList) {
         modularElementsList.addEventListener("click", (e) => {
             const moveUpBtn = e.target.closest(".btn-move-up");
@@ -2119,15 +2486,227 @@ function initApp() {
                     card.parentNode.insertBefore(card, card.previousElementSibling);
                     syncElementOrderFromDOM();
                 }
+                return;
             } else if (moveDownBtn) {
                 const card = moveDownBtn.closest(".modular-element-card");
                 if (card && card.nextElementSibling) {
                     card.parentNode.insertBefore(card.nextElementSibling, card);
                     syncElementOrderFromDOM();
                 }
+                return;
+            }
+
+            // Clicking card body selects it
+            const card = e.target.closest(".modular-element-card");
+            if (card && card.dataset.elementId && !e.target.closest("input, select, button")) {
+                selectDesignerElement(card.dataset.elementId);
             }
         });
     }
+
+    // Live Label Interactive Element Click Handler
+    if (designerLiveLabel) {
+        designerLiveLabel.addEventListener("click", (e) => {
+            const targetElem = e.target.closest(".interactive-designer-elem");
+            if (targetElem && targetElem.dataset.elementId) {
+                selectDesignerElement(targetElem.dataset.elementId);
+            }
+        });
+    }
+
+    // Card Nudge Buttons Click Delegation
+    document.addEventListener("click", (e) => {
+        const btnUp = e.target.closest(".btn-nudge-up");
+        const btnDown = e.target.closest(".btn-nudge-down");
+        const btnReset = e.target.closest(".btn-nudge-reset");
+        if (btnUp) {
+            const elem = btnUp.dataset.element;
+            selectDesignerElement(elem);
+            nudgeElement(elem, -0.5);
+        } else if (btnDown) {
+            const elem = btnDown.dataset.element;
+            selectDesignerElement(elem);
+            nudgeElement(elem, 0.5);
+        } else if (btnReset) {
+            const elem = btnReset.dataset.element;
+            selectDesignerElement(elem);
+            resetElementOffset(elem);
+        }
+    });
+
+    // Preview Toolbar Nudge Buttons
+    const btnTbUp = document.getElementById("btn-tb-nudge-up");
+    const btnTbDown = document.getElementById("btn-tb-nudge-down");
+    const btnTbReset = document.getElementById("btn-tb-nudge-reset");
+
+    if (btnTbUp) btnTbUp.addEventListener("click", () => {
+        if (activeSelectedElemId) nudgeElement(activeSelectedElemId, -0.5);
+    });
+    if (btnTbDown) btnTbDown.addEventListener("click", () => {
+        if (activeSelectedElemId) nudgeElement(activeSelectedElemId, 0.5);
+    });
+    if (btnTbReset) btnTbReset.addEventListener("click", () => {
+        if (activeSelectedElemId) resetElementOffset(activeSelectedElemId);
+    });
+
+    // Keyboard Arrow Up / Down Nudging
+    window.addEventListener("keydown", (e) => {
+        if (!activeSelectedElemId) return;
+
+        const tabBtn = document.querySelector('.tab-btn[data-tab="designer-tab"]');
+        if (tabBtn && !tabBtn.classList.contains("active")) return;
+
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
+        if (["input", "textarea", "select"].includes(activeTag)) return;
+
+        if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const step = e.shiftKey ? -1.5 : -0.5;
+            nudgeElement(activeSelectedElemId, step);
+        } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            const step = e.shiftKey ? 1.5 : 0.5;
+            nudgeElement(activeSelectedElemId, step);
+        } else if (e.key === "Escape") {
+            selectDesignerElement(null);
+        }
+    });
+
+    const PRESETS_CONFIG = {
+        "classic-black": {
+            default_template: "option-b",
+            bar_style: "filled",
+            bar_bg_color: "#000000",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "1.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "none",
+            label_border_color: "#000000",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "corporate-navy": {
+            default_template: "option-b",
+            bar_style: "filled",
+            bar_bg_color: "#1e3a8a",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "2.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "solid",
+            label_border_color: "#cbd5e1",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "emerald-green": {
+            default_template: "option-b",
+            bar_style: "filled",
+            bar_bg_color: "#065f46",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "2.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "solid",
+            label_border_color: "#a7f3d0",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "luxury-burgundy": {
+            default_template: "option-b",
+            bar_style: "filled",
+            bar_bg_color: "#991b1b",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "3.0",
+            label_bg_color: "#fff5f7",
+            label_border_style: "solid",
+            label_border_color: "#fbcfe8",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "kumasci-detayli": {
+            default_template: "option-b",
+            bar_style: "plain",
+            bar_bg_color: "#000000",
+            bar_text_color: "#000000",
+            prefix_quality_code_elem: "KALİTE KODU:",
+            prefix_quality_name: "KALİTE ADI:",
+            prefix_color: "RENK:",
+            prefix_quality_code: "VARYANT:",
+            prefix_composition: "KARIŞIM:",
+            prefix_weight: "GRAMAJ:",
+            align_company: "left",
+            align_quality_code_elem: "left",
+            align_quality_name: "left",
+            align_color: "left",
+            align_quality_code: "left",
+            align_composition: "left",
+            align_weight: "left",
+            show_quality_code_elem: true,
+            show_quality_name: true,
+            show_color: true,
+            label_bg_color: "#ffffff",
+            label_border_style: "solid",
+            label_border_color: "#e2e8f0"
+        },
+        "minimalist-white": {
+            default_template: "option-b",
+            bar_style: "outline",
+            bar_bg_color: "#000000",
+            bar_text_color: "#000000",
+            bar_border_radius: "2.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "none",
+            label_border_color: "#000000",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "secret-code-a": {
+            default_template: "option-a",
+            bar_style: "filled",
+            bar_bg_color: "#312e81",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "1.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "none",
+            label_border_color: "#000000",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        }
+    };
 
     // Preset Chip Buttons Click Listener
     document.querySelectorAll(".preset-chip-btn").forEach(btn => {
@@ -2160,6 +2739,21 @@ function initApp() {
     });
 
     // Label Theme & Global Bar Controls Listeners
+    if (desShowPrefixes) {
+        desShowPrefixes.addEventListener("change", () => {
+            currentDesignConfig.show_field_prefixes = desShowPrefixes.checked;
+            renderDesignerPreview();
+            saveVisualDesignToAPI();
+        });
+    }
+    if (desBarTarget) {
+        desBarTarget.addEventListener("change", () => {
+            currentDesignConfig.bar_target = desBarTarget.value;
+            renderDesignerPreview();
+            saveVisualDesignToAPI();
+        });
+    }
+
     if (desLabelBgColor) desLabelBgColor.addEventListener("input", renderDesignerPreview);
     if (desLabelBorderStyle) {
         desLabelBorderStyle.addEventListener("change", (e) => {
@@ -2179,7 +2773,18 @@ function initApp() {
     if (desBarTextColor) desBarTextColor.addEventListener("input", renderDesignerPreview);
     if (desBarRadius) desBarRadius.addEventListener("change", renderDesignerPreview);
 
-    // 2. Kalite Adı Listeners
+    // 2. Kalite Kodu (Ayrı Eleman) Listeners
+    if (desShowQualityCodeElem) desShowQualityCodeElem.addEventListener("change", renderDesignerPreview);
+    if (desFontQualityCodeElem) {
+        desFontQualityCodeElem.addEventListener("input", (e) => {
+            if (valFontQualityCodeElem) valFontQualityCodeElem.textContent = e.target.value + "pt";
+            renderDesignerPreview();
+        });
+    }
+    if (desAlignQualityCodeElem) desAlignQualityCodeElem.addEventListener("change", renderDesignerPreview);
+    if (desPrefixQualityCodeElem) desPrefixQualityCodeElem.addEventListener("input", renderDesignerPreview);
+
+    // 3. Kalite Adı Listeners
     if (desShowQualityName) desShowQualityName.addEventListener("change", renderDesignerPreview);
     if (desFontQualityName) {
         desFontQualityName.addEventListener("input", (e) => {
@@ -2190,7 +2795,18 @@ function initApp() {
     if (desAlignQualityName) desAlignQualityName.addEventListener("change", renderDesignerPreview);
     if (desPrefixQualityName) desPrefixQualityName.addEventListener("input", renderDesignerPreview);
 
-    // 3. Kalite & Varyant Kodu (Header Bar) Listeners
+    // 4. Renk Bilgisi Listeners
+    if (desShowColor) desShowColor.addEventListener("change", renderDesignerPreview);
+    if (desFontColor) {
+        desFontColor.addEventListener("input", (e) => {
+            if (valFontColor) valFontColor.textContent = e.target.value + "pt";
+            renderDesignerPreview();
+        });
+    }
+    if (desAlignColor) desAlignColor.addEventListener("change", renderDesignerPreview);
+    if (desPrefixColor) desPrefixColor.addEventListener("input", renderDesignerPreview);
+
+    // 5. Kalite & Varyant Kodu (Header Bar) Listeners
     if (desShowQualityCode) desShowQualityCode.addEventListener("change", renderDesignerPreview);
     if (desFontHeader) {
         desFontHeader.addEventListener("input", (e) => {
@@ -2231,25 +2847,36 @@ function initApp() {
                 prefix_quality_code: "",
                 prefix_composition: "",
                 prefix_weight: "",
-                font_size_header: 8.5,
-                font_size_company: 8.5,
-                font_size_quality_name: 7.5,
-                font_size_composition: 7.5,
-                font_size_weight: 7.5,
-                font_size_body: 7.5,
+                bar_target: "code_bar",
+                show_field_prefixes: true,
+                font_size_header: 9.0,
+                font_size_company: 9.0,
+                font_size_quality_code_elem: 9.0,
+                font_size_quality_name: 9.0,
+                font_size_color: 9.0,
+                font_size_composition: 9.0,
+                font_size_weight: 9.0,
+                font_size_body: 9.0,
                 header_black_bar: true,
                 barcode_height: 8.0,
                 barcode_visible: true,
                 show_company: true,
+                show_quality_code_elem: true,
                 show_quality_name: true,
+                show_color: true,
                 show_quality_code: true,
                 show_composition: true,
                 show_weight: true,
+                prefix_quality_code_elem: "",
+                prefix_color: "",
                 align_company: "right",
+                align_quality_code_elem: "center",
                 align_quality_name: "center",
+                align_color: "left",
                 align_quality_code: "center",
                 align_composition: "left",
-                align_weight: "left"
+                align_weight: "left",
+                element_offsets: {}
             };
             currentDesignConfig = Object.assign({}, DEFAULT_CONFIG);
             try {
@@ -2376,7 +3003,9 @@ function initApp() {
                 prefix_weight: "",
                 font_size_header: 8.5,
                 font_size_company: 8.5,
+                font_size_quality_code_elem: 7.5,
                 font_size_quality_name: 7.5,
+                font_size_color: 7.5,
                 font_size_composition: 7.5,
                 font_size_weight: 7.5,
                 font_size_body: 7.5,
@@ -2384,15 +3013,22 @@ function initApp() {
                 barcode_height: 8.0,
                 barcode_visible: true,
                 show_company: true,
+                show_quality_code_elem: true,
                 show_quality_name: true,
+                show_color: true,
                 show_quality_code: true,
                 show_composition: true,
                 show_weight: true,
+                prefix_quality_code_elem: "",
+                prefix_color: "",
                 align_company: "right",
+                align_quality_code_elem: "center",
                 align_quality_name: "center",
+                align_color: "left",
                 align_quality_code: "center",
                 align_composition: "left",
-                align_weight: "left"
+                align_weight: "left",
+                element_offsets: {}
             };
 
             currentDesignConfig = Object.assign({}, DEFAULT_CONFIG);
@@ -2995,6 +3631,9 @@ function initApp() {
         inputInternalCode.value = data.internal_code || ""; 
         if (data.internal_code) internalCodeGroup.style.display = "flex";
 
+        const manualBadge = document.getElementById("manual-mode-badge");
+        if (manualBadge) manualBadge.style.display = "none";
+
         inputCompany.value = toAppUpper(data.company_name);
         inputQualityCode.value = toAppUpper(data.quality_code);
         inputQualityName.value = toAppUpper(data.quality_name);
@@ -3003,7 +3642,55 @@ function initApp() {
         inputWeight.value = toAppUpper(data.weight);
         inputComposition.value = cleanCompositionPunctuation(data.composition);
         inputBarcode.value = toAppUpper(data.barcode_or_qr);
+        if (inputColor) inputColor.value = toAppUpper(data.color || "");
     }
+
+    // Manuel Kumaş Giriş Modu
+    const btnManualFabricEntry = document.getElementById("btn-manual-fabric-entry");
+    const btnDbManualAdd = document.getElementById("btn-db-manual-add");
+    const manualModeBadge = document.getElementById("manual-mode-badge");
+
+    function startManualEntry() {
+        editingInternalCode = null;
+        if (duplicateWarning) duplicateWarning.style.display = "none";
+        if (manualModeBadge) manualModeBadge.style.display = "inline-flex";
+
+        if (inputInternalCode) inputInternalCode.value = "";
+        if (internalCodeGroup) internalCodeGroup.style.display = "none";
+
+        if (inputCompany) inputCompany.value = "";
+        if (inputQualityCode) inputQualityCode.value = "";
+        if (inputQualityName) inputQualityName.value = "";
+        if (inputDesign) inputDesign.value = "";
+        if (inputWidth) inputWidth.value = "";
+        if (inputWeight) inputWeight.value = "";
+        if (inputComposition) inputComposition.value = "";
+        if (inputBarcode) inputBarcode.value = "";
+        if (inputColor) inputColor.value = "";
+
+        if (previewBox) previewBox.style.display = "none";
+        if (imagePreview) imagePreview.src = "";
+
+        if (resultCard) {
+            resultCard.style.opacity = "1";
+            resultCard.style.pointerEvents = "auto";
+        }
+
+        const scanTabBtn = document.querySelector('[data-tab="scan-tab"]');
+        if (scanTabBtn) scanTabBtn.click();
+
+        setTimeout(() => {
+            if (inputCompany) {
+                inputCompany.focus();
+                inputCompany.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 150);
+
+        showToast("✍️ Manuel kumaş giriş modu hazır. Bilgileri girip Kaydet'e basın.", 2200);
+    }
+
+    if (btnManualFabricEntry) btnManualFabricEntry.addEventListener("click", startManualEntry);
+    if (btnDbManualAdd) btnDbManualAdd.addEventListener("click", startManualEntry);
 
     // Dynamic Label Printing HTML Builder based on Saved Design Configuration
     function createSingleLabelHTML(data, option, barcodeId) {
@@ -3153,7 +3840,8 @@ function initApp() {
             width: toAppUpper(overrideData.width),
             weight: toAppUpper(overrideData.weight),
             composition: cleanCompositionPunctuation(overrideData.composition),
-            barcode_or_qr: toAppUpper(overrideData.barcode_or_qr)
+            barcode_or_qr: toAppUpper(overrideData.barcode_or_qr),
+            color: toAppUpper(overrideData.color || (inputColor ? inputColor.value : "") || "")
         } : {
             internal_code: editingInternalCode || null,
             company_name: toAppUpper(inputCompany.value) || "GENEL",
@@ -3163,7 +3851,8 @@ function initApp() {
             width: toAppUpper(inputWidth.value),
             weight: toAppUpper(inputWeight.value),
             composition: cleanCompositionPunctuation(inputComposition.value),
-            barcode_or_qr: toAppUpper(inputBarcode.value)
+            barcode_or_qr: toAppUpper(inputBarcode.value),
+            color: toAppUpper(inputColor ? inputColor.value : "")
         };
         
         return fetch("/api/fabrics", {
@@ -3235,7 +3924,8 @@ function initApp() {
             width: toAppUpper(inputWidth.value),
             weight: toAppUpper(inputWeight.value),
             composition: cleanCompositionPunctuation(inputComposition.value),
-            barcode_or_qr: toAppUpper(inputBarcode.value)
+            barcode_or_qr: toAppUpper(inputBarcode.value),
+            color: toAppUpper(inputColor ? inputColor.value : "")
         };
         
         triggerSinglePrint(payload);
@@ -3354,7 +4044,7 @@ function initApp() {
                         <td><strong>${f.company_name}</strong></td>
                         <td>${f.quality_code}</td>
                         <td>${f.quality_name || "-"}</td>
-                        <td>${f.design_code || "-"}</td>
+                        <td>${[f.design_code, f.color].filter(Boolean).join(" • ") || "-"}</td>
                         <td title="${f.composition}">${f.composition ? (f.composition.length > 30 ? f.composition.substring(0, 30) + "..." : f.composition) : "-"}</td>
                         <td>${f.width || "-"}</td>
                         <td>${f.weight || "-"}</td>
@@ -3407,8 +4097,8 @@ function initApp() {
                             </div>
                             <div class="fabric-card-specs">
                                 <div class="spec-item">
-                                    <span class="spec-label"><i class="fa-solid fa-palette"></i> Desen</span>
-                                    <span class="spec-value">${f.design_code || '-'}</span>
+                                    <span class="spec-label"><i class="fa-solid fa-palette"></i> Desen / Renk</span>
+                                    <span class="spec-value">${[f.design_code, f.color].filter(Boolean).join(" • ") || '-'}</span>
                                 </div>
                                 <div class="spec-item">
                                     <span class="spec-label"><i class="fa-solid fa-ruler-horizontal"></i> En</span>
