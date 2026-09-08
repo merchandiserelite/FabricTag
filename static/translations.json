@@ -161,7 +161,8 @@
         "ios_step1": "iPhone kamerasını açıp QR kodu okutun ve Safari'de açın.",
         "ios_step2": "Safari'nin alt menüsündeki Paylaş (Share) simgesine dokunun.",
         "ios_step3": "Aşağı kaydırıp \"Ana Ekrana Ekle (Add to Home Screen)\" seçeneğini seçin.",
-        "ios_step4": "Sağ üstteki \"Ekle\"ye basın. FabricTag artık telefonunuzda tam ekran bir uygulama olarak açılır!"
+        "ios_step4": "Sağ üstteki \"Ekle\"ye basın. FabricTag artık telefonunuzda tam ekran bir uygulama olarak açılır!",
+        "th_color": "Renk Kodu"
     },
     "en": {
         "lang_label": "Language:",
@@ -325,7 +326,8 @@
         "ios_step1": "Open iPhone Camera, scan the QR code and open in Safari.",
         "ios_step2": "Tap the Share icon at the bottom of Safari.",
         "ios_step3": "Scroll down and tap \"Add to Home Screen\".",
-        "ios_step4": "Tap \"Add\" in the top right. FabricTag will open as a full-screen app!"
+        "ios_step4": "Tap \"Add\" in the top right. FabricTag will open as a full-screen app!",
+        "th_color": "Color Code"
     },
     "de": {
         "lang_label": "Sprache:",
@@ -678,7 +680,8 @@
         "ios_step1": "افتح كاميرا iPhone، امسح رمز QR وافتحه في متصفح Safari.",
         "ios_step2": "اضغط على أيقونة المشاركة (Share) أسفل متصفح Safari.",
         "ios_step3": "مرر لأسفل واختر \"إضافة إلى الصفحة الرئيسية\".",
-        "ios_step4": "اضغط على \"إضافة\" في أعلى اليسار."
+        "ios_step4": "اضغط على \"إضافة\" في أعلى اليسار.",
+        "th_color": "رمز اللون"
     },
     "zh": {
         "lang_label": "语言:",
@@ -803,7 +806,8 @@
         "ios_step1": "打开 iPhone 相机扫描二维码并在 Safari 中打开。",
         "ios_step2": "点击 Safari 底部菜单中的分享图标。",
         "ios_step3": "向下滚动并选择 \"添加到主屏幕\"。",
-        "ios_step4": "点击右上角的 \"添加\" 即可。"
+        "ios_step4": "点击右上角的 \"添加\" 即可。",
+        "th_color": "颜色代码"
     },
     "ja": {
         "lang_label": "言語:",
@@ -928,6 +932,7 @@
         "ios_step1": "iPhoneのカメラでQRコードを読み取り、Safariで開きます。",
         "ios_step2": "Safari下部の「共有」アイコンをタップします。",
         "ios_step3": "下にスクロールして「ホーム画面に追加」を選択します。",
-        "ios_step4": "右上の「追加」をタップして完了です！"
+        "ios_step4": "右上の「追加」をタップして完了です！",
+        "th_color": "カラーコード"
     }
 }

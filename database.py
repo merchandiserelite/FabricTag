@@ -395,6 +395,7 @@ def export_to_csv(filepath):
         "Kalite Kodu (Article)", 
         "Kalite Adı (Name)", 
         "Desen Kodu (Design)", 
+        "Renk / Varyant (Color)", 
         "En (Width)", 
         "Gramaj (Weight)", 
         "Karışım (Composition)", 
@@ -412,6 +413,7 @@ def export_to_csv(filepath):
                 row["quality_code"],
                 row["quality_name"],
                 row["design_code"],
+                row["color"] if "color" in row.keys() else "",
                 row["width"],
                 row["weight"],
                 row["composition"],
@@ -587,7 +589,9 @@ def detect_column_field(header_name):
         return "quality_code"
     if any(k in norm for k in ["kaliteadi", "kaliteismi", "qualityname", "kumasadi", "fabricname", "cins", "aciklama", "description"]):
         return "quality_name"
-    if any(k in norm for k in ["desenkodu", "desen", "renkkodu", "renkno", "renk", "varyant", "color", "colour", "design", "designcode", "variant"]):
+    if any(k in norm for k in ["renkkodu", "renkno", "renk", "varyant", "color", "colour", "variant"]):
+        return "color"
+    if any(k in norm for k in ["desenkodu", "desen", "design", "designcode"]):
         return "design_code"
     if any(k in norm for k in ["karisim", "kompozisyon", "composition", "icerik", "elyaf", "content", "fabriccontent", "material"]):
         return "composition"
@@ -761,6 +765,7 @@ def import_excel_fabrics(filepath, column_mappings):
             q_code = clean_excel_text(record["quality_code"]) or ""
             q_name = clean_excel_text(record["quality_name"])
             d_code = clean_excel_text(record["design_code"])
+            color_val = clean_excel_text(record.get("color", ""))
             width = clean_excel_text(record["width"])
             weight = clean_excel_text(record["weight"])
             comp = clean_excel_text(record["composition"])
@@ -783,17 +788,17 @@ def import_excel_fabrics(filepath, column_mappings):
                 cursor.execute("""
                     UPDATE fabrics SET 
                         company_name = ?, quality_code = ?, quality_name = ?, 
-                        design_code = ?, width = ?, weight = ?, composition = ?, barcode_or_qr = ?
+                        design_code = ?, color = ?, width = ?, weight = ?, composition = ?, barcode_or_qr = ?
                     WHERE id = ?
-                """, (company, q_code, q_name, d_code, width, weight, comp, barcode, existing["id"]))
+                """, (company, q_code, q_name, d_code, color_val, width, weight, comp, barcode, existing["id"]))
                 updated_count += 1
             else:
                 cursor.execute("""
                     INSERT INTO fabrics (
                         internal_code, company_name, quality_code, quality_name,
-                        design_code, width, weight, composition, barcode_or_qr
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (int_code, company, q_code, q_name, d_code, width, weight, comp, barcode))
+                        design_code, color, width, weight, composition, barcode_or_qr
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (int_code, company, q_code, q_name, d_code, color_val, width, weight, comp, barcode))
                 imported_count += 1
                 
         conn.commit()

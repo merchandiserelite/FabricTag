@@ -305,6 +305,7 @@ function initApp() {
                 "th_quality_code": "Kalite Kodu",
                 "th_quality_name": "Kalite Adı",
                 "th_design_code": "Desen Kodu",
+                "th_color": "Renk Kodu",
                 "th_composition": "Karışım",
                 "th_width": "En",
                 "th_weight": "Gramaj",
@@ -479,6 +480,7 @@ function initApp() {
                 "th_quality_code": "Quality Code",
                 "th_quality_name": "Quality Name",
                 "th_design_code": "Design Code",
+                "th_color": "Color Code",
                 "th_composition": "Composition",
                 "th_width": "Width",
                 "th_weight": "Weight",
@@ -921,6 +923,7 @@ function initApp() {
                 "th_quality_code": "رمز الجودة",
                 "th_quality_name": "اسم الجودة",
                 "th_design_code": "رمز التصميم",
+                "th_color": "رمز اللون",
                 "th_composition": "التركيبة",
                 "th_width": "العرض",
                 "th_weight": "الوزن",
@@ -1056,6 +1059,7 @@ function initApp() {
                 "th_quality_code": "品号码",
                 "th_quality_name": "品质名称",
                 "th_design_code": "花型号",
+                "th_color": "颜色代码",
                 "th_composition": "成分",
                 "th_width": "门幅",
                 "th_weight": "克重",
@@ -1191,6 +1195,7 @@ function initApp() {
                 "th_quality_code": "品質コード",
                 "th_quality_name": "品質名",
                 "th_design_code": "柄コード",
+                "th_color": "カラーコード",
                 "th_composition": "組成",
                 "th_width": "生地幅",
                 "th_weight": "目付",
@@ -4024,7 +4029,7 @@ function initApp() {
                     const emptyMsg = search ? "Arama kriterlerinize uygun kumaş bulunamadı." : "Henüz hiçbir kumaş kartelası taranmamış.";
                     dbTableBody.innerHTML = `
                         <tr>
-                            <td colspan="10" class="empty-state">
+                            <td colspan="11" class="empty-state">
                                 <i class="fa-solid fa-database"></i>
                                 <p>${emptyMsg}</p>
                             </td>
@@ -4053,9 +4058,10 @@ function initApp() {
                         <td><input type="checkbox" class="db-row-checkbox" data-code="${code}"></td>
                         <td><span class="internal-code-badge">${code}</span></td>
                         <td><strong>${f.company_name}</strong></td>
-                        <td>${f.quality_code}</td>
+                        <td>${f.quality_code || "-"}</td>
                         <td>${f.quality_name || "-"}</td>
-                        <td>${[f.design_code, f.color].filter(Boolean).join(" • ") || "-"}</td>
+                        <td><strong>${f.design_code || "-"}</strong></td>
+                        <td><span class="badge-color-tag" style="background: #f1f5f9; padding: 2px 7px; border-radius: 4px; font-weight: 600; color: #1e293b;">${f.color || "-"}</span></td>
                         <td title="${f.composition}">${f.composition ? (f.composition.length > 30 ? f.composition.substring(0, 30) + "..." : f.composition) : "-"}</td>
                         <td>${f.width || "-"}</td>
                         <td>${f.weight || "-"}</td>
@@ -4108,8 +4114,12 @@ function initApp() {
                             </div>
                             <div class="fabric-card-specs">
                                 <div class="spec-item">
-                                    <span class="spec-label"><i class="fa-solid fa-palette"></i> Desen / Renk</span>
-                                    <span class="spec-value">${[f.design_code, f.color].filter(Boolean).join(" • ") || '-'}</span>
+                                    <span class="spec-label"><i class="fa-solid fa-shapes"></i> Desen Kodu</span>
+                                    <span class="spec-value">${f.design_code || '-'}</span>
+                                </div>
+                                <div class="spec-item">
+                                    <span class="spec-label"><i class="fa-solid fa-palette"></i> Renk Kodu</span>
+                                    <span class="spec-value">${f.color || '-'}</span>
                                 </div>
                                 <div class="spec-item">
                                     <span class="spec-label"><i class="fa-solid fa-ruler-horizontal"></i> En</span>
