@@ -2212,7 +2212,8 @@ function initApp() {
         // 2. Kalite Kodu (Ayrı Satır)
         if (cfg.show_quality_code_elem !== false) {
             const prefix = getPrefix(cfg.prefix_quality_code_elem, "KALİTE KODU:");
-            const qCodeText = toAppUpper(data.quality_code) || "-";
+            let qCodeText = toAppUpper(data.quality_code);
+            if (qCodeText === "KODSUZ") qCodeText = "";
             const intAttrs = isInteractive ? `data-element-id="quality_code" class="print-quality-code interactive-designer-elem ${activeSelectedElemId === 'quality_code' ? 'selected-element' : ''}"` : 'class="print-quality-code"';
             const isHighlighted = barTarget === "quality_code" && barStyle !== "plain";
             const barCSS = getBarCSS("quality_code");
@@ -2220,7 +2221,7 @@ function initApp() {
 
             blocks.quality_code = `
                 <div ${intAttrs} style="font-size: ${fQualityCode}pt; font-weight: 700; line-height: 1.25; min-height: 1.25em; text-align: ${cfg.align_quality_code_elem || 'center'}; width: 100%; color: ${textColor} !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; ${barCSS} ${getOffsetStyle('quality_code')}">
-                    ${prefix}${qCodeText}
+                    ${qCodeText ? prefix + qCodeText : ""}
                 </div>
             `;
         }
@@ -2228,14 +2229,17 @@ function initApp() {
         // 3. Kalite Adı Satırı
         if (cfg.show_quality_name !== false) {
             let qText = "";
-            const qCode = toAppUpper(data.quality_code);
-            const qName = toAppUpper(data.quality_name);
+            let qCode = toAppUpper(data.quality_code);
+            if (qCode === "KODSUZ") qCode = "";
+            let qName = toAppUpper(data.quality_name);
+            if (qName === "KODSUZ") qName = "";
+
             if (order.includes("quality_code") && cfg.show_quality_code_elem !== false) {
-                qText = qName || "-";
+                qText = qName || "";
             } else if (qCode && qName) {
                 qText = `${qCode} ${qName}`;
             } else {
-                qText = qCode || qName || "-";
+                qText = qCode || qName || "";
             }
             const prefix = getPrefix(cfg.prefix_quality_name, "KALİTE ADI:");
             const intAttrs = isInteractive ? `data-element-id="quality_name" class="print-name interactive-designer-elem ${activeSelectedElemId === 'quality_name' ? 'selected-element' : ''}"` : 'class="print-name"';
@@ -2245,7 +2249,7 @@ function initApp() {
 
             const qHtml = `
                 <div ${intAttrs} style="font-size: ${fQualityName}pt; font-weight: 700; line-height: 1.25; min-height: 1.25em; text-align: ${cfg.align_quality_name || 'center'}; width: 100%; color: ${textColor} !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; box-sizing: border-box; ${barCSS} ${getOffsetStyle('quality_name')}">
-                    ${prefix}${qText}
+                    ${qText ? prefix + qText : ""}
                 </div>
             `;
             blocks.quality_name = qHtml;
@@ -3839,7 +3843,7 @@ function initApp() {
         const payload = overrideData ? {
             internal_code: overrideData.internal_code || null, // Never inherit editingInternalCode when saving batch scans!
             company_name: toAppUpper(overrideData.company_name) || "GENEL",
-            quality_code: toAppUpper(overrideData.quality_code) || "KODSUZ",
+            quality_code: (toAppUpper(overrideData.quality_code) === "KODSUZ" ? "" : toAppUpper(overrideData.quality_code)) || "",
             quality_name: toAppUpper(overrideData.quality_name),
             design_code: toAppUpper(overrideData.design_code),
             width: toAppUpper(overrideData.width),
@@ -3850,7 +3854,7 @@ function initApp() {
         } : {
             internal_code: editingInternalCode || null,
             company_name: toAppUpper(inputCompany.value) || "GENEL",
-            quality_code: toAppUpper(inputQualityCode.value) || "KODSUZ",
+            quality_code: (toAppUpper(inputQualityCode.value) === "KODSUZ" ? "" : toAppUpper(inputQualityCode.value)) || "",
             quality_name: toAppUpper(inputQualityName.value),
             design_code: toAppUpper(inputDesign.value),
             width: toAppUpper(inputWidth.value),
@@ -3925,7 +3929,7 @@ function initApp() {
         const payload = {
             internal_code: inputInternalCode.value || "ELT0000001",
             company_name: toAppUpper(inputCompany.value) || "GENEL",
-            quality_code: toAppUpper(inputQualityCode.value) || "KODSUZ",
+            quality_code: (toAppUpper(inputQualityCode.value) === "KODSUZ" ? "" : toAppUpper(inputQualityCode.value)) || "",
             quality_name: toAppUpper(inputQualityName.value),
             design_code: toAppUpper(inputDesign.value),
             width: toAppUpper(inputWidth.value),
@@ -4038,7 +4042,7 @@ function initApp() {
                 }
                 
                 fabrics.forEach((f) => {
-                    const code = f.internal_code || "KODSUZ";
+                    const code = f.internal_code || "-";
 
                     // 1. Desktop Table Row
                     const tr = document.createElement("tr");

@@ -157,7 +157,9 @@ def add_fabric(company_name, quality_code, quality_name, design_code, width, wei
     cursor = conn.cursor()
     
     company_name = company_name.strip().upper() if company_name else "GENEL"
-    quality_code = quality_code.strip().upper() if quality_code else "KODSUZ"
+    quality_code = quality_code.strip().upper() if quality_code else ""
+    if quality_code == "KODSUZ":
+        quality_code = ""
     quality_name = quality_name.strip().upper() if quality_name else ""
     design_code = design_code.strip().upper() if design_code else ""
     color = color.strip().upper() if color else ""
@@ -216,7 +218,7 @@ def add_fabric(company_name, quality_code, quality_name, design_code, width, wei
             conn.close()
             return dup_dict
 
-    if company_name != "GENEL" or quality_code != "KODSUZ":
+    if (company_name != "GENEL" or quality_code) and (quality_code or quality_name or design_code):
         cursor.execute(
             """SELECT * FROM fabrics 
                WHERE LOWER(company_name) = LOWER(?) 
@@ -756,7 +758,7 @@ def import_excel_fabrics(filepath, column_mappings):
             
             # Text cleaning
             company = clean_excel_text(record["company_name"]) or "GENEL"
-            q_code = clean_excel_text(record["quality_code"]) or "KODSUZ"
+            q_code = clean_excel_text(record["quality_code"]) or ""
             q_name = clean_excel_text(record["quality_name"])
             d_code = clean_excel_text(record["design_code"])
             width = clean_excel_text(record["width"])
