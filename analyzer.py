@@ -135,6 +135,15 @@ def analyze_swatch_card(image_bytes: bytes, mime_type: str, api_key: str) -> dic
                     logger.info(f"Successfully analyzed using {model_name}")
                     break
             except Exception as e:
+                err_str = str(e)
+                if "401" in err_str or "UNAUTHENTICATED" in err_str or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_str or "API_KEY_INVALID" in err_str:
+                    raise Exception(
+                        "Geçersiz API Anahtarı! Girdiğiniz anahtar bir Gemini API anahtarı değildir "
+                        "(muhtemelen 'AQ...' ile başlayan geçici bir OAuth jetonudur). "
+                        "Google Gemini API anahtarları daima 'AIzaSy...' ile başlar. "
+                        "Lütfen https://aistudio.google.com/app/apikey adresinden ücretsiz yeni bir anahtar alıp "
+                        "sol menüdeki 'Ayarlar & Tasarım' bölümünden kaydedin."
+                    )
                 logger.warning(f"Model {model_name} failed or unavailable: {str(e)}")
                 last_error = e
                 continue
