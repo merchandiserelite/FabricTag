@@ -198,11 +198,32 @@ def add_fabric(company_name, quality_code, quality_name, design_code, width, wei
             conn.close()
             return updated_row
 
-    # 2. Otherwise check if (company_name, quality_code) already exists
+    # 2. Duplicate checking
+    # In textile, a quality (e.g. "Sandy") often has multiple colors and design variants.
+    # A true duplicate occurs ONLY if:
+    # - Barcode is non-empty and matches an existing record, OR
+    # - Company + Quality Code + Design Code + Color are ALL identical!
+    if barcode_or_qr and barcode_or_qr.strip():
+        cursor.execute(
+            "SELECT * FROM fabrics WHERE barcode_or_qr = ? AND barcode_or_qr != ''",
+            (barcode_or_qr.strip().upper(),)
+        )
+        existing_bc = cursor.fetchone()
+        if existing_bc:
+            dup_dict = dict(existing_bc)
+            dup_dict["is_duplicate"] = True
+            dup_dict["is_updated"] = False
+            conn.close()
+            return dup_dict
+
     if company_name != "GENEL" or quality_code != "KODSUZ":
         cursor.execute(
-            "SELECT * FROM fabrics WHERE LOWER(company_name) = LOWER(?) AND LOWER(quality_code) = LOWER(?)",
-            (company_name, quality_code)
+            """SELECT * FROM fabrics 
+               WHERE LOWER(company_name) = LOWER(?) 
+                 AND LOWER(quality_code) = LOWER(?)
+                 AND LOWER(COALESCE(design_code, '')) = LOWER(?)
+                 AND LOWER(COALESCE(color, '')) = LOWER(?)""",
+            (company_name, quality_code, design_code, color)
         )
         existing = cursor.fetchone()
         if existing:

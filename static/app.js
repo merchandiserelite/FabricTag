@@ -3565,6 +3565,7 @@ function initApp() {
         }
 
         stopCamera();
+        editingInternalCode = null; // Ensure every item in the queue is saved as an independent new record!
         progressBarBox.style.display = "block";
         analysisLoader.style.display = "block";
         resultCard.style.opacity = "0.6";
@@ -3609,6 +3610,9 @@ function initApp() {
             alert(`⚠️ Kartela Okuma Başarısız Oldu:\n\n${errorsList.join("\n")}\n\nLütfen Ayarlar sekmesinden Gemini API anahtarınızı kontrol edin.`);
         } else {
             alert(`✅ ${savedCount} adet kartela okundu ve veritabanına kaydedildi!`);
+        }
+        if (typeof loadDatabase === "function") {
+            loadDatabase();
         }
     });
 
@@ -3831,8 +3835,9 @@ function initApp() {
 
     // Perform Save / Update to API
     function performSaveRecord(overrideData = null) {
+        const isFromQueue = !!overrideData;
         const payload = overrideData ? {
-            internal_code: overrideData.internal_code || editingInternalCode || null,
+            internal_code: overrideData.internal_code || null, // Never inherit editingInternalCode when saving batch scans!
             company_name: toAppUpper(overrideData.company_name) || "GENEL",
             quality_code: toAppUpper(overrideData.quality_code) || "KODSUZ",
             quality_name: toAppUpper(overrideData.quality_name),
@@ -3841,7 +3846,7 @@ function initApp() {
             weight: toAppUpper(overrideData.weight),
             composition: cleanCompositionPunctuation(overrideData.composition),
             barcode_or_qr: toAppUpper(overrideData.barcode_or_qr),
-            color: toAppUpper(overrideData.color || (inputColor ? inputColor.value : "") || "")
+            color: toAppUpper(overrideData.color || "")
         } : {
             internal_code: editingInternalCode || null,
             company_name: toAppUpper(inputCompany.value) || "GENEL",
@@ -3873,9 +3878,11 @@ function initApp() {
                 showToast("Yeni kumaş kaydedildi!", 1000);
             }
 
-            editingInternalCode = savedRecord.internal_code;
-            inputInternalCode.value = savedRecord.internal_code;
-            internalCodeGroup.style.display = "flex";
+            if (!isFromQueue) {
+                editingInternalCode = savedRecord.internal_code;
+                inputInternalCode.value = savedRecord.internal_code;
+                internalCodeGroup.style.display = "flex";
+            }
             return savedRecord;
         });
     }
