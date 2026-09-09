@@ -613,7 +613,7 @@ async def scan_swatch(file: UploadFile = File(...)):
         logger.error(f"Scan failed: {str(e)}")
         err_msg = str(e)
         if "401" in err_msg or "UNAUTHENTICATED" in err_msg or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_msg:
-            err_msg = "Geçersiz API Anahtarı! Girdiğiniz anahtar geçersiz. Google Gemini API anahtarları 'AIzaSy...' ile başlamalıdır. Lütfen https://aistudio.google.com/app/apikey adresinden ücretsiz yeni bir anahtar alıp '⚙️ Ayarlar & Tasarım' bölümüne kaydedin."
+            err_msg = "API Anahtarı Doğrulanamadı! Lütfen Google AI Studio'dan aldığınız güncel API anahtarınızı '⚙️ Ayarlar & Tasarım' bölümüne kaydedin. (Yeni oluşturulan anahtarların Google'da aktifleşmesi 10-30 saniye sürebilir)."
         raise HTTPException(status_code=500, detail=f"Kartela okuma başarısız: {err_msg}")
     
     finally:
@@ -671,7 +671,7 @@ async def scan_kartela_base64(req: Base64ScanRequest):
         logger.error(f"Base64 scan failed: {str(e)}")
         err_msg = str(e)
         if "401" in err_msg or "UNAUTHENTICATED" in err_msg or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_msg:
-            err_msg = "Geçersiz API Anahtarı! Girdiğiniz anahtar geçersiz. Google Gemini API anahtarları 'AIzaSy...' ile başlamalıdır. Lütfen https://aistudio.google.com/app/apikey adresinden ücretsiz yeni bir anahtar alıp '⚙️ Ayarlar & Tasarım' bölümüne kaydedin."
+            err_msg = "API Anahtarı Doğrulanamadı! Lütfen Google AI Studio'dan aldığınız güncel API anahtarınızı '⚙️ Ayarlar & Tasarım' bölümüne kaydedin. (Yeni oluşturulan anahtarların Google'da aktifleşmesi 10-30 saniye sürebilir)."
         raise HTTPException(status_code=500, detail=f"Kartela okuma başarısız: {err_msg}")
 
 @app.post("/api/fabrics")

@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import time
 import socket
@@ -10,6 +10,12 @@ import json
 
 import multiprocessing
 multiprocessing.freeze_support()
+
+# Safe redirection when running without a black console window
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, 'w')
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
