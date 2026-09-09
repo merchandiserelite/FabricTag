@@ -1,0 +1,15 @@
+﻿__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+.venv/
+.system_generated/
+*.log
+*.tmp
+database.db
+production.db
+textile.db
