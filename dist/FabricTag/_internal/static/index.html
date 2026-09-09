@@ -23,7 +23,7 @@
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     
-    <link rel="stylesheet" href="style.css?v=4.1.2">
+    <link rel="stylesheet" href="style.css?v=4.3.0">
 </head>
 <body>
     <!-- Toast Banner Notification for Alerts -->
@@ -203,6 +203,9 @@
                                 <button class="btn btn-primary" id="webcam-btn" type="button">
                                     <i class="fa-solid fa-video"></i> <span data-i18n="btn_live_camera">Canli Kamera (Seri Cekim)</span>
                                 </button>
+                                <button type="button" class="btn btn-secondary" id="btn-manual-fabric-entry" style="font-weight: 700; border: 1px dashed #4f46e5; color: #4f46e5; background: rgba(79, 70, 229, 0.06);" title="Resim yüklemeden doğrudan elle kumaş bilgisi girin">
+                                    <i class="fa-solid fa-pen-to-square"></i> <span data-i18n="btn_manual_fabric_entry">✍️ Manuel Kumaş Girişi</span>
+                                </button>
                             </div>
                         </div>
 
@@ -262,7 +265,10 @@
                     <div class="card result-card" id="result-card" style="opacity: 0.6; pointer-events: none;">
                         <div class="card-header">
                             <h2><i class="fa-solid fa-square-poll-horizontal"></i> <span data-i18n="form_title">Okunan Kartela Bilgileri</span></h2>
-                            <span class="badge" id="duplicate-warning" style="display: none;"><i class="fa-solid fa-clock-rotate-left"></i> Kayitli Kumas Duzenleniyor</span>
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                <span class="badge" id="duplicate-warning" style="display: none;"><i class="fa-solid fa-clock-rotate-left"></i> Kayitli Kumas Duzenleniyor</span>
+                                <span class="badge" id="manual-mode-badge" style="display: none; background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;"><i class="fa-solid fa-pen-to-square"></i> <span data-i18n="manual_mode_badge">Manuel Giriş Modu</span></span>
+                            </div>
                         </div>
                         
                         <form id="fabric-form" class="fabric-form">
@@ -364,6 +370,9 @@
                             <p data-i18n="db_header_desc">Su ana kadar taranan ve kaydedilen tum etiketler burada tutulur.</p>
                         </div>
                         <div class="header-buttons" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-success" id="btn-db-manual-add" style="font-weight: 700; background: linear-gradient(135deg, #10b981, #059669);" title="Fotoğraf yüklemeden doğrudan elle yeni kumaş kartı oluşturun">
+                                <i class="fa-solid fa-plus-circle"></i> <span data-i18n="btn_manual_add_fabric">+ Manuel Kumaş Ekle</span>
+                            </button>
                             <button class="btn btn-secondary" id="btn-download-excel-template" title="Örnek Boş Excel Formatı İndir">
                                 <i class="fa-solid fa-file-arrow-down"></i> <span data-i18n="btn_download_template">Şablon İndir (.xlsx)</span>
                             </button>
@@ -507,6 +516,10 @@
                                     <button type="button" class="preset-chip-btn" data-preset="luxury-burgundy">
                                         <span class="preset-dot" style="background: #991b1b;"></span>
                                         <span>Bordo Luks</span>
+                                    </button>
+                                    <button type="button" class="preset-chip-btn" data-preset="kumasci-detayli" title="Kumaşçılar için açık etiket başlıklı şablon (Kalite Adı, Varyant, Karışım, Gramaj)">
+                                        <span class="preset-dot" style="background: #4f46e5;"></span>
+                                        <span style="font-weight: 700;">👔 Kumaşçı (Başlıklı)</span>
                                     </button>
                                     <button type="button" class="preset-chip-btn" data-preset="minimalist-white">
                                         <span class="preset-dot" style="background: #f8fafc; border: 1px solid #94a3b8;"></span>
@@ -1296,6 +1309,25 @@
                     </p>
                 </div>
 
+                <!-- Purchase & Contact Information Banner -->
+                <div class="license-contact-banner" style="margin-bottom: 1.25rem; padding: 14px 16px; border-radius: 10px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(6, 182, 212, 0.08)); border: 1px solid rgba(79, 70, 229, 0.25); display: flex; align-items: center; gap: 14px;">
+                    <div style="width: 44px; height: 44px; border-radius: 50%; background: #4f46e5; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);">
+                        <i class="fa-solid fa-phone-volume"></i>
+                    </div>
+                    <div style="flex-grow: 1;">
+                        <div style="font-size: 0.86rem; font-weight: 700; color: #1e1b4b; margin-bottom: 3px;" data-i18n="license_contact_thanks">
+                            Beğenip programımızı almaya karar verdiğiniz için teşekkür ederiz.
+                        </div>
+                        <div style="font-size: 0.82rem; color: #475569;">
+                            <span data-i18n="license_contact_call">İletişim için</span> 
+                            <a href="tel:05321556151" style="color: #4f46e5; font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="fa-solid fa-phone"></i> 0532 155 6151
+                            </a> 
+                            <span data-i18n="license_contact_suffix">nolu telefon numaramızı arayabilirsiniz.</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label style="font-size: 0.85rem; font-weight: 700; color: #334155; display: flex; justify-content: space-between;">
                         <span data-i18n="lbl_hardware_id">Bilgisayarınızın Donanım Kimliği (Hardware ID):</span>
@@ -1339,7 +1371,17 @@
                 <div class="guide-steps-container">
                     <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="background: #4f46e5; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">1</span>
+                            <span style="background: #0ea5e9; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">1</span>
+                            <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step0_title">Programı Başlatma ve Açılış</h4>
+                        </div>
+                        <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step0_desc">
+                            Masaüstünüzdeki <strong>FabricTag</strong> kısayoluna veya program klasöründeki <strong>FabricTag.exe</strong> dosyasına çift tıklayın. Sistem tamamen arka planda sessizce başlar ve varsayılan internet tarayıcınızda otomatik olarak açılır.
+                        </p>
+                    </div>
+
+                    <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="background: #4f46e5; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">2</span>
                             <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step1_title">Gemini Yapay Zeka API Anahtarı Kurulumu</h4>
                         </div>
                         <p style="font-size: 0.82rem; color: #475569; margin: 0 0 10px 36px; line-height: 1.5;" data-i18n="guide_step1_desc">
@@ -1354,17 +1396,17 @@
 
                     <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="background: #06b6d4; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">2</span>
+                            <span style="background: #06b6d4; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">3</span>
                             <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step2_title">Kartela Tarama ve Otomatik Okuma</h4>
                         </div>
                         <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step2_desc">
-                            Kartela fotoğrafını 3 şekilde yükleyebilirsiniz: <strong>Webcam/Kamera</strong> ile seri çekim, <strong>Telefondan QR ile Kablosuz</strong> tarama veya <strong>Fotoğraf Yükleyerek</strong>. Yapay zeka tüm kumaş bilgilerini saniyeler içinde ayrıştırır.
+                            Kartela fotoğrafını 3 şekilde yükleyebilirsiniz: <strong>Webcam/Kamera</strong> ile seri çekim, <strong>Telefondan QR ile Kablosuz</strong> tarama veya <strong>Fotoğraf Yükleyerek</strong>. Dilerseniz <strong>✍️ Manuel Kumaş Girişi</strong> butonuyla fotoğrafsız da doğrudan kayıt ekleyebilirsiniz.
                         </p>
                     </div>
 
                     <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="background: #10b981; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">3</span>
+                            <span style="background: #10b981; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">4</span>
                             <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step3_title">Görsel Etiket Tasarımı & Barkod Baskısı</h4>
                         </div>
                         <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step3_desc">
@@ -1374,7 +1416,7 @@
 
                     <div class="guide-step-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px;">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="background: #8b5cf6; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">4</span>
+                            <span style="background: #8b5cf6; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">5</span>
                             <h4 style="margin: 0; color: #1e293b; font-size: 0.95rem;" data-i18n="guide_step4_title">Excel İçe/Dışa Aktarma ve Bulut Yedekleme</h4>
                         </div>
                         <p style="font-size: 0.82rem; color: #475569; margin: 0 0 0 36px; line-height: 1.5;" data-i18n="guide_step4_desc">
@@ -1459,6 +1501,6 @@
     <!-- Hidden Print Area -->
     <div id="print-section"></div>
 
-    <script src="app.js?v=4.1.2"></script>
+    <script src="app.js?v=4.3.0"></script>
 </body>
 </html>

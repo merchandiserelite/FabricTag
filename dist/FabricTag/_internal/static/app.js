@@ -217,6 +217,16 @@ function initApp() {
     // ==========================================
     const i18n = {
         "tr": {
+            "guide_step0_title": "Programı Başlatma ve Açılış",
+            "guide_step0_desc": "Masaüstünüzdeki FabricTag kısayoluna veya program klasöründeki FabricTag.exe dosyasına çift tıklayın. Sistem tamamen arka planda sessizce başlar ve varsayılan internet tarayıcınızda otomatik olarak açılır.",
+
+            "btn_manual_fabric_entry": "✍️ Manuel Kumaş Girişi",
+            "btn_manual_add_fabric": "+ Manuel Kumaş Ekle",
+            "manual_mode_badge": "Manuel Giriş Modu",
+            "license_contact_thanks": "Beğenip programımızı almaya karar verdiğiniz için teşekkür ederiz.",
+            "license_contact_call": "İletişim için",
+            "license_contact_suffix": "nolu telefon numaramızı arayabilirsiniz.",
+
                 "lang_label": "Dil / Language:",
                 "nav_scan": "Kartela Tara",
                 "nav_database": "Veritabanı / Geçmiş",
@@ -381,6 +391,16 @@ function initApp() {
                 "ios_step4": "Sağ üstteki \"Ekle\"ye basın. FabricTag artık telefonunuzda tam ekran bir uygulama olarak açılır!"
         },
         "en": {
+            "guide_step0_title": "Launching and Starting the Program",
+            "guide_step0_desc": "Double-click the FabricTag desktop shortcut or FabricTag.exe in the folder. The system starts silently in the background and opens automatically in your browser.",
+
+            "btn_manual_fabric_entry": "✍️ Manual Fabric Entry",
+            "btn_manual_add_fabric": "+ Add Fabric Manually",
+            "manual_mode_badge": "Manual Entry Mode",
+            "license_contact_thanks": "Thank you for choosing to purchase our software.",
+            "license_contact_call": "For contact and support",
+            "license_contact_suffix": "you can call our phone number.",
+
                 "lang_label": "Language:",
                 "nav_scan": "Scan Swatch",
                 "nav_database": "Database / History",
@@ -545,6 +565,16 @@ function initApp() {
                 "ios_step4": "Tap \"Add\" in the top right. FabricTag will open as a full-screen app!"
         },
         "de": {
+            "guide_step0_title": "Starten des Programms",
+            "guide_step0_desc": "Doppelklicken Sie auf die FabricTag-Verknüpfung oder FabricTag.exe. Das System startet lautlos im Hintergrund und öffnet sich im Browser.",
+
+            "btn_manual_fabric_entry": "✍️ Manuelle Stoffeingabe",
+            "btn_manual_add_fabric": "+ Stoff Manuell Hinzufügen",
+            "manual_mode_badge": "Manueller Eingabemodus",
+            "license_contact_thanks": "Vielen Dank, dass Sie sich für unsere Software entschieden haben.",
+            "license_contact_call": "Für Kontakt",
+            "license_contact_suffix": "können Sie uns anrufen.",
+
                 "lang_label": "Sprache:",
                 "nav_scan": "Muster Scannen",
                 "nav_database": "Datenbank / Historie",
@@ -602,6 +632,16 @@ function initApp() {
                 "ios_step4": "Tippen Sie oben rechts auf \"Hinzufügen\"."
         },
         "it": {
+            "guide_step0_title": "Avvio del Programma",
+            "guide_step0_desc": "Fare doppio clic sul collegamento FabricTag o su FabricTag.exe. Il sistema si avvia in background e si apre nel browser.",
+
+            "btn_manual_fabric_entry": "✍️ Inserimento Manuale Tessuto",
+            "btn_manual_add_fabric": "+ Aggiungi Tessuto Manualmente",
+            "manual_mode_badge": "Modalità Inserimento Manuale",
+            "license_contact_thanks": "Grazie per aver scelto di acquistare il nostro programma.",
+            "license_contact_call": "Per contatti",
+            "license_contact_suffix": "puoi chiamare il nostro numero.",
+
                 "lang_label": "Lingua:",
                 "nav_scan": "Scansiona Cartella",
                 "nav_database": "Database / Storico",
@@ -659,6 +699,16 @@ function initApp() {
                 "ios_step4": "Tocca \"Aggiungi\" in alto a destra."
         },
         "es": {
+            "guide_step0_title": "Iniciar el Programa",
+            "guide_step0_desc": "Haga doble clic en el acceso directo de FabricTag o en FabricTag.exe. El sistema se inicia en segundo plano y se abre en su navegador.",
+
+            "btn_manual_fabric_entry": "✍️ Entrada Manual de Tela",
+            "btn_manual_add_fabric": "+ Agregar Tela Manualmente",
+            "manual_mode_badge": "Modo de Entrada Manual",
+            "license_contact_thanks": "Gracias por decidir comprar nuestro software.",
+            "license_contact_call": "Para contacto",
+            "license_contact_suffix": "puede llamar a nuestro número.",
+
                 "lang_label": "Idioma:",
                 "nav_scan": "Escanear Muestra",
                 "nav_database": "Base de Datos / Historial",
@@ -716,6 +766,16 @@ function initApp() {
                 "ios_step4": "Toque \"Añadir\" en la esquina superior derecha."
         },
         "fr": {
+            "guide_step0_title": "Lancement du Programme",
+            "guide_step0_desc": "Double-cliquez sur le raccourci FabricTag ou FabricTag.exe. Le système démarre silencieusement en arrière-plan et s'ouvre dans votre navigateur.",
+
+            "btn_manual_fabric_entry": "✍️ Entrée Manuelle du Tissu",
+            "btn_manual_add_fabric": "+ Ajouter Tissu Manuellement",
+            "manual_mode_badge": "Mode Saisie Manuelle",
+            "license_contact_thanks": "Merci d'avoir choisi d'acheter notre logiciel.",
+            "license_contact_call": "Pour nous contacter",
+            "license_contact_suffix": "vous pouvez nous appeler.",
+
                 "lang_label": "Langue:",
                 "nav_scan": "Scanner Échantillon",
                 "nav_database": "Base de Données / Historique",
@@ -773,6 +833,16 @@ function initApp() {
                 "ios_step4": "Appuyez sur \"Ajouter\" en haut à droite."
         },
         "ar": {
+            "guide_step0_title": "تشغيل البرنامج والبدء",
+            "guide_step0_desc": "انقر نقراً مزدوجاً فوق اختصار FabricTag أو ملف FabricTag.exe. يبدأ البرنامج في الخلفية ويفتح تلقائياً في المتصفح.",
+
+            "btn_manual_fabric_entry": "✍️ إدخال يدوي للقماش",
+            "btn_manual_add_fabric": "+ إضافة قماش يدوياً",
+            "manual_mode_badge": "وضع الإدخال اليدوي",
+            "license_contact_thanks": "شكراً لاختيارك شراء برنامجنا.",
+            "license_contact_call": "للتواصل",
+            "license_contact_suffix": "يمكنكم الاتصال برقمنا.",
+
                 "lang_label": "اللغة:",
                 "nav_scan": "مسح البطاقة",
                 "nav_database": "قاعدة البيانات / السجل",
@@ -898,6 +968,16 @@ function initApp() {
                 "ios_step4": "اضغط على \"إضافة\" في أعلى اليسار."
         },
         "zh": {
+            "guide_step0_title": "启动程序",
+            "guide_step0_desc": "双击桌面上的FabricTag快捷方式或文件夹中的FabricTag.exe。系统将在后台静默启动并在浏览器中自动打开。",
+
+            "btn_manual_fabric_entry": "✍️ 手动面料录入",
+            "btn_manual_add_fabric": "+ 手动添加面料",
+            "manual_mode_badge": "手动输入模式",
+            "license_contact_thanks": "感谢您决定购买我们的软件。",
+            "license_contact_call": "联系方式",
+            "license_contact_suffix": "欢迎致电我们的电话。",
+
                 "lang_label": "语言:",
                 "nav_scan": "扫描色卡",
                 "nav_database": "数据库 / 历史",
@@ -1023,6 +1103,16 @@ function initApp() {
                 "ios_step4": "点击右上角的 \"添加\" 即可。"
         },
         "ja": {
+            "guide_step0_title": "プログラムの起動と開始",
+            "guide_step0_desc": "デスクトップのFabricTagショートカットまたはFabricTag.exeをダブルクリックします。システムはバックグラウンドで静かに起動しブラウザで自動的に開きます。",
+
+            "btn_manual_fabric_entry": "✍️ 生地の直接手動入力",
+            "btn_manual_add_fabric": "+ 手動で生地を追加",
+            "manual_mode_badge": "手動入力モード",
+            "license_contact_thanks": "ソフトウェアのご購入を決めていただき誠にありがとうございます。",
+            "license_contact_call": "お問い合わせ",
+            "license_contact_suffix": "お電話でお問い合わせください。",
+
                 "lang_label": "言語:",
                 "nav_scan": "スワッチスキャン",
                 "nav_database": "データベース / 履歴",
@@ -1819,6 +1909,7 @@ function initApp() {
             if (valFontComp) valFontComp.textContent = compTxtSize + "pt";
         }
         if (desAlignComp) desAlignComp.value = cfg.align_composition || "left";
+        if (desPrefixComposition) desPrefixComposition.value = cfg.prefix_composition || "";
 
         // 5. Gramaj
         if (desShowWeight) desShowWeight.checked = cfg.show_weight !== false;
@@ -1828,6 +1919,7 @@ function initApp() {
             if (valFontWeight) valFontWeight.textContent = weightSize + "pt";
         }
         if (desAlignWeight) desAlignWeight.value = cfg.align_weight || "left";
+        if (desPrefixWeight) desPrefixWeight.value = cfg.prefix_weight || "";
 
         // Barcode
         if (desBarcodeVisible) desBarcodeVisible.checked = cfg.barcode_visible !== false;
@@ -2128,6 +2220,135 @@ function initApp() {
             }
         });
     }
+
+    const PRESETS_CONFIG = {
+        "classic-black": {
+            default_template: "option-b",
+            bar_style: "filled",
+            bar_bg_color: "#000000",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "1.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "none",
+            label_border_color: "#000000",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "corporate-navy": {
+            default_template: "option-b",
+            bar_style: "filled",
+            bar_bg_color: "#1e3a8a",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "2.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "solid",
+            label_border_color: "#cbd5e1",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "emerald-green": {
+            default_template: "option-b",
+            bar_style: "filled",
+            bar_bg_color: "#065f46",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "2.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "solid",
+            label_border_color: "#a7f3d0",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "luxury-burgundy": {
+            default_template: "option-b",
+            bar_style: "filled",
+            bar_bg_color: "#991b1b",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "3.0",
+            label_bg_color: "#fff5f7",
+            label_border_style: "solid",
+            label_border_color: "#fbcfe8",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "kumasci-detayli": {
+            default_template: "option-b",
+            bar_style: "plain",
+            bar_bg_color: "#000000",
+            bar_text_color: "#000000",
+            prefix_quality_name: "KALİTE ADI:",
+            prefix_quality_code: "VARYANT:",
+            prefix_composition: "KARIŞIM:",
+            prefix_weight: "GRAMAJ:",
+            align_company: "left",
+            align_quality_name: "left",
+            align_quality_code: "left",
+            align_composition: "left",
+            align_weight: "left",
+            label_bg_color: "#ffffff",
+            label_border_style: "solid",
+            label_border_color: "#e2e8f0"
+        },
+        "minimalist-white": {
+            default_template: "option-b",
+            bar_style: "outline",
+            bar_bg_color: "#000000",
+            bar_text_color: "#000000",
+            bar_border_radius: "2.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "none",
+            label_border_color: "#000000",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        },
+        "secret-code-a": {
+            default_template: "option-a",
+            bar_style: "filled",
+            bar_bg_color: "#312e81",
+            bar_text_color: "#ffffff",
+            bar_border_radius: "1.0",
+            label_bg_color: "#ffffff",
+            label_border_style: "none",
+            label_border_color: "#000000",
+            prefix_quality_name: "",
+            prefix_quality_code: "",
+            prefix_composition: "",
+            prefix_weight: "",
+            align_quality_name: "center",
+            align_quality_code: "center",
+            align_composition: "left",
+            align_weight: "left"
+        }
+    };
 
     // Preset Chip Buttons Click Listener
     document.querySelectorAll(".preset-chip-btn").forEach(btn => {
@@ -2995,6 +3216,9 @@ function initApp() {
         inputInternalCode.value = data.internal_code || ""; 
         if (data.internal_code) internalCodeGroup.style.display = "flex";
 
+        const manualBadge = document.getElementById("manual-mode-badge");
+        if (manualBadge) manualBadge.style.display = "none";
+
         inputCompany.value = toAppUpper(data.company_name);
         inputQualityCode.value = toAppUpper(data.quality_code);
         inputQualityName.value = toAppUpper(data.quality_name);
@@ -3004,6 +3228,52 @@ function initApp() {
         inputComposition.value = cleanCompositionPunctuation(data.composition);
         inputBarcode.value = toAppUpper(data.barcode_or_qr);
     }
+
+    // Manuel Kumaş Giriş Modu
+    const btnManualFabricEntry = document.getElementById("btn-manual-fabric-entry");
+    const btnDbManualAdd = document.getElementById("btn-db-manual-add");
+    const manualModeBadge = document.getElementById("manual-mode-badge");
+
+    function startManualEntry() {
+        editingInternalCode = null;
+        if (duplicateWarning) duplicateWarning.style.display = "none";
+        if (manualModeBadge) manualModeBadge.style.display = "inline-flex";
+
+        if (inputInternalCode) inputInternalCode.value = "";
+        if (internalCodeGroup) internalCodeGroup.style.display = "none";
+
+        if (inputCompany) inputCompany.value = "";
+        if (inputQualityCode) inputQualityCode.value = "";
+        if (inputQualityName) inputQualityName.value = "";
+        if (inputDesign) inputDesign.value = "";
+        if (inputWidth) inputWidth.value = "";
+        if (inputWeight) inputWeight.value = "";
+        if (inputComposition) inputComposition.value = "";
+        if (inputBarcode) inputBarcode.value = "";
+
+        if (previewBox) previewBox.style.display = "none";
+        if (imagePreview) imagePreview.src = "";
+
+        if (resultCard) {
+            resultCard.style.opacity = "1";
+            resultCard.style.pointerEvents = "auto";
+        }
+
+        const scanTabBtn = document.querySelector('[data-tab="scan-tab"]');
+        if (scanTabBtn) scanTabBtn.click();
+
+        setTimeout(() => {
+            if (inputCompany) {
+                inputCompany.focus();
+                inputCompany.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 150);
+
+        showToast("✍️ Manuel kumaş giriş modu hazır. Bilgileri girip Kaydet'e basın.", 2200);
+    }
+
+    if (btnManualFabricEntry) btnManualFabricEntry.addEventListener("click", startManualEntry);
+    if (btnDbManualAdd) btnDbManualAdd.addEventListener("click", startManualEntry);
 
     // Dynamic Label Printing HTML Builder based on Saved Design Configuration
     function createSingleLabelHTML(data, option, barcodeId) {
