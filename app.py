@@ -1633,6 +1633,411 @@ def api_export_styles_excel_post(req: ExportExcelRequest, authorization: Optiona
     return generate_styles_excel_workbook(req.style_ids, company_id)
 
 
+# ----------------- BUDGET EXCEL EXPORT (ÖRNEK BÜTÇE FORMATI) -----------------
+
+def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, company_id: int = 1) -> Response:
+    conn = get_db()
+    c = conn.cursor()
+    
+    if style_ids and len(style_ids) > 0:
+        placeholders = ",".join("?" for _ in style_ids)
+        order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
+        sql = f"""
+        SELECT s.*, 
+               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
+        FROM styles s
+        JOIN orders o ON s.order_id = o.id
+        WHERE s.company_id = ? AND s.id IN ({placeholders})
+        ORDER BY {order_by_clause}
+        """
+        params = [company_id] + style_ids
+    else:
+        sql = """
+        SELECT s.*, 
+               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
+        FROM styles s
+        JOIN orders o ON s.order_id = o.id
+        WHERE s.company_id = ?
+        ORDER BY o.id DESC, s.id ASC
+        """
+        params = [company_id]
+        
+    c.execute(sql, tuple(params))
+    styles = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Bütçe Tablosu"
+    ws.views.sheetView[0].showGridLines = True
+    ws.freeze_panes = "G2"
+
+    first_cust = (styles[0].get("customer_name") or styles[0].get("brand") or "ÜRETİM") if styles else "ÜRETİM"
+    first_season = (styles[0].get("season") or "") if styles else ""
+    title_col_1 = f"{first_cust}  {first_season} SMS".strip() or "BÜTÇE LİSTESİ"
+
+    headers = [
+        title_col_1,
+        "Model - Renk",
+        "Style",
+        "Renk",
+        "Kumaş",
+        "QUANTITY",
+        "PRICE ",
+        "KUMAŞ 1  FİYAT",
+        "1 iç  CM",
+        "KUMAŞ 1 TOTAL",
+        "KUMAŞ 2 FİYAT",
+        "1 iç gramaj ",
+        "KUMAŞ 2 TOTAL ",
+        "kumaş toplam ",
+        "KUMAŞ 3 FİYAT",
+        "1 iç gramaj ",
+        "KUMAŞ 3 TOTAL ",
+        "FASON",
+        "KES.İŞT",
+        "AKS",
+        "ETKOL",
+        "LOGO",
+        "BRİT",
+        "LASTİK",
+        "Düğme",
+        "Çıtçıt",
+        "DIGER",
+        "KARGO",
+        "NAKLIYE",
+        "KUMAŞ ",
+        "ASTAR",
+        "DİKME",
+        "İlik-Düğme",
+        "Çıtçıt Çakım",
+        "",
+        "",
+        "",
+        "",
+        "maliyet TL",
+        "maliyet  EURO ",
+        "Euro",
+        "PRICE",
+        "TOPLAM maliyet TL +   6%",
+        "TOPLAM maliyet EUR +   6%",
+        "Order Toplamı "
+    ]
+
+    header_font = Font(name="Segoe UI", size=9.5, bold=True, color="000000")
+    header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    header_border = Border(
+        left=Side(style="thin", color="CBD5E1"),
+        right=Side(style="thin", color="CBD5E1"),
+        top=Side(style="medium", color="475569"),
+        bottom=Side(style="medium", color="475569")
+    )
+
+    ws.row_dimensions[1].height = 34
+    for col_num, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        cell.border = header_border
+
+    cell_border = Border(
+        left=Side(style="thin", color="E2E8F0"),
+        right=Side(style="thin", color="E2E8F0"),
+        top=Side(style="thin", color="E2E8F0"),
+        bottom=Side(style="thin", color="E2E8F0")
+    )
+    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    font_normal = Font(name="Segoe UI", size=9, color="1E293B")
+    font_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
+    align_center = Alignment(horizontal="center", vertical="center")
+    align_left = Alignment(horizontal="left", vertical="center")
+    align_right = Alignment(horizontal="right", vertical="center")
+
+    last_row = 1
+    total_qty = 0
+    total_maliyet_tl_sum = 0.0
+    total_maliyet_eur_sum = 0.0
+    total_order_sum = 0.0
+
+    for idx, s in enumerate(styles, start=2):
+        last_row = idx
+        ws.row_dimensions[idx].height = 22
+        current_fill = fill_white if (idx % 2 == 0) else fill_zebra
+
+        cost_data = {}
+        if s.get("cost_data_json"):
+            try:
+                cost_data = json.loads(s["cost_data_json"])
+            except Exception:
+                cost_data = {}
+
+        def safe_num(val, default=0.0):
+            if val is None or val == "":
+                return default
+            try:
+                if isinstance(val, (int, float)):
+                    return float(val)
+                s_clean = str(val).strip().replace(",", ".")
+                return float(s_clean)
+            except Exception:
+                return default
+
+        rates = cost_data.get("exchangeRates") or {"EUR": 55.75, "USD": 48.9, "TL": 1.0}
+        eur_rate = safe_num(rates.get("EUR"), 55.75)
+
+        fabrics = cost_data.get("fabrics") or []
+        items = cost_data.get("items") or []
+
+        def get_item_val(keywords):
+            for it in items:
+                n = (it.get("name") or "").lower()
+                if any(k.lower() in n for k in keywords):
+                    v = it.get("total_tl")
+                    if v is None or v == "":
+                        v = it.get("evaluated_price")
+                    if v is None or v == "":
+                        v = it.get("price")
+                    return safe_num(v, 0.0)
+            return 0.0
+
+        fb1 = fabrics[0] if len(fabrics) > 0 else {}
+        fb1_price = safe_num(fb1.get("price") or s.get("fabric_price_1"))
+        fb1_meters = safe_num(fb1.get("meters") or s.get("unit_meters"))
+        fb1_grams = safe_num(fb1.get("grams") or s.get("unit_grams"))
+        fb1_cm = round(fb1_meters * 100) if fb1.get("unit_type") != "KG" else fb1_grams
+        fb1_total = safe_num(fb1.get("total_tl"))
+
+        fb2 = fabrics[1] if len(fabrics) > 1 else {}
+        fb2_price = safe_num(fb2.get("price") or s.get("fabric_price_2"))
+        fb2_meters = safe_num(fb2.get("meters") or s.get("unit_meters_2"))
+        fb2_grams = safe_num(fb2.get("grams") or s.get("unit_grams_2"))
+        fb2_gramaj = fb2_grams if fb2_grams > 0 else (fb2_meters * 100)
+        fb2_total = safe_num(fb2.get("total_tl"))
+
+        fb3 = fabrics[2] if len(fabrics) > 2 else {}
+        fb3_price = safe_num(fb3.get("price"))
+        fb3_meters = safe_num(fb3.get("meters"))
+        fb3_grams = safe_num(fb3.get("grams"))
+        fb3_gramaj = fb3_grams if fb3_grams > 0 else (fb3_meters * 100)
+        fb3_total = safe_num(fb3.get("total_tl"))
+
+        kumas_toplam = safe_num(cost_data.get("totals", {}).get("toplam_kumas_tl") or (fb1_total + fb2_total + fb3_total))
+
+        v_fason = get_item_val(["fason", "dikim"])
+        v_kesim = get_item_val(["kesim"])
+        v_aks = get_item_val(["aksesuar", "aks"])
+        v_etkol = get_item_val(["etiket", "kol", "etkol"])
+        v_logo = get_item_val(["logo", "baskı", "nakış"])
+        v_brit = get_item_val(["brit"])
+        v_lastik = get_item_val(["lastik"])
+        v_dugme = get_item_val(["düğme", "fermuar"])
+        v_citcit = get_item_val(["çıtçıt"])
+        v_diger = get_item_val(["diğer", "tasarım", "kalıp"])
+        v_kargo = get_item_val(["kargo"])
+        v_nakliye = get_item_val(["nakliye"])
+        v_kumas_extra = get_item_val(["yıkama", "taş"]) or (fb1_total if not get_item_val(["yıkama", "taş"]) else 0.0)
+        v_astar = get_item_val(["astar", "tela"])
+        v_dikme = get_item_val(["dikme", "el dikişi"])
+        v_ilik_dugme = get_item_val(["ilik", "ilik-düğme"])
+        v_citcit_cakim = get_item_val(["çakım", "çıtçıt çakım"])
+
+        totals = cost_data.get("totals") or {}
+        maliyet_tl = safe_num(totals.get("maliyet_1_tl") or totals.get("maliyet_2_tl"))
+        if maliyet_tl == 0.0 and (kumas_toplam > 0 or v_fason > 0):
+            maliyet_tl = round((kumas_toplam + v_fason + v_kesim + v_aks + v_etkol + v_kargo + v_nakliye + v_diger) * 1.06, 2)
+            
+        maliyet_eur = safe_num(totals.get("maliyet_1_doviz") or (round(maliyet_tl / eur_rate, 2) if eur_rate > 0 else 0.0))
+        price = safe_num(totals.get("toplam_satis_doviz") or s.get("unit_price"))
+        qty = int(safe_num(s.get("total_quantity")))
+        total_qty += qty
+
+        tot_maliyet_tl = round(maliyet_tl * qty, 2)
+        tot_maliyet_eur = round(maliyet_eur * qty, 2)
+        order_toplam = round(price * qty, 2)
+
+        total_maliyet_tl_sum += tot_maliyet_tl
+        total_maliyet_eur_sum += tot_maliyet_eur
+        total_order_sum += order_toplam
+
+        style_no = str(s.get("style_no") or "")
+        color_code = str(s.get("color_code") or "").strip()
+        color_name = str(s.get("color_name") or "").strip()
+        model_color = f"{style_no}-{color_code or color_name}"
+        fabric_name = str(s.get("fabric_article") or s.get("fabric_type") or "")
+        cust_season = f"{s.get('customer_name') or ''} {s.get('season') or ''}".strip()
+
+        row_data = [
+            cust_season,
+            model_color,
+            style_no,
+            color_code or color_name,
+            fabric_name,
+            qty if qty else None,
+            price if price else None,
+            fb1_price if fb1_price else 0,
+            fb1_cm if fb1_cm else 0,
+            fb1_total if fb1_total else 0,
+            fb2_price if fb2_price else 0,
+            fb2_gramaj if fb2_gramaj else 0,
+            fb2_total if fb2_total else 0,
+            kumas_toplam if kumas_toplam else 0,
+            fb3_price if fb3_price else None,
+            fb3_gramaj if fb3_gramaj else None,
+            fb3_total if fb3_total else None,
+            v_fason if v_fason else 0,
+            v_kesim if v_kesim else 0,
+            v_aks if v_aks else 0,
+            v_etkol if v_etkol else 0,
+            v_logo if v_logo else 0,
+            v_brit if v_brit else 0,
+            v_lastik if v_lastik else 0,
+            v_dugme if v_dugme else 0,
+            v_citcit if v_citcit else 0,
+            v_diger if v_diger else 0,
+            v_kargo if v_kargo else 0,
+            v_nakliye if v_nakliye else 0,
+            v_kumas_extra if v_kumas_extra else 0,
+            v_astar if v_astar else 0,
+            v_dikme if v_dikme else 0,
+            v_ilik_dugme if v_ilik_dugme else 0,
+            v_citcit_cakim if v_citcit_cakim else 0,
+            None,
+            None,
+            None,
+            None,
+            maliyet_tl if maliyet_tl else 0,
+            maliyet_eur if maliyet_eur else 0,
+            eur_rate,
+            price if price else 0,
+            tot_maliyet_tl if tot_maliyet_tl else 0,
+            tot_maliyet_eur if tot_maliyet_eur else 0,
+            order_toplam if order_toplam else 0
+        ]
+
+        for col_idx, val in enumerate(row_data, 1):
+            c_cell = ws.cell(row=idx, column=col_idx, value=val)
+            c_cell.fill = current_fill
+            c_cell.border = cell_border
+            c_cell.font = font_normal
+
+            if col_idx in [1, 2, 5]:
+                c_cell.alignment = align_left
+            elif col_idx in [3, 4]:
+                c_cell.alignment = align_center
+                c_cell.font = font_bold
+            elif col_idx == 6:  # QUANTITY
+                c_cell.alignment = align_center
+                c_cell.font = font_bold
+                c_cell.number_format = "#,##0"
+            elif col_idx in [7, 42]:  # PRICE
+                c_cell.alignment = align_right
+                c_cell.font = font_bold
+                c_cell.number_format = "#,##0.00"
+            elif col_idx in [41]:  # EUR RATE
+                c_cell.alignment = align_center
+                c_cell.number_format = "#,##0.00"
+            elif col_idx in [39, 40, 43, 44, 45]:  # Maliyet and Totals
+                c_cell.alignment = align_right
+                c_cell.font = font_bold
+                c_cell.number_format = "#,##0.00"
+            elif isinstance(val, (int, float)):
+                c_cell.alignment = align_right
+                c_cell.number_format = "#,##0.##"
+
+    # Summary Total Row
+    tot_row = last_row + 1
+    ws.row_dimensions[tot_row].height = 26
+    tot_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
+    tot_font = Font(name="Segoe UI", size=10, bold=True, color="000000")
+    
+    cell_tot_lbl = ws.cell(row=tot_row, column=5, value="GENEL TOPLAM")
+    cell_tot_lbl.font = tot_font
+    cell_tot_lbl.alignment = Alignment(horizontal="right", vertical="center")
+    
+    c_tot_qty = ws.cell(row=tot_row, column=6, value=total_qty)
+    c_tot_qty.font = tot_font
+    c_tot_qty.alignment = align_center
+    c_tot_qty.number_format = "#,##0"
+    
+    c_tot_tl = ws.cell(row=tot_row, column=43, value=total_maliyet_tl_sum)
+    c_tot_tl.font = tot_font
+    c_tot_tl.alignment = align_right
+    c_tot_tl.number_format = "#,##0.00"
+    
+    c_tot_eur = ws.cell(row=tot_row, column=44, value=total_maliyet_eur_sum)
+    c_tot_eur.font = tot_font
+    c_tot_eur.alignment = align_right
+    c_tot_eur.number_format = "#,##0.00"
+    
+    c_tot_order = ws.cell(row=tot_row, column=45, value=total_order_sum)
+    c_tot_order.font = tot_font
+    c_tot_order.alignment = align_right
+    c_tot_order.number_format = "#,##0.00"
+    
+    for c_i in range(1, 46):
+        c_tot = ws.cell(row=tot_row, column=c_i)
+        c_tot.fill = tot_fill
+        c_tot.border = Border(top=Side(style="medium", color="475569"), bottom=Side(style="double", color="475569"))
+
+    ws.column_dimensions["A"].width = 24
+    ws.column_dimensions["B"].width = 20
+    ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["D"].width = 14
+    ws.column_dimensions["E"].width = 30
+    ws.column_dimensions["F"].width = 14
+    ws.column_dimensions["G"].width = 14
+    ws.column_dimensions["N"].width = 15
+    ws.column_dimensions["AM"].width = 15
+    ws.column_dimensions["AN"].width = 15
+    ws.column_dimensions["AO"].width = 12
+    ws.column_dimensions["AP"].width = 14
+    ws.column_dimensions["AQ"].width = 20
+    ws.column_dimensions["AR"].width = 20
+    ws.column_dimensions["AS"].width = 18
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    
+    filename = f"Butce_Tablosu_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+    )
+
+@app.get("/api/styles/export-budget-excel")
+def api_export_budget_excel_get(ids: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
+    user = None
+    if authorization:
+        t = authorization.replace("Bearer ", "").strip()
+        user = get_current_user(t)
+    company_id = user.get("company_id") if user else 1
+    
+    style_ids = None
+    if ids:
+        try:
+            style_ids = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
+        except Exception:
+            pass
+            
+    return generate_budget_excel_workbook(style_ids, company_id)
+
+@app.post("/api/styles/export-budget-excel")
+def api_export_budget_excel_post(req: ExportExcelRequest, authorization: Optional[str] = Header(None)):
+    user = None
+    if authorization:
+        t = authorization.replace("Bearer ", "").strip()
+        user = get_current_user(t)
+    company_id = user.get("company_id") if user else 1
+    
+    return generate_budget_excel_workbook(req.style_ids, company_id)
+
+
 
 # ----------------- SINGLE SIZE INLINE UPDATE -----------------
 

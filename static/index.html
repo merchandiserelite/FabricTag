@@ -1294,11 +1294,21 @@
                             </button>
 
                             <!-- KUMAŞ SİPARİŞ BUTONU -->
-                            <button @click="openKumasSiparisModal"
-                                    class="h-9 px-3 rounded-xl btn-theme text-white text-xs font-bold flex items-center gap-1.5 transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
+                            <button id="btn-kumas-siparis"
+                                    @click="openKumasSiparisModal"
+                                    class="h-9 px-2.5 rounded-xl btn-theme text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
                                     title="Planlama ve Sipariş Alındı Aşamasındaki Kumaş Sipariş Listesi">
-                                <i data-lucide="shopping-bag" class="w-3.5 h-3.5"></i>
-                                <span>Kumaş Sipariş</span>
+                                <span>Kumaş</span>
+                                <span class="text-[9.5px] text-white/90 font-semibold">Sipariş</span>
+                            </button>
+
+                            <!-- BÜTÇE GÖSTER BUTONU -->
+                            <button id="btn-butce-goster"
+                                    @click="openBudgetModal"
+                                    class="h-9 px-2.5 rounded-xl btn-theme text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
+                                    title="Maliyet Gir ekranındaki verilerle bütçe ve gider tablosunu aç">
+                                <span>Bütçe</span>
+                                <span class="text-[9.5px] text-white/90 font-semibold">Göster</span>
                             </button>
 
                             <!-- ÖZET YAZDIR BUTONU -->
@@ -7221,7 +7231,9 @@
                 </div>
             </form>
         </div>
-        <!-- KESİMHANE GÖRSEL BÜYÜTME (LIGHTBOX / ZOOM MODAL) -->
+    </div>
+    
+    <!-- KESİMHANE GÖRSEL BÜYÜTME (LIGHTBOX / ZOOM MODAL) -->
         <div v-if="cuttingZoomImage"
              class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm transition-opacity"
              @click.self="closeCuttingZoom">
@@ -7250,10 +7262,176 @@
             </div>
         </div>
 
+        <!-- ========================================================================= -->
+        <!-- MODAL 12: BÜTÇE GÖSTER & MALİYET ANALİZİ TABLOSU (ÖRNEK BÜTÇE FORMATI)    -->
+        <!-- ========================================================================= -->
+        <div v-if="budgetModalOpen"
+             id="carsaf-budget-modal"
+             class="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col p-2 sm:p-4 overflow-hidden select-none animate-fadeIn">
+
+            <!-- MODAL KONTROL ÇUBUĞU -->
+            <div class="relative w-full mx-auto mb-3 px-4 py-3 sm:pr-14 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3 shrink-0"
+                 :class="isDarkMode ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200 text-slate-900'">
+                
+                <!-- SAĞ ÜST KÖŞE KAPATMA BUTONU (ESC) -->
+                <button @click="closeBudgetModal"
+                        class="absolute top-2.5 sm:top-3 right-3 sm:right-4 p-1.5 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer z-20 flex items-center justify-center"
+                        title="Kapat (ESC)">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+                
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center shadow-inner">
+                        <i data-lucide="wallet" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-sm font-black text-amber-600 dark:text-amber-400">Üretim & Sipariş Bütçe Analizi</h3>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                {{ budgetFilteredRows.length }} Model
+                            </span>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                Toplam: {{ (budgetTotals.total_qty || 0).toLocaleString('tr-TR') }} Adet
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-400">
+                            Maliyet Gir ekranındaki kumaş, imalat, aksesuar ve kur detaylarıyla sipariş bütçe dökümü
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 flex-wrap">
+                    <!-- Arama Kutusu -->
+                    <div class="relative w-56">
+                        <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input v-model="budgetSearchQuery"
+                               type="text"
+                               placeholder="Model, renk veya kumaş ara..."
+                               class="w-full pl-8 pr-3 py-1.5 rounded-xl border text-xs outline-none transition focus:ring-1 focus:ring-amber-500"
+                               :class="isDarkMode ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'">
+                    </div>
+
+                    <!-- Excel'e Aktar Butonu -->
+                    <button @click="exportBudgetExcel"
+                            class="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 transition shadow-md active:scale-95 cursor-pointer select-none"
+                            title="Örnek Bütçe formatında Excel (.xlsx) olarak indir">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                        <span>Excel'e Aktar</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- BÜTÇE TABLOSU ALANI (YATAY & DİKEY KAYDIRMALI) -->
+            <div class="flex-1 min-h-0 w-full mx-auto rounded-2xl border shadow-2xl overflow-auto bg-white dark:bg-slate-900"
+                 :class="isDarkMode ? 'border-slate-800' : 'border-slate-300'">
+                <table class="w-full text-left border-collapse text-xs font-sans whitespace-nowrap">
+                    <!-- SARI BAŞLIK (#FFFF00) -->
+                    <thead class="sticky top-0 z-10 shadow-sm" style="background-color: #FFFF00 !important; color: #000000 !important;">
+                        <tr class="border-b-2 border-slate-400 font-extrabold text-[11px] uppercase tracking-wider"
+                            style="background-color: #FFFF00 !important; color: #000000 !important;">
+                            <th class="p-2 border-r border-slate-300 text-left min-w-[140px]" style="background-color: #FFFF00 !important; color: #000000 !important;">MÜŞTERİ / SEZON</th>
+                            <th class="p-2 border-r border-slate-300 text-left min-w-[120px]" style="background-color: #FFFF00 !important; color: #000000 !important;">MODEL - RENK</th>
+                            <th class="p-2 border-r border-slate-300 text-center min-w-[100px]" style="background-color: #FFFF00 !important; color: #000000 !important;">STYLE</th>
+                            <th class="p-2 border-r border-slate-300 text-center min-w-[90px]" style="background-color: #FFFF00 !important; color: #000000 !important;">RENK</th>
+                            <th class="p-2 border-r border-slate-300 text-left min-w-[180px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ</th>
+                            <th class="p-2 border-r border-slate-300 text-center min-w-[90px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">QUANTITY</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[85px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">PRICE</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[85px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ 1 FİYAT</th>
+                            <th class="p-2 border-r border-slate-300 text-center min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">1 İÇ CM</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[95px] font-bold" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ 1 TOTAL</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[85px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ 2 FİYAT</th>
+                            <th class="p-2 border-r border-slate-300 text-center min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">1 İÇ GRAMAJ</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[95px] font-bold" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ 2 TOTAL</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[95px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ TOPLAM</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">FASON</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KES.İŞT</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">AKS</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ETKOL</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">LOGO</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">BRİT</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">LASTİK</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">DÜĞME</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ÇITÇIT</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">DIGER</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KARGO</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">NAKLIYE</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ASTAR</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">DİKME</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">İLİK-DÜĞME</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ÇITÇIT ÇAKIM</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[95px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">MALİYET TL</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[95px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">MALİYET EURO</th>
+                            <th class="p-2 border-r border-slate-300 text-center min-w-[75px] font-bold" style="background-color: #FFFF00 !important; color: #000000 !important;">EURO</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[85px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">PRICE</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[125px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">TOPLAM MALİYET TL (+%6)</th>
+                            <th class="p-2 border-r border-slate-300 text-right min-w-[125px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">TOPLAM MALİYET EUR (+%6)</th>
+                            <th class="p-2 text-right min-w-[115px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">ORDER TOPLAMI</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+                        <tr v-for="(r, idx) in budgetFilteredRows" :key="r.id"
+                            class="hover:bg-amber-500/5 transition font-medium"
+                            :class="idx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/60 dark:bg-slate-850'">
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 font-semibold text-slate-700 dark:text-slate-300">{{ r.cust_season }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 font-mono text-slate-600 dark:text-slate-400">{{ r.model_color }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-bold text-slate-900 dark:text-white">{{ r.style_no }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-semibold text-indigo-600 dark:text-indigo-400">{{ r.color_name }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 truncate max-w-[200px]" :title="r.fabric_name">{{ r.fabric_name }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-black text-slate-900 dark:text-white">{{ (r.qty || 0).toLocaleString('tr-TR') }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-black text-emerald-600 dark:text-emerald-400">{{ formatCurrencyVal(r.price, '€') }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.fb1_price) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center text-slate-500">{{ r.fb1_cm || '-' }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-bold text-slate-800 dark:text-slate-200">{{ formatNumber2Dec(r.fb1_total) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.fb2_price) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center text-slate-500">{{ r.fb2_gramaj || '-' }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-bold text-slate-800 dark:text-slate-200">{{ formatNumber2Dec(r.fb2_total) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-black text-blue-600 dark:text-blue-400">{{ formatNumber2Dec(r.kumas_toplam) }} ₺</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_fason) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_kesim) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_aks) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_etkol) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_logo) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_brit) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_lastik) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_dugme) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_citcit) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_diger) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_kargo) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_nakliye) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_kumas_extra) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_astar) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_dikme) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_ilik_dugme) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_citcit_cakim) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-bold text-slate-900 dark:text-white">{{ formatNumber2Dec(r.maliyet_tl) }} ₺</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-black text-amber-600 dark:text-amber-400">{{ formatCurrencyVal(r.maliyet_eur, '€') }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-bold text-slate-500">{{ formatNumber2Dec(r.eur_rate) }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-black text-emerald-600 dark:text-emerald-400">{{ formatCurrencyVal(r.price, '€') }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-bold text-slate-900 dark:text-white">{{ formatNumber2Dec(r.tot_maliyet_tl) }} ₺</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-black text-amber-600 dark:text-amber-400">{{ formatCurrencyVal(r.tot_maliyet_eur, '€') }}</td>
+                            <td class="p-2 text-right font-black text-emerald-600 dark:text-emerald-400">{{ formatCurrencyVal(r.order_toplam, '€') }}</td>
+                        </tr>
+                    </tbody>
+                    <!-- GENEL TOPLAM SATIRI -->
+                    <tfoot class="sticky bottom-0 z-10 bg-amber-100 dark:bg-slate-800 font-black text-slate-900 dark:text-white border-t-2 border-slate-400 shadow-inner">
+                        <tr class="h-10 text-[11px]">
+                            <td colspan="5" class="p-2.5 text-right border-r border-slate-300 dark:border-slate-700 tracking-wider">GENEL TOPLAM:</td>
+                            <td class="p-2.5 text-center border-r border-slate-300 dark:border-slate-700 text-xs font-black">{{ (budgetTotals.total_qty || 0).toLocaleString('tr-TR') }}</td>
+                            <td colspan="29" class="p-2 border-r border-slate-300 dark:border-slate-700 bg-amber-50/50 dark:bg-slate-850"></td>
+                            <td class="p-2.5 text-right border-r border-slate-300 dark:border-slate-700 font-black text-slate-900 dark:text-white">{{ formatNumber2Dec(budgetTotals.total_maliyet_tl) }} ₺</td>
+                            <td class="p-2.5 text-right border-r border-slate-300 dark:border-slate-700 font-black text-amber-700 dark:text-amber-400">{{ formatCurrencyVal(budgetTotals.total_maliyet_eur, '€') }}</td>
+                            <td class="p-2.5 text-right font-black text-emerald-700 dark:text-emerald-400">{{ formatCurrencyVal(budgetTotals.total_order, '€') }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20260910_1450"></script>
+<script src="/static/js/app.js?v=20260910_1600"></script>
 
 </body>
 </html>

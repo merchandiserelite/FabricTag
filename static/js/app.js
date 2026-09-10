@@ -1821,11 +1821,11 @@ createApp({
         };
 
         const kumasSiparisList = computed(() => {
-            const allStyles = styles.value || [];
+            const allStyles = (filteredStyles && filteredStyles.value ? filteredStyles.value : styles.value) || [];
             const filterMode = kumasSiparisStatusFilter.value;
             const search = (kumasSiparisSearch.value || '').toLowerCase().trim();
 
-            const filteredStyles = allStyles.filter(s => {
+            const targetStyles = allStyles.filter(s => {
                 if (isItemCancelled(s)) return false;
                 if (filterMode === 'planning_and_ordered') {
                     return isPlanningOrOrderedStatus(s.status);
@@ -1835,7 +1835,7 @@ createApp({
 
             const groupsMap = {};
 
-            filteredStyles.forEach(s => {
+            targetStyles.forEach(s => {
                 const modelName = (s.style_no || s.model_name || 'Bilinmeyen').trim();
                 const colorName = (s.color_name || s.color_code || '').trim();
 
@@ -4624,6 +4624,257 @@ createApp({
             license_expires_at: '2027-12-31',
             max_users: 20
         });
+
+        // ============================================================
+        // BÜTÇE GÖSTER & MALİYET ANALİZİ TABLOSU
+        // ============================================================
+        const budgetModalOpen = ref(false);
+        const budgetSearchQuery = ref('');
+        const budgetRows = ref([]);
+
+        const formatCurrencyVal = (val, symbol = '€') => {
+            if (val === null || val === undefined || val === '') return '-';
+            const n = parseFloat(val);
+            if (isNaN(n)) return '-';
+            return n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + symbol;
+        };
+
+        const formatNumber2Dec = (val) => {
+            if (val === null || val === undefined || val === '') return '-';
+            const n = parseFloat(val);
+            if (isNaN(n)) return '-';
+            if (n === 0) return '0';
+            return n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+
+        const openBudgetModal = () => {
+            try {
+                const targetList = (filteredStyles.value && filteredStyles.value.length > 0)
+                    ? filteredStyles.value
+                    : (styles.value || []);
+
+                if (!targetList || targetList.length === 0) {
+                    showToast('Görüntülenecek model bulunamadı.', 'warning');
+                    return;
+                }
+
+                budgetRows.value = targetList.map(s => {
+                    let costData = {};
+                    if (s.cost_data && typeof s.cost_data === 'object') {
+                        costData = s.cost_data;
+                    } else if (s.cost_data_json) {
+                        try {
+                            costData = JSON.parse(s.cost_data_json);
+                        } catch (e) {
+                            costData = {};
+                        }
+                    }
+
+                const rates = costData.exchangeRates || { EUR: 55.75, USD: 48.9, TL: 1.0 };
+                const eurRate = parseFloat(rates.EUR) || 55.75;
+                const fabrics = costData.fabrics || [];
+                const items = costData.items || [];
+
+                const getItemVal = (keywords) => {
+                    for (const it of items) {
+                        const n = (it.name || '').toLowerCase();
+                        if (keywords.some(k => n.includes(k.toLowerCase()))) {
+                            let v = it.total_tl;
+                            if (v === undefined || v === null || v === '') v = it.evaluated_price;
+                            if (v === undefined || v === null || v === '') v = it.price;
+                            const num = parseFloat(v);
+                            return isNaN(num) ? 0 : num;
+                        }
+                    }
+                    return 0;
+                };
+
+                const fb1 = fabrics[0] || {};
+                const fb1Price = parseFloat(fb1.price || s.fabric_price_1 || 0) || 0;
+                const fb1Meters = parseFloat(fb1.meters || s.unit_meters || 0) || 0;
+                const fb1Grams = parseFloat(fb1.grams || s.unit_grams || 0) || 0;
+                const fb1Cm = fb1.unit_type !== 'KG' ? Math.round(fb1Meters * 100) : fb1Grams;
+                const fb1Total = parseFloat(fb1.total_tl || 0) || 0;
+
+                const fb2 = fabrics[1] || {};
+                const fb2Price = parseFloat(fb2.price || s.fabric_price_2 || 0) || 0;
+                const fb2Meters = parseFloat(fb2.meters || s.unit_meters_2 || 0) || 0;
+                const fb2Grams = parseFloat(fb2.grams || s.unit_grams_2 || 0) || 0;
+                const fb2Gramaj = fb2Grams > 0 ? fb2Grams : Math.round(fb2Meters * 100);
+                const fb2Total = parseFloat(fb2.total_tl || 0) || 0;
+
+                const fb3 = fabrics[2] || {};
+                const fb3Price = parseFloat(fb3.price || 0) || 0;
+                const fb3Meters = parseFloat(fb3.meters || 0) || 0;
+                const fb3Grams = parseFloat(fb3.grams || 0) || 0;
+                const fb3Gramaj = fb3Grams > 0 ? fb3Grams : Math.round(fb3Meters * 100);
+                const fb3Total = parseFloat(fb3.total_tl || 0) || 0;
+
+                const kumasToplam = parseFloat(costData.totals?.toplam_kumas_tl || (fb1Total + fb2Total + fb3Total)) || 0;
+
+                const vFason = getItemVal(['fason', 'dikim']);
+                const vKesim = getItemVal(['kesim']);
+                const vAks = getItemVal(['aksesuar', 'aks']);
+                const vEtkol = getItemVal(['etiket', 'kol', 'etkol']);
+                const vLogo = getItemVal(['logo', 'baskı', 'nakış']);
+                const vBrit = getItemVal(['brit']);
+                const vLastik = getItemVal(['lastik']);
+                const vDugme = getItemVal(['düğme', 'fermuar']);
+                const vCitcit = getItemVal(['çıtçıt']);
+                const vDiger = getItemVal(['diğer', 'tasarım', 'kalıp']);
+                const vKargo = getItemVal(['kargo']);
+                const vNakliye = getItemVal(['nakliye']);
+                const vKumasExtra = getItemVal(['yıkama', 'taş']) || (fb1Total && !getItemVal(['yıkama', 'taş']) ? fb1Total : 0);
+                const vAstar = getItemVal(['astar', 'tela']);
+                const vDikme = getItemVal(['dikme', 'el dikişi']);
+                const vIlikDugme = getItemVal(['ilik', 'ilik-düğme']);
+                const vCitcitCakim = getItemVal(['çakım', 'çıtçıt çakım']);
+
+                const totals = costData.totals || {};
+                let maliyetTL = parseFloat(totals.maliyet_1_tl || totals.maliyet_2_tl || 0) || 0;
+                if (maliyetTL === 0 && (kumasToplam > 0 || vFason > 0)) {
+                    maliyetTL = Math.round((kumasToplam + vFason + vKesim + vAks + vEtkol + vKargo + vNakliye + vDiger) * 1.06 * 100) / 100;
+                }
+                const maliyetEUR = parseFloat(totals.maliyet_1_doviz || (eurRate > 0 ? Math.round((maliyetTL / eurRate) * 100) / 100 : 0)) || 0;
+                const price = parseFloat(totals.toplam_satis_doviz || s.unit_price || 0) || 0;
+                const qty = parseInt(s.total_quantity || 0) || 0;
+
+                const totMaliyetTL = Math.round(maliyetTL * qty * 100) / 100;
+                const totMaliyetEUR = Math.round(maliyetEUR * qty * 100) / 100;
+                const orderToplam = Math.round(price * qty * 100) / 100;
+
+                const colorCode = (s.color_code || '').toString().trim();
+                const colorName = (s.color_name || '').toString().trim();
+                const displayColor = (colorCode && colorName && !colorName.startsWith(colorCode)) ? `${colorCode} ${colorName}` : (colorName || colorCode);
+
+                return {
+                    id: s.id,
+                    cust_season: `${s.customer_name || s.brand || ''} ${s.season || ''}`.trim(),
+                    model_color: `${s.style_no || ''}-${colorCode || colorName}`,
+                    style_no: s.style_no || '',
+                    color_name: displayColor,
+                    fabric_name: s.fabric_article || s.fabric_type || '',
+                    qty: qty,
+                    price: price,
+                    fb1_price: fb1Price,
+                    fb1_cm: fb1Cm,
+                    fb1_total: fb1Total,
+                    fb2_price: fb2Price,
+                    fb2_gramaj: fb2Gramaj,
+                    fb2_total: fb2Total,
+                    fb3_price: fb3Price,
+                    fb3_gramaj: fb3Gramaj,
+                    fb3_total: fb3Total,
+                    kumas_toplam: kumasToplam,
+                    v_fason: vFason,
+                    v_kesim: vKesim,
+                    v_aks: vAks,
+                    v_etkol: vEtkol,
+                    v_logo: vLogo,
+                    v_brit: vBrit,
+                    v_lastik: vLastik,
+                    v_dugme: vDugme,
+                    v_citcit: vCitcit,
+                    v_diger: vDiger,
+                    v_kargo: vKargo,
+                    v_nakliye: vNakliye,
+                    v_kumas_extra: vKumasExtra,
+                    v_astar: vAstar,
+                    v_dikme: vDikme,
+                    v_ilik_dugme: vIlikDugme,
+                    v_citcit_cakim: vCitcitCakim,
+                    maliyet_tl: maliyetTL,
+                    maliyet_eur: maliyetEUR,
+                    eur_rate: eurRate,
+                    tot_maliyet_tl: totMaliyetTL,
+                    tot_maliyet_eur: totMaliyetEUR,
+                    order_toplam: orderToplam
+                };
+            });
+
+                budgetModalOpen.value = true;
+                budgetSearchQuery.value = '';
+                setTimeout(() => { refreshIcons(); }, 80);
+            } catch (err) {
+                console.error('[ERROR] openBudgetModal failed:', err);
+            }
+        };
+
+        const closeBudgetModal = () => {
+            budgetModalOpen.value = false;
+        };
+
+        const budgetFilteredRows = computed(() => {
+            const list = budgetRows.value || [];
+            const q = (budgetSearchQuery.value || '').toLowerCase().trim();
+            if (!q) return list;
+            return list.filter(r => {
+                return (r.style_no && r.style_no.toLowerCase().includes(q)) ||
+                       (r.color_name && r.color_name.toLowerCase().includes(q)) ||
+                       (r.fabric_name && r.fabric_name.toLowerCase().includes(q)) ||
+                       (r.cust_season && r.cust_season.toLowerCase().includes(q)) ||
+                       (r.model_color && r.model_color.toLowerCase().includes(q));
+            });
+        });
+
+        const budgetTotals = computed(() => {
+            const list = budgetFilteredRows.value || [];
+            let total_qty = 0;
+            let total_maliyet_tl = 0;
+            let total_maliyet_eur = 0;
+            let total_order = 0;
+            list.forEach(r => {
+                total_qty += r.qty || 0;
+                total_maliyet_tl += r.tot_maliyet_tl || 0;
+                total_maliyet_eur += r.tot_maliyet_eur || 0;
+                total_order += r.order_toplam || 0;
+            });
+            return {
+                total_qty,
+                total_maliyet_tl: Math.round(total_maliyet_tl * 100) / 100,
+                total_maliyet_eur: Math.round(total_maliyet_eur * 100) / 100,
+                total_order: Math.round(total_order * 100) / 100
+            };
+        });
+
+        const exportBudgetExcel = async () => {
+            try {
+                const styleIds = (budgetFilteredRows.value || []).map(r => r.id);
+                if (styleIds.length === 0) {
+                    showToast('Dışa aktarılacak model bulunamadı.', 'warning');
+                    return;
+                }
+
+                showToast('Bütçe Excel dosyası hazırlanıyor...', 'info');
+                const token = authToken.value;
+                const res = await fetch('/api/styles/export-budget-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({ style_ids: styleIds })
+                });
+
+                if (!res.ok) {
+                    throw new Error(`HTTP Hata: ${res.status}`);
+                }
+
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const dStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                a.download = `Butce_Tablosu_${dStr}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                showToast('Bütçe Excel dosyası başarıyla indirildi.', 'success');
+            } catch (err) {
+                alert('Excel indirme hatası: ' + err.message);
+            }
+        };
 
         const refreshIcons = () => {
             nextTick(() => {
@@ -7574,7 +7825,19 @@ createApp({
             getShippedVsCutPercent,
             getShippingStyleDiff,
             onShippingInputChange,
-            saveShippingRow
+            saveShippingRow,
+
+            // Bütçe Göster & Maliyet Tablosu
+            budgetModalOpen,
+            budgetSearchQuery,
+            budgetRows,
+            budgetFilteredRows,
+            budgetTotals,
+            openBudgetModal,
+            closeBudgetModal,
+            exportBudgetExcel,
+            formatCurrencyVal,
+            formatNumber2Dec
         };
 
 
