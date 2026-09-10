@@ -6080,16 +6080,17 @@ createApp({
             let qCode = cleanFabricField(fb.quality_code);
             let qName = cleanFabricField(fb.quality_name || fb.quality);
             let variant = cleanFabricField(fb.variant);
-            let color = cleanFabricField(fb.color);
+            let color = '';
             let en = cleanFabricField(fb.width || fb.en);
             let gramaj = cleanFabricField(fb.gramaj || fb.weight);
             let composition = cleanFabricField(fb.composition);
 
             // Eksikse kumaş deposunda fb.code veya qCode ile ara
             const searchCode = cleanFabricField(fb.code) || qCode;
+            let foundFab = null;
             if (searchCode && fabricsList.value && fabricsList.value.length > 0) {
                 const cleanCode = String(searchCode).trim().toUpperCase();
-                const foundFab = fabricsList.value.find(f => 
+                foundFab = fabricsList.value.find(f => 
                     String(f.internal_code || '').trim().toUpperCase() === cleanCode ||
                     String(f.code || '').trim().toUpperCase() === cleanCode ||
                     (f.quality_code && String(f.quality_code).trim().toUpperCase() === cleanCode)
@@ -6099,11 +6100,17 @@ createApp({
                     if (!qCode) qCode = cleanFabricField(foundFab.quality_code || foundFab.fabric_code);
                     if (!qName) qName = cleanFabricField(foundFab.quality_name || foundFab.fabric_name || foundFab.name);
                     if (!variant) variant = cleanFabricField(foundFab.design_code || foundFab.variant);
-                    if (!color) color = cleanFabricField(foundFab.color || foundFab.color_name);
+                    // Kumaş rengi FabricTag'den çekilir, FabricTag'de yoksa boş bırakılır
+                    color = cleanFabricField(foundFab.color || foundFab.color_name);
                     if (!en) en = cleanFabricField(foundFab.width || foundFab.en);
                     if (!gramaj) gramaj = cleanFabricField(foundFab.weight || foundFab.gramaj);
                     if (!composition) composition = cleanFabricField(foundFab.composition);
                 }
+            }
+
+            // Kumaş deposunda eşleşme yoksa fb.color varsa al (asla model rengi s.color_name değil)
+            if (!foundFab && !color) {
+                color = cleanFabricField(fb.color);
             }
 
             // Hala eksikse ve model yüklüyse model üzerinden tamamla
@@ -6116,7 +6123,8 @@ createApp({
                 if (!qCode) qCode = cleanFabricField(d.code);
                 if (!qName) qName = cleanFabricField(d.name || defD.quality || (isSecond ? s.fabric_type_2 : s.fabric_type));
                 if (!variant) variant = cleanFabricField(d.variant);
-                if (!color) color = cleanFabricField(d.color || s.color_name);
+                // Sadece kumaşa ait d.color alınabilir, model rengi ASLA eklenmez!
+                if (!color && !foundFab) color = cleanFabricField(d.color);
                 if (!en) en = cleanFabricField(d.width || d.en || (isSecond ? s.fabric_width_2 : s.fabric_width));
                 if (!gramaj) gramaj = cleanFabricField(defD.gramaj || (isSecond ? s.unit_grams_2 : s.unit_grams));
                 if (!composition) composition = cleanFabricField(defD.composition || (isSecond ? s.composition_2 : s.composition));
@@ -6215,6 +6223,9 @@ createApp({
             if (cellIndex === -1) return;
 
             let targetTr = event.shiftKey ? currentTr.previousElementSibling : currentTr.nextElementSibling;
+            while (targetTr && !targetTr.children[cellIndex]?.querySelector('input:not([disabled]), select:not([disabled])')) {
+                targetTr = event.shiftKey ? targetTr.previousElementSibling : targetTr.nextElementSibling;
+            }
             if (!targetTr) return;
 
             const targetTd = targetTr.children[cellIndex];
@@ -6225,7 +6236,9 @@ createApp({
                 event.preventDefault();
                 target.blur();
                 targetInput.focus();
-                if (typeof targetInput.select === 'function') targetInput.select();
+                if (typeof targetInput.select === 'function') {
+                    targetInput.select();
+                }
             }
         };
 
