@@ -1295,7 +1295,7 @@
 
                             <!-- KUMAŞ SİPARİŞ BUTONU -->
                             <button @click="openKumasSiparisModal"
-                                    class="h-9 px-3 rounded-xl border text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95 select-none"
+                                    class="h-9 px-3 rounded-xl btn-theme text-white text-xs font-bold flex items-center gap-1.5 transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
                                     title="Planlama ve Sipariş Alındı Aşamasındaki Kumaş Sipariş Listesi">
                                 <i data-lucide="shopping-bag" class="w-3.5 h-3.5"></i>
                                 <span>Kumaş Sipariş</span>
@@ -2946,13 +2946,6 @@
                                 </button>
                             </div>
 
-                            <!-- Kumaş Sipariş Butonu -->
-                            <button @click="openKumasSiparisModal"
-                                    class="px-3 py-1.5 rounded-xl border text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-                                    title="Planlama ve Sipariş Alındı Aşamasındaki Kumaş Sipariş Listesi">
-                                <i data-lucide="shopping-bag" class="w-3.5 h-3.5"></i>
-                                <span>Kumaş Sipariş Listesi</span>
-                            </button>
 
                             <!-- Arama Kutusu -->
                             <div class="w-full sm:w-72">
@@ -5062,53 +5055,11 @@
                                                        placeholder="Kumaş İç Kodu">
                                             </div>
 
-                                            <!-- 2. Satır: Kumaşçının adı / Kumaş kalitesi / Karışım / Gramaj bilgisi (Tam metin bitiminden / ile aralıksız, dibine kadar) -->
-                                            <div class="flex items-center text-[11px] font-medium flex-nowrap whitespace-nowrap"
-                                                 :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">
-                                                
-                                                <!-- Kumaşçının adı (Metin bitiminden hemen sonra /, max 12 harf, kesilme yok) -->
-                                                <input v-model="fb.supplier"
-                                                       type="text"
-                                                       maxlength="12"
-                                                       :style="{ width: (fb.supplier ? fb.supplier.length + 1.2 : 6.5) + 'ch' }"
-                                                       class="bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 hover:border-theme focus:border-theme outline-none text-[11px] font-semibold transition text-left shrink-0 p-0"
-                                                       :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'"
-                                                       :title="'Kumaşçı: ' + (fb.supplier || 'Yok')"
-                                                       placeholder="Kumaşçı">
-                                                
-                                                <span class="text-slate-400 font-bold select-none px-1 shrink-0">/</span>
-
-                                                <!-- Kumaş kalitesi (Metin bitiminden hemen sonra /, kesilme yok) -->
-                                                <input v-model="fb.quality"
-                                                       type="text"
-                                                       :style="{ width: (fb.quality ? fb.quality.length + 1.2 : 5) + 'ch' }"
-                                                       class="bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 hover:border-theme focus:border-theme outline-none text-[11px] font-semibold shrink-0 transition p-0"
-                                                       :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'"
-                                                       :title="'Kalite: ' + (fb.quality || 'Yok')"
-                                                       placeholder="Kalite">
-
-                                                <span class="text-slate-400 font-bold select-none px-1 shrink-0">/</span>
-
-                                                <!-- Karışım (Uluslararası standart kısaltmalarla, metin bitiminden hemen sonra /, kesilme yok) -->
-                                                <input v-model="fb.composition"
-                                                       type="text"
-                                                       :style="{ width: (fb.composition ? fb.composition.length + 1.2 : 6) + 'ch' }"
-                                                       class="bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 hover:border-theme focus:border-theme outline-none text-[11px] font-semibold shrink-0 transition p-0"
-                                                       :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'"
-                                                       :title="'Karışım: ' + (fb.composition || 'Yok')"
-                                                       placeholder="Karışım">
-
-                                                <span class="text-slate-400 font-bold select-none px-1 shrink-0">/</span>
-
-                                                <!-- Gramaj (Max 3 rakam, boşluksuz) -->
-                                                <input v-model="fb.gramaj"
-                                                       type="text"
-                                                       maxlength="3"
-                                                       :style="{ width: (fb.gramaj ? fb.gramaj.length + 0.5 : 3) + 'ch' }"
-                                                       class="bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 hover:border-theme focus:border-theme outline-none text-[11px] font-semibold shrink-0 text-center transition p-0"
-                                                       :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'"
-                                                       :title="'Gramaj: ' + (fb.gramaj || 'Yok')"
-                                                       placeholder="Gr">
+                                            <!-- 2. Satır: Kalite İsmi / Kalite Kodu / Varyant / Renk Bilgisi (Bilgisi olmayanlar gösterilmez, 'bilgisi yok' yazılmaz) -->
+                                            <div class="text-[11px] font-semibold truncate select-none leading-tight min-h-[16px]"
+                                                 :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'"
+                                                 :title="getCostFabricDisplay(fb)">
+                                                <span v-if="getCostFabricDisplay(fb)">{{ getCostFabricDisplay(fb) }}</span>
                                             </div>
                                         </td>
 
@@ -5881,8 +5832,15 @@
          class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col p-2 sm:p-4 overflow-hidden select-none">
         
         <!-- 1. ÜST BUTON VE KONTROL BARI (YAZDIRMA SIRASINDA GİZLENİR: no-print) -->
-        <div class="no-print print:!hidden w-full max-w-7xl mx-auto mb-3 px-4 py-2.5 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3"
+        <div class="no-print print:!hidden relative w-full max-w-7xl mx-auto mb-3 px-4 py-2.5 sm:pr-14 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3"
              :class="isDarkMode ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200 text-slate-900'">
+            
+            <!-- SAĞ ÜST KÖŞE KAPATMA BUTONU (ESC) -->
+            <button @click="kumasBilgiModalOpen = false"
+                    class="absolute top-2.5 sm:top-3 right-3 sm:right-4 p-1.5 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer z-20 flex items-center justify-center"
+                    title="Kapat (ESC)">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
             
             <div class="flex items-center gap-3 min-w-0">
                 <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-500 flex items-center justify-center shrink-0">
@@ -6014,10 +5972,6 @@
                     <span>{{ kumasBilgiOrientation === 'portrait' ? 'A4 Dikey Yazdır' : 'A4 Yatay Yazdır' }} / PDF</span>
                 </button>
 
-                <!-- KAPAT BUTONU -->
-                <button @click="kumasBilgiModalOpen = false" class="p-2 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer" title="Kapat">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
             </div>
 
         </div>
@@ -6391,8 +6345,15 @@
          class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col p-2 sm:p-4 overflow-hidden select-none">
 
         <!-- MODAL KONTROL ÇUBUĞU (BASKIDA GİZLENİR: no-print) -->
-        <div class="no-print w-full max-w-7xl mx-auto mb-3 px-4 py-2.5 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3"
+        <div class="no-print relative w-full max-w-7xl mx-auto mb-3 px-4 py-2.5 sm:pr-14 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3"
              :class="isDarkMode ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200 text-slate-900'">
+            
+            <!-- SAĞ ÜST KÖŞE KAPATMA BUTONU (ESC) -->
+            <button @click="carsafPrintModalOpen = false"
+                    class="absolute top-2.5 sm:top-3 right-3 sm:right-4 p-1.5 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer z-20 flex items-center justify-center"
+                    title="Kapat (ESC)">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
             
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-500 flex items-center justify-center">
@@ -6499,10 +6460,6 @@
                     <span>Yazdır / PDF</span>
                 </button>
 
-                <!-- Kapat Butonu -->
-                <button @click="carsafPrintModalOpen = false" class="p-2 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer" title="Kapat">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
             </div>
         </div>
 
@@ -6664,8 +6621,15 @@
          class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col p-2 sm:p-4 overflow-hidden select-none">
 
         <!-- MODAL KONTROL ÇUBUĞU (BASKIDA GİZLENİR: no-print) -->
-        <div class="no-print w-full max-w-7xl mx-auto mb-3 px-4 py-2.5 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3"
+        <div class="no-print relative w-full max-w-7xl mx-auto mb-3 px-4 py-2.5 sm:pr-14 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3"
              :class="isDarkMode ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200 text-slate-900'">
+            
+            <!-- SAĞ ÜST KÖŞE KAPATMA BUTONU (ESC) -->
+            <button @click="haftalikProgramModalOpen = false"
+                    class="absolute top-2.5 sm:top-3 right-3 sm:right-4 p-1.5 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer z-20 flex items-center justify-center"
+                    title="Kapat (ESC)">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
             
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 flex items-center justify-center">
@@ -6738,10 +6702,6 @@
                     <span>Yazdır / PDF</span>
                 </button>
 
-                <!-- Kapat Butonu -->
-                <button @click="haftalikProgramModalOpen = false" class="p-2 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer" title="Kapat">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
             </div>
         </div>
 
@@ -6899,16 +6859,16 @@
          id="kumas-siparis-print-modal"
          class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col p-2 sm:p-4 overflow-hidden select-none animate-fadeIn">
 
-        <!-- SAĞ ÜST KÖŞE KAPATMA BUTONU (ESC) -->
-        <button @click="closeKumasSiparisModal"
-                class="no-print absolute top-3 sm:top-4 right-3 sm:right-5 z-50 w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white bg-slate-800/90 hover:bg-rose-600 border border-slate-700 hover:border-rose-500 transition-all shadow-xl cursor-pointer active:scale-95"
-                title="Kapat (ESC)">
-            <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-
         <!-- MODAL KONTROL ÇUBUĞU (BASKIDA GİZLENİR: no-print) -->
-        <div class="no-print w-full max-w-6xl mx-auto mb-3 px-4 py-3 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3 shrink-0"
+        <div class="no-print relative w-full max-w-6xl mx-auto mb-3 px-4 py-3 sm:pr-14 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3 shrink-0"
              :class="isDarkMode ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200 text-slate-900'">
+            
+            <!-- SAĞ ÜST KÖŞE KAPATMA BUTONU (ESC) -->
+            <button @click="closeKumasSiparisModal"
+                    class="absolute top-2.5 sm:top-3 right-3 sm:right-4 p-1.5 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer z-20 flex items-center justify-center"
+                    title="Kapat (ESC)">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
             
             <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 flex items-center justify-center">
@@ -7291,7 +7251,7 @@
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20260909_1400"></script>
+<script src="/static/js/app.js?v=20260910_0900"></script>
 
 </body>
 </html>

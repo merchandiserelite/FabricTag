@@ -6070,6 +6070,53 @@ createApp({
             };
         };
 
+        const getCostFabricDisplay = (fb) => {
+            if (!fb) return '';
+            let qName = cleanFabricField(fb.quality_name);
+            let qCode = cleanFabricField(fb.quality_code);
+            let variant = cleanFabricField(fb.variant);
+            let color = cleanFabricField(fb.color);
+
+            // Eksikse kumaş deposunda fb.code ile ara
+            if ((!qName || !qCode || !variant || !color) && fb.code && fabricsList.value && fabricsList.value.length > 0) {
+                const cleanCode = String(fb.code).trim().toUpperCase();
+                const foundFab = fabricsList.value.find(f => 
+                    String(f.internal_code || '').trim().toUpperCase() === cleanCode ||
+                    String(f.code || '').trim().toUpperCase() === cleanCode
+                );
+                if (foundFab) {
+                    if (!qName) qName = cleanFabricField(foundFab.quality_name || foundFab.fabric_name || foundFab.name);
+                    if (!qCode) qCode = cleanFabricField(foundFab.quality_code || foundFab.fabric_code);
+                    if (!variant) variant = cleanFabricField(foundFab.design_code || foundFab.variant);
+                    if (!color) color = cleanFabricField(foundFab.color);
+                }
+            }
+
+            // Hala eksikse ve model yüklüyse model üzerinden tamamla
+            if ((!qName || !qCode || !variant || !color) && costStyle.value) {
+                const s = costStyle.value;
+                const isSecond = fb.title && (fb.title.includes('2') || fb.title.includes('İkinci'));
+                const d = extractFabricDetails(s, isSecond ? 2 : 1);
+                if (!qName) qName = cleanFabricField(d.name || (isSecond ? s.fabric_type_2 : s.fabric_type));
+                if (!qCode) qCode = cleanFabricField(d.code);
+                if (!variant) variant = cleanFabricField(d.variant);
+                if (!color) color = cleanFabricField(d.color);
+            }
+
+            // Eski kalite alanı temizse yedek olarak kullan
+            if (!qName && fb.quality) {
+                qName = cleanFabricField(fb.quality);
+            }
+
+            const parts = [];
+            if (qName) parts.push(qName);
+            if (qCode) parts.push(qCode);
+            if (variant) parts.push(variant);
+            if (color) parts.push(color);
+
+            return parts.join(' / ');
+        };
+
         // MALİYET PENCERESİ ENTER İLE BİR ALT SATIRIN AYNI SÜTUNUNA GEÇME
         const handleCostItemsKeydown = (event) => {
             if (event.key !== 'Enter' || event.ctrlKey || event.altKey) return;
@@ -6153,7 +6200,30 @@ createApp({
             const cleanQuery = String(fb.code).trim().toUpperCase();
             if (cleanQuery.length < 3) return;
 
-            // Loaded styles içinden girilen iç koda göre kumaş bilgilerini bul ve alttaki alanları güncelle
+            // 1. Önce FabricTag kumaş deposunda ara (en güncel kartela bilgisi)
+            if (fabricsList.value && fabricsList.value.length > 0) {
+                const foundFab = fabricsList.value.find(f => 
+                    String(f.internal_code || '').trim().toUpperCase() === cleanQuery ||
+                    String(f.code || '').trim().toUpperCase() === cleanQuery
+                );
+                if (foundFab) {
+                    fb.supplier = cleanFabricField(foundFab.company_name || foundFab.supplier || '').slice(0, 12);
+                    fb.quality_name = cleanFabricField(foundFab.quality_name || foundFab.fabric_name || foundFab.name);
+                    fb.quality_code = cleanFabricField(foundFab.quality_code || foundFab.fabric_code);
+                    fb.variant = cleanFabricField(foundFab.design_code || foundFab.variant);
+                    fb.color = cleanFabricField(foundFab.color);
+                    fb.quality = fb.quality_name || '';
+                    fb.composition = normalizeComposition(foundFab.composition || fb.composition);
+                    if (foundFab.weight) {
+                        const gm = String(foundFab.weight).match(/\d{2,3}/);
+                        if (gm) fb.gramaj = gm[0];
+                    }
+                    recalculateCost();
+                    return;
+                }
+            }
+
+            // 2. Loaded styles içinden girilen iç koda göre kumaş bilgilerini bul ve alttaki alanları güncelle
             if (styles.value && styles.value.length > 0) {
                 const found = styles.value.find(st => {
                     const art1 = String(st.fabric_article || '').toUpperCase();
@@ -6165,8 +6235,13 @@ createApp({
                     const isSecond = !String(found.fabric_article || '').toUpperCase().includes(cleanQuery) &&
                                       String(found.fabric_article_2 || '').toUpperCase().includes(cleanQuery);
                     const defD = parseFabricDetails(found, isSecond);
+                    const extD = extractFabricDetails(found, isSecond ? 2 : 1);
                     if (defD.supplier) fb.supplier = defD.supplier.slice(0, 12);
-                    fb.quality = defD.quality || '';
+                    fb.quality_name = cleanFabricField(extD.name || defD.quality);
+                    fb.quality_code = cleanFabricField(extD.code);
+                    fb.variant = cleanFabricField(extD.variant);
+                    fb.color = cleanFabricField(extD.color);
+                    fb.quality = fb.quality_name || defD.quality || '';
                     if (defD.composition) fb.composition = defD.composition;
                     if (defD.gramaj) fb.gramaj = defD.gramaj;
 
@@ -6231,8 +6306,14 @@ createApp({
                 // Sync & normalize fabric currencies and backfill missing detail fields
                 costForm.value.fabrics.forEach((fb, idx) => {
                     const defD = parseFabricDetails(style, idx === 1);
+                    const extD = extractFabricDetails(style, idx === 1 ? 2 : 1);
                     if (!fb.supplier) fb.supplier = defD.supplier;
                     if (fb.supplier && fb.supplier.length > 12) fb.supplier = fb.supplier.slice(0, 12).trim();
+
+                    if (!fb.quality_name) fb.quality_name = cleanFabricField(extD.name);
+                    if (!fb.quality_code) fb.quality_code = cleanFabricField(extD.code);
+                    if (!fb.variant) fb.variant = cleanFabricField(extD.variant);
+                    if (!fb.color) fb.color = cleanFabricField(extD.color);
 
                     // Aradaki kumaşçı ismini koddan çıkar
                     if (fb.code) {
@@ -6285,11 +6366,16 @@ createApp({
                 const initFabrics = [];
                 // Fabric 1
                 const d1 = parseFabricDetails(style, false);
+                const extD1 = extractFabricDetails(style, 1);
                 if (style.fabric_article || style.unit_meters || style.unit_grams || style.fabric_price_1) {
                     initFabrics.push({
                         title: 'Kumaş 1 (Ana Kumaş)',
                         code: d1.code,
                         supplier: d1.supplier,
+                        quality_name: cleanFabricField(extD1.name),
+                        quality_code: cleanFabricField(extD1.code),
+                        variant: cleanFabricField(extD1.variant),
+                        color: cleanFabricField(extD1.color),
                         quality: d1.quality,
                         gramaj: d1.gramaj,
                         composition: d1.composition,
@@ -6306,6 +6392,10 @@ createApp({
                         title: 'Kumaş 1 (Ana Kumaş)',
                         code: d1.code,
                         supplier: d1.supplier,
+                        quality_name: cleanFabricField(extD1.name),
+                        quality_code: cleanFabricField(extD1.code),
+                        variant: cleanFabricField(extD1.variant),
+                        color: cleanFabricField(extD1.color),
                         quality: d1.quality,
                         gramaj: d1.gramaj,
                         composition: d1.composition,
@@ -6322,10 +6412,15 @@ createApp({
                 // Fabric 2
                 if (style.fabric_article_2 || style.unit_meters_2 || style.unit_grams_2 || style.fabric_price_2) {
                     const d2 = parseFabricDetails(style, true);
+                    const extD2 = extractFabricDetails(style, 2);
                     initFabrics.push({
                         title: 'Kumaş 2 (İkinci Kumaş)',
                         code: d2.code,
                         supplier: d2.supplier,
+                        quality_name: cleanFabricField(extD2.name),
+                        quality_code: cleanFabricField(extD2.code),
+                        variant: cleanFabricField(extD2.variant),
+                        color: cleanFabricField(extD2.color),
                         quality: d2.quality,
                         gramaj: d2.gramaj,
                         composition: d2.composition,
@@ -7262,6 +7357,7 @@ createApp({
             handleCostFabricKeydown,
             applyLiveRatesToCost,
             onFabricCodeChange,
+            getCostFabricDisplay,
             availableFabricCodes,
             draggedCostStyle,
             dropTargetCostStyle,
