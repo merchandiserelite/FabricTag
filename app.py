@@ -1670,13 +1670,14 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
     ws = wb.active
     ws.title = "Bütçe Tablosu"
     ws.views.sheetView[0].showGridLines = True
-    ws.freeze_panes = "G2"
+    ws.freeze_panes = "H2"
 
     first_cust = (styles[0].get("customer_name") or styles[0].get("brand") or "ÜRETİM") if styles else "ÜRETİM"
     first_season = (styles[0].get("season") or "") if styles else ""
     title_col_1 = f"{first_cust}  {first_season} SMS".strip() or "BÜTÇE LİSTESİ"
 
     headers = [
+        "Görsel",
         title_col_1,
         "Model - Renk",
         "Style",
@@ -1753,6 +1754,7 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
 
     font_normal = Font(name="Segoe UI", size=9, color="1E293B")
     font_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
+    font_muted = Font(name="Segoe UI", size=8.5, color="94A3B8")
     align_center = Alignment(horizontal="center", vertical="center")
     align_left = Alignment(horizontal="left", vertical="center")
     align_right = Alignment(horizontal="right", vertical="center")
@@ -1762,11 +1764,66 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
     total_maliyet_tl_sum = 0.0
     total_maliyet_eur_sum = 0.0
     total_order_sum = 0.0
+    img_buffers = []
 
     for idx, s in enumerate(styles, start=2):
         last_row = idx
-        ws.row_dimensions[idx].height = 22
+        ws.row_dimensions[idx].height = 75
         current_fill = fill_white if (idx % 2 == 0) else fill_zebra
+
+        # 0. Görsel (A Sütunu / Column 1)
+        img_url = s.get("image_url") or s.get("image_url_2")
+        cell_a = ws.cell(row=idx, column=1)
+        cell_a.fill = current_fill
+        cell_a.border = cell_border
+        img_added = False
+        if img_url:
+            try:
+                pil_img = None
+                if img_url.startswith("data:image"):
+                    hdr, enc = img_url.split(",", 1)
+                    pil_img = PILImage.open(io.BytesIO(base64.b64decode(enc)))
+                elif img_url.startswith("/uploads/"):
+                    p = UPLOADS_DIR / img_url.replace("/uploads/", "").lstrip("/")
+                    if p.exists():
+                        pil_img = PILImage.open(p)
+                elif img_url.startswith("/data/uploads/") or img_url.startswith("data/uploads/"):
+                    rel_path = img_url.lstrip("/")
+                    p = Path(rel_path)
+                    if p.exists():
+                        pil_img = PILImage.open(p)
+                elif Path(img_url).exists():
+                    pil_img = PILImage.open(img_url)
+                    
+                if pil_img:
+                    pil_img = pil_img.convert("RGB")
+                    pil_img.thumbnail((105, 88), PILImage.Resampling.LANCZOS)
+                    buf = io.BytesIO()
+                    pil_img.save(buf, format="JPEG", quality=88)
+                    buf.seek(0)
+                    img_buffers.append(buf)
+                    xl_img = OpenpyxlImage(buf)
+                    img_w = pil_img.width
+                    img_h = pil_img.height
+
+                    # Hücrede En ve Boydan Ortalama (Horizontal & Vertical Center)
+                    col_w_px = 140
+                    row_h_px = 100
+                    x_off_px = max(0, (col_w_px - img_w) // 2)
+                    y_off_px = max(0, (row_h_px - img_h) // 2)
+
+                    marker = AnchorMarker(col=0, colOff=pixels_to_EMU(x_off_px), row=idx - 1, rowOff=pixels_to_EMU(y_off_px))
+                    size = XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h))
+                    xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
+                    ws.add_image(xl_img)
+                    img_added = True
+            except Exception:
+                pass
+                
+        if not img_added:
+            cell_a.value = "[Görsel Yok]"
+            cell_a.alignment = align_center
+            cell_a.font = font_muted
 
         cost_data = {}
         if s.get("cost_data_json"):
@@ -1918,29 +1975,30 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
             order_toplam if order_toplam else 0
         ]
 
-        for col_idx, val in enumerate(row_data, 1):
-            c_cell = ws.cell(row=idx, column=col_idx, value=val)
+        # Populate columns 2 to 46 (column 1 is Görsel)
+        for c_idx_offset, val in enumerate(row_data, start=2):
+            c_cell = ws.cell(row=idx, column=c_idx_offset, value=val)
             c_cell.fill = current_fill
             c_cell.border = cell_border
             c_cell.font = font_normal
 
-            if col_idx in [1, 2, 5]:
+            if c_idx_offset in [2, 3, 6]:
                 c_cell.alignment = align_left
-            elif col_idx in [3, 4]:
+            elif c_idx_offset in [4, 5]:
                 c_cell.alignment = align_center
                 c_cell.font = font_bold
-            elif col_idx == 6:  # QUANTITY
+            elif c_idx_offset == 7:  # QUANTITY
                 c_cell.alignment = align_center
                 c_cell.font = font_bold
                 c_cell.number_format = "#,##0"
-            elif col_idx in [7, 42]:  # PRICE
+            elif c_idx_offset in [8, 43]:  # PRICE
                 c_cell.alignment = align_right
                 c_cell.font = font_bold
                 c_cell.number_format = "#,##0.00"
-            elif col_idx in [41]:  # EUR RATE
+            elif c_idx_offset in [42]:  # EUR RATE
                 c_cell.alignment = align_center
                 c_cell.number_format = "#,##0.00"
-            elif col_idx in [39, 40, 43, 44, 45]:  # Maliyet and Totals
+            elif c_idx_offset in [40, 41, 44, 45, 46]:  # Maliyet and Totals
                 c_cell.alignment = align_right
                 c_cell.font = font_bold
                 c_cell.number_format = "#,##0.00"
@@ -1950,54 +2008,56 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
 
     # Summary Total Row
     tot_row = last_row + 1
-    ws.row_dimensions[tot_row].height = 26
+    ws.row_dimensions[tot_row].height = 28
     tot_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
     tot_font = Font(name="Segoe UI", size=10, bold=True, color="000000")
     
-    cell_tot_lbl = ws.cell(row=tot_row, column=5, value="GENEL TOPLAM")
+    ws.merge_cells(start_row=tot_row, start_column=1, end_row=tot_row, end_column=6)
+    cell_tot_lbl = ws.cell(row=tot_row, column=1, value="GENEL TOPLAM:")
     cell_tot_lbl.font = tot_font
     cell_tot_lbl.alignment = Alignment(horizontal="right", vertical="center")
     
-    c_tot_qty = ws.cell(row=tot_row, column=6, value=total_qty)
+    c_tot_qty = ws.cell(row=tot_row, column=7, value=total_qty)
     c_tot_qty.font = tot_font
     c_tot_qty.alignment = align_center
     c_tot_qty.number_format = "#,##0"
     
-    c_tot_tl = ws.cell(row=tot_row, column=43, value=total_maliyet_tl_sum)
+    c_tot_tl = ws.cell(row=tot_row, column=44, value=total_maliyet_tl_sum)
     c_tot_tl.font = tot_font
     c_tot_tl.alignment = align_right
     c_tot_tl.number_format = "#,##0.00"
     
-    c_tot_eur = ws.cell(row=tot_row, column=44, value=total_maliyet_eur_sum)
+    c_tot_eur = ws.cell(row=tot_row, column=45, value=total_maliyet_eur_sum)
     c_tot_eur.font = tot_font
     c_tot_eur.alignment = align_right
     c_tot_eur.number_format = "#,##0.00"
     
-    c_tot_order = ws.cell(row=tot_row, column=45, value=total_order_sum)
+    c_tot_order = ws.cell(row=tot_row, column=46, value=total_order_sum)
     c_tot_order.font = tot_font
     c_tot_order.alignment = align_right
     c_tot_order.number_format = "#,##0.00"
     
-    for c_i in range(1, 46):
+    for c_i in range(1, 47):
         c_tot = ws.cell(row=tot_row, column=c_i)
         c_tot.fill = tot_fill
         c_tot.border = Border(top=Side(style="medium", color="475569"), bottom=Side(style="double", color="475569"))
 
-    ws.column_dimensions["A"].width = 24
-    ws.column_dimensions["B"].width = 20
-    ws.column_dimensions["C"].width = 14
-    ws.column_dimensions["D"].width = 14
-    ws.column_dimensions["E"].width = 30
-    ws.column_dimensions["F"].width = 14
-    ws.column_dimensions["G"].width = 14
-    ws.column_dimensions["N"].width = 15
-    ws.column_dimensions["AM"].width = 15
-    ws.column_dimensions["AN"].width = 15
-    ws.column_dimensions["AO"].width = 12
-    ws.column_dimensions["AP"].width = 14
-    ws.column_dimensions["AQ"].width = 20
-    ws.column_dimensions["AR"].width = 20
-    ws.column_dimensions["AS"].width = 18
+    ws.column_dimensions["A"].width = 18  # Görsel
+    ws.column_dimensions["B"].width = 24  # Müşteri / Sezon
+    ws.column_dimensions["C"].width = 20  # Model - Renk
+    ws.column_dimensions["D"].width = 14  # Style
+    ws.column_dimensions["E"].width = 16  # Renk
+    ws.column_dimensions["F"].width = 30  # Kumaş
+    ws.column_dimensions["G"].width = 14  # Quantity
+    ws.column_dimensions["H"].width = 14  # Price
+    ws.column_dimensions["O"].width = 16  # Kumaş Toplam
+    ws.column_dimensions["AN"].width = 16 # Maliyet TL
+    ws.column_dimensions["AO"].width = 16 # Maliyet EUR
+    ws.column_dimensions["AP"].width = 12 # Euro Kuru
+    ws.column_dimensions["AQ"].width = 14 # Price
+    ws.column_dimensions["AR"].width = 20 # Toplam Maliyet TL +6%
+    ws.column_dimensions["AS"].width = 20 # Toplam Maliyet EUR +6%
+    ws.column_dimensions["AT"].width = 18 # Order Toplamı
 
     buf = io.BytesIO()
     wb.save(buf)

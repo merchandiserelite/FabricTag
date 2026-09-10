@@ -22,6 +22,37 @@ createApp({
         const sidebarOpen = ref(false);
         const isMobile = ref(window.innerWidth < 768);
 
+        // Toast Notification System
+        const showToast = (message, type = 'info') => {
+            try {
+                const containerId = 'texflow-toast-container';
+                let container = document.getElementById(containerId);
+                if (!container) {
+                    container = document.createElement('div');
+                    container.id = containerId;
+                    container.className = 'fixed bottom-5 right-5 z-[99999] flex flex-col gap-2 pointer-events-none';
+                    document.body.appendChild(container);
+                }
+                const toast = document.createElement('div');
+                const bgClass = type === 'success' ? 'bg-emerald-600 text-white shadow-emerald-500/20' :
+                                type === 'error' ? 'bg-red-600 text-white shadow-red-500/20' :
+                                type === 'warning' ? 'bg-amber-600 text-white shadow-amber-500/20' :
+                                'bg-slate-900 text-white border border-slate-700 shadow-black/40';
+                toast.className = `px-4 py-2.5 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-2 pointer-events-auto transition-all duration-300 transform translate-y-4 opacity-0 ${bgClass}`;
+                toast.innerHTML = `<span>${message}</span>`;
+                container.appendChild(toast);
+                requestAnimationFrame(() => {
+                    toast.classList.remove('translate-y-4', 'opacity-0');
+                });
+                setTimeout(() => {
+                    toast.classList.add('opacity-0', 'translate-y-2');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3500);
+            } catch (e) {
+                console.log('[Toast]', type, message);
+            }
+        };
+
         // Zoom / Scale State (%100 Default)
         const zoomLevel = ref(parseInt(localStorage.getItem('texflow_zoom_level') || '100'));
         const changeZoom = (delta) => {
@@ -4749,6 +4780,9 @@ createApp({
 
                 return {
                     id: s.id,
+                    image_url: s.image_url || s.image_url_2 || '',
+                    po_number: s.po_number || '',
+                    customer_name: s.customer_name || s.brand || '',
                     cust_season: `${s.customer_name || s.brand || ''} ${s.season || ''}`.trim(),
                     model_color: `${s.style_no || ''}-${colorCode || colorName}`,
                     style_no: s.style_no || '',
@@ -4846,18 +4880,19 @@ createApp({
                 }
 
                 showToast('Bütçe Excel dosyası hazırlanıyor...', 'info');
-                const token = authToken.value;
+                const tokenVal = token.value || localStorage.getItem('texflow_token') || '';
                 const res = await fetch('/api/styles/export-budget-excel', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                        ...(tokenVal ? { 'Authorization': `Bearer ${tokenVal}` } : {})
                     },
                     body: JSON.stringify({ style_ids: styleIds })
                 });
 
                 if (!res.ok) {
-                    throw new Error(`HTTP Hata: ${res.status}`);
+                    const errText = await res.text().catch(() => '');
+                    throw new Error(`HTTP ${res.status}: ${errText || 'Bilinmeyen hata'}`);
                 }
 
                 const blob = await res.blob();
@@ -4872,7 +4907,8 @@ createApp({
                 window.URL.revokeObjectURL(url);
                 showToast('Bütçe Excel dosyası başarıyla indirildi.', 'success');
             } catch (err) {
-                alert('Excel indirme hatası: ' + err.message);
+                console.error('Excel indirme hatası:', err);
+                showToast('Excel indirme hatası: ' + err.message, 'error');
             }
         };
 
@@ -7837,7 +7873,8 @@ createApp({
             closeBudgetModal,
             exportBudgetExcel,
             formatCurrencyVal,
-            formatNumber2Dec
+            formatNumber2Dec,
+            showToast
         };
 
 
