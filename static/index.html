@@ -399,9 +399,9 @@
             .print-header-light-yellow,
             th.print-header-light-yellow,
             .print-header-light-yellow th {
-                background-color: #FEF9C3 !important;
-                background: #FEF9C3 !important;
-                box-shadow: inset 0 0 0 1000px #FEF9C3 !important;
+                background-color: #FFFF00 !important;
+                background: #FFFF00 !important;
+                box-shadow: inset 0 0 0 1000px #FFFF00 !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
@@ -1301,11 +1301,11 @@
                                 <span>Kumaş Sipariş</span>
                             </button>
 
-                            <!-- YAZDIR BUTONU -->
+                            <!-- ÖZET YAZDIR BUTONU -->
                             <button @click="openCarsafPrintModal"
                                     class="h-9 px-3 rounded-xl btn-theme text-white text-xs font-bold flex items-center justify-center transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
                                     title="İmalat formatında yazdır">
-                                <span>Yazdır</span>
+                                <span>Özet Yazdır</span>
                             </button>
 
                             <!-- SÜZGEÇLERİ TEMİZLE -->
@@ -1879,9 +1879,9 @@
 
                                             <!-- 6. Renk / Varyant (ELLE DEĞİŞTİRİLEBİLİR & SEÇENEK LİSTELİ) -->
                                             <template v-else-if="col.key === 'color_name'">
-                                                <input :value="item.color_name"
+                                                <input :value="getDisplayColor(item)"
                                                        list="dl-colors"
-                                                       @change="updateCellWithLog(item.id, 'color_name', $event.target.value, 'Renk/Varyant Güncellendi')"
+                                                       @change="updateColorCell(item, $event.target.value)"
                                                        class="w-full bg-transparent border-0 outline-none focus:bg-slate-500/10 hover:bg-slate-500/5 px-1 py-0.5 rounded text-xs font-medium transition truncate"
                                                        :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'"
                                                        placeholder="Renk / Varyant...">
@@ -6479,15 +6479,15 @@
                 
                 <table id="carsaf-print-table" class="w-full text-left border-collapse print-table" style="table-layout: fixed; width: 100%;">
                     
-                    <!-- BAŞLIK SATIRI (AÇIK SARI RENK İLE DOLDURULMUŞ: #FEF9C3, YÜZDE ESASLI SÜTUNLAR) -->
+                    <!-- BAŞLIK SATIRI (AÇIK SARI RENK İLE DOLDURULMUŞ: #FFFF00, YÜZDE ESASLI SÜTUNLAR) -->
                     <thead>
                         <tr class="print-header-light-yellow border-b-2 border-slate-500"
-                            style="background-color: #FEF9C3 !important; box-shadow: inset 0 0 0 1000px #FEF9C3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
+                            style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
                             
                             <!-- 1. SOL ÜST MÜŞTERİ / SEZON / İMALAT BAŞLIĞI (GÖRSEL SÜTUNU) -->
                             <th class="print-header-light-yellow p-1.5 text-center border-r border-slate-400 font-black text-xs uppercase tracking-wider relative select-none"
                                 :style="{ width: carsafPrintColWidths.image + '%' }"
-                                style="background-color: #FEF9C3 !important; box-shadow: inset 0 0 0 1000px #FEF9C3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
+                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
                                 <input v-model="carsafPrintTitle"
                                        placeholder="MÜŞTERİ SEZON İMALAT..."
                                        class="w-full text-center bg-transparent border-0 outline-none font-black text-xs text-black uppercase tracking-wider focus:ring-0">
@@ -6497,7 +6497,7 @@
                             <!-- 2. STYLE -->
                             <th class="print-header-light-yellow p-1.5 text-center border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none whitespace-nowrap"
                                 :style="{ width: carsafPrintColWidths.style + '%' }"
-                                style="background-color: #FEF9C3 !important; box-shadow: inset 0 0 0 1000px #FEF9C3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
+                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
                                 <span>STYLE</span>
                                 <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('style', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
                             </th>
@@ -6505,7 +6505,7 @@
                             <!-- 3. RENK -->
                             <th class="print-header-light-yellow p-1.5 text-left border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none"
                                 :style="{ width: carsafPrintColWidths.color + '%' }"
-                                style="background-color: #FEF9C3 !important; box-shadow: inset 0 0 0 1000px #FEF9C3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
+                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
                                 <span>RENK</span>
                                 <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('color', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
                             </th>
@@ -6513,7 +6513,7 @@
                             <!-- 4. KUMAŞ -->
                             <th class="print-header-light-yellow p-1.5 text-left border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none"
                                 :style="{ width: carsafPrintColWidths.fabric + '%' }"
-                                style="background-color: #FEF9C3 !important; box-shadow: inset 0 0 0 1000px #FEF9C3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
+                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
                                 <span>KUMAŞ</span>
                                 <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('fabric', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
                             </th>
@@ -6521,7 +6521,7 @@
                             <!-- 5. ADET -->
                             <th class="print-header-light-yellow p-1.5 text-center border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none whitespace-nowrap"
                                 :style="{ width: carsafPrintColWidths.quantity + '%' }"
-                                style="background-color: #FEF9C3 !important; box-shadow: inset 0 0 0 1000px #FEF9C3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
+                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
                                 <span>ADET</span>
                                 <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('quantity', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
                             </th>
@@ -6529,7 +6529,7 @@
                             <!-- 6. PRICE -->
                             <th class="print-header-light-yellow p-1.5 text-center border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none whitespace-nowrap"
                                 :style="{ width: carsafPrintColWidths.price + '%' }"
-                                style="background-color: #FEF9C3 !important; box-shadow: inset 0 0 0 1000px #FEF9C3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
+                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
                                 <span>PRICE</span>
                                 <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('price', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
                             </th>
@@ -6537,13 +6537,13 @@
                             <!-- 7. NOTLAR -->
                             <th class="print-header-light-yellow p-1.5 text-left font-extrabold text-xs uppercase tracking-wider relative select-none whitespace-nowrap"
                                 :style="{ width: carsafPrintColWidths.notes + '%' }"
-                                style="background-color: #FEF9C3 !important; box-shadow: inset 0 0 0 1000px #FEF9C3 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
+                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
                                 <span>NOTLAR</span>
                             </th>
 
                             <!-- SATIR SİL BUTONU BAŞLIĞI (BASKIDA GİZLENİR) -->
                             <th class="print-header-light-yellow w-6 p-0.5 text-center no-print"
-                                style="background-color: #FEF9C3 !important; box-shadow: inset 0 0 0 1000px #FEF9C3 !important;"></th>
+                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important;"></th>
                         </tr>
                     </thead>
 
@@ -7253,7 +7253,7 @@
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20260910_1000"></script>
+<script src="/static/js/app.js?v=20260910_1450"></script>
 
 </body>
 </html>

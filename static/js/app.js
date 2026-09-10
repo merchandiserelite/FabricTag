@@ -4547,7 +4547,7 @@ createApp({
                     image_url: s.image_url || '',
                     image_url_2: s.image_url_2 || '',
                     style_no: s.style_no || '',
-                    color_name: s.color_name || '',
+                    color_name: getDisplayColor(s),
                     fabric_article: s.fabric_article || '',
                     total_quantity: s.total_quantity || 0,
                     price_formatted: priceStr,
@@ -4831,6 +4831,26 @@ createApp({
             } finally {
                 refreshIcons();
             }
+        };
+
+        const getDisplayColor = (item) => {
+            if (!item) return '';
+            const code = (item.color_code || '').toString().trim();
+            const name = (item.color_name || '').toString().trim();
+            if (code && name) {
+                if (name.toLowerCase().startsWith(code.toLowerCase())) {
+                    return name;
+                }
+                return `${code} ${name}`;
+            }
+            return name || code || '';
+        };
+
+        const updateColorCell = async (item, val) => {
+            if (!item) return;
+            const newVal = (val || '').trim();
+            item.color_name = newVal;
+            await updateCellWithLog(item.id, 'color_name', newVal, 'Renk/Varyant Güncellendi');
         };
 
         // Navigation
@@ -7292,6 +7312,8 @@ createApp({
 
             updateSingleSizeInline,
             updateCellWithLog,
+            getDisplayColor,
+            updateColorCell,
             updateUnitMeters,
             updateUnitGrams,
             updateFabricWastage,

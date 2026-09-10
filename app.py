@@ -25,6 +25,9 @@ import base64
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.drawing.image import Image as OpenpyxlImage
+from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+from openpyxl.drawing.xdr import XDRPositiveSize2D
+from openpyxl.utils.units import pixels_to_EMU
 from openpyxl.utils import get_column_letter
 from PIL import Image as PILImage
 from fastapi.middleware.cors import CORSMiddleware
@@ -1115,13 +1118,14 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
     
     if style_ids and len(style_ids) > 0:
         placeholders = ",".join("?" for _ in style_ids)
+        order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
         sql = f"""
         SELECT s.*, 
                o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
         FROM styles s
         JOIN orders o ON s.order_id = o.id
         WHERE s.company_id = ? AND s.id IN ({placeholders})
-        ORDER BY s.id DESC
+        ORDER BY {order_by_clause}
         """
         params = [company_id] + style_ids
     else:
@@ -1131,7 +1135,7 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
         FROM styles s
         JOIN orders o ON s.order_id = o.id
         WHERE s.company_id = ?
-        ORDER BY s.id DESC
+        ORDER BY o.id DESC, s.id ASC
         """
         params = [company_id]
         
@@ -1185,17 +1189,20 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
                 fl_by_style[sid] = dict(fl)
 
     # FabricTag detaylarını entegre et
+    ft_map = {}
     try:
         ft_conn = FabricTagConnector.get_connection()
         if ft_conn:
             ft_c = ft_conn.cursor()
-            for sid, fl_dict in fl_by_style.items():
-                if fl_dict.get("fabrictag_id"):
-                    ft_c.execute("SELECT width, weight FROM fabrics WHERE id = ?", (fl_dict["fabrictag_id"],))
-                    ft_row = ft_c.fetchone()
-                    if ft_row:
-                        fl_dict["ft_width"] = ft_row["width"]
-                        fl_dict["ft_weight"] = ft_row["weight"]
+            ft_c.execute("SELECT id, internal_code, company_name, quality_name, quality_code, design_code, color, width, weight, composition FROM fabrics")
+            for f_row in ft_c.fetchall():
+                f_d = dict(f_row)
+                if f_d.get("id"):
+                    ft_map[str(f_d["id"])] = f_d
+                if f_d.get("internal_code"):
+                    ft_map[f_d["internal_code"].upper()] = f_d
+                if f_d.get("quality_code"):
+                    ft_map[f_d["quality_code"].upper()] = f_d
             ft_conn.close()
     except Exception:
         pass
@@ -1228,14 +1235,16 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
     col_idx_amount = len(headers) + 1
     headers.append("Toplam Tutar")
     
-    # Kumaş Bilgileri Sütunları
+    # Kumaş Bilgileri Sütunları (FabricTag Kumaş Deposu)
     headers.extend([
-        "Kumaş / Kalite Adı",
-        "Kumaş Kodu",
-        "Karışım / Kompozisyon",
-        "Kumaş Tedarikçisi",
-        "En (cm)",
-        "Gramaj (g/m²)",
+        "Kumaşçı",
+        "Kalite Kodu",
+        "Kalite Adı",
+        "Varyant",
+        "Renk",
+        "Karışım",
+        "Ağırlık",
+        "En",
         "Sipariş Kumaş (M/KG)",
         "Gelen Kumaş (M/KG)",
         "Kumaş Durumu / Termin"
@@ -1243,8 +1252,6 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
     
     col_idx_ordered_fabric = headers.index("Sipariş Kumaş (M/KG)") + 1
     col_idx_received_fabric = headers.index("Gelen Kumaş (M/KG)") + 1
-    col_idx_width = headers.index("En (cm)") + 1
-    col_idx_weight = headers.index("Gramaj (g/m²)") + 1
     
     # Diğer Sütunlar
     headers.extend([
@@ -1323,14 +1330,54 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
         price = s.get("unit_price") or 0
         tot_amt = (price or 0) * (qty or 0)
         
-        # Kumaş Bilgileri (styles tablosu ve fabric_links harmanlanır)
+        # Kumaş Bilgileri (FabricTag ve stiller tablosu harmanlanır)
         fl = fl_by_style.get(s["id"], {})
-        fabric_article_val = s.get("fabric_article") or fl.get("fabric_name") or ""
-        fabric_code_val = fl.get("fabric_code") or s.get("fabric_type") or ""
-        fabric_comp_val = s.get("fabric_composition") or fl.get("composition") or ""
-        fabric_supplier_val = fl.get("supplier") or ""
-        fabric_width_val = s.get("fabric_width") or fl.get("ft_width") or ""
-        fabric_weight_val = s.get("fabric_weight") or fl.get("ft_weight") or ""
+        f_meta = None
+        if fl.get("fabrictag_id") and str(fl["fabrictag_id"]) in ft_map:
+            f_meta = ft_map[str(fl["fabrictag_id"])]
+        if not f_meta:
+            raw_art = str(s.get("fabric_article") or s.get("fabric_type") or "")
+            m_elt = re.search(r'ELT\d+', raw_art, re.IGNORECASE)
+            if m_elt and m_elt.group(0).upper() in ft_map:
+                f_meta = ft_map[m_elt.group(0).upper()]
+        if not f_meta and fl.get("fabric_code") and fl["fabric_code"].upper() in ft_map:
+            f_meta = ft_map[fl["fabric_code"].upper()]
+
+        def clean_field(val):
+            if not val:
+                return ""
+            sv = str(val).strip()
+            if sv.upper() in ["KODSUZ", "YOK", "NONE", "NULL", "-", "—", "İSİMSİZ", "ISIMSIZ", "TANIMSIZ", "BİLGİSİ YOK", "BILGISI YOK", "BİLGİ YOK", "BILGI YOK", "BELİRTİLMEDİ", "BELIRTILMEDI"]:
+                return ""
+            return sv
+
+        def clean_weight(val):
+            v = clean_field(val)
+            if not v:
+                return ""
+            v_num = re.sub(r'^(gr|gramaj|weight)[:\s]*', '', v, flags=re.I).strip()
+            if v_num.isdigit():
+                return f"{v_num} gr"
+            return v
+
+        def clean_width(val):
+            v = clean_field(val)
+            if not v:
+                return ""
+            v_num = re.sub(r'^(en|genişlik|width)[:\s]*', '', v, flags=re.I).strip()
+            if v_num.isdigit():
+                return f"{v_num} cm"
+            return v
+
+        fabric_supplier_val = clean_field(f_meta.get("company_name") if f_meta else (fl.get("supplier") or s.get("fabric_company_1") or ""))
+        fabric_qcode_val = clean_field(f_meta.get("quality_code") if f_meta else (fl.get("fabric_code") or s.get("fabric_quality_code_1") or ""))
+        fabric_qname_val = clean_field(f_meta.get("quality_name") if f_meta else (fl.get("fabric_name") or s.get("fabric_quality_name_1") or s.get("fabric_article") or ""))
+        fabric_variant_val = clean_field(f_meta.get("design_code") if f_meta else (s.get("fabric_variant_1") or ""))
+        fabric_color_val = clean_field(f_meta.get("color") if f_meta else (s.get("fabric_color_1") or ""))
+        fabric_comp_val = clean_field(f_meta.get("composition") if f_meta else (fl.get("composition") or s.get("fabric_composition") or ""))
+        fabric_weight_val = clean_weight(f_meta.get("weight") if f_meta else (s.get("fabric_weight") or fl.get("ft_weight") or ""))
+        fabric_width_val = clean_width(f_meta.get("width") if f_meta else (s.get("fabric_width") or fl.get("ft_width") or ""))
+
         fabric_ordered_m = s.get("fabric_ordered_meters") or 0.0
         fabric_received_m = s.get("fabric_received_meters") or 0.0
         fabric_status_val = s.get("fabric_order_status") or fl.get("status") or ""
@@ -1363,9 +1410,20 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
                     buf.seek(0)
                     img_buffers.append(buf)
                     xl_img = OpenpyxlImage(buf)
-                    xl_img.width = pil_img.width
-                    xl_img.height = pil_img.height
-                    ws.add_image(xl_img, f"A{idx}")
+                    img_w = pil_img.width
+                    img_h = pil_img.height
+
+                    # Hücrede En ve Boydan Ortalama (Horizontal & Vertical Center)
+                    # Sütun A genişliği: 18 karakter (~140px), Satır yüksekliği: 75pt (~100px)
+                    col_w_px = 140
+                    row_h_px = 100
+                    x_off_px = max(0, (col_w_px - img_w) // 2)
+                    y_off_px = max(0, (row_h_px - img_h) // 2)
+
+                    marker = AnchorMarker(col=0, colOff=pixels_to_EMU(x_off_px), row=idx - 1, rowOff=pixels_to_EMU(y_off_px))
+                    size = XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h))
+                    xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
+                    ws.add_image(xl_img)
                     img_added = True
             except Exception:
                 pass
@@ -1414,17 +1472,15 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
         c_amt.number_format = "#,##0.00"
         c_amt.font = font_bold
         
-        # 4. Kumaş Bilgileri Sütunları
-        ws.cell(row=idx, column=headers.index("Kumaş / Kalite Adı") + 1, value=fabric_article_val).alignment = align_left_wrap
-        ws.cell(row=idx, column=headers.index("Kumaş Kodu") + 1, value=fabric_code_val).alignment = align_center
-        ws.cell(row=idx, column=headers.index("Karışım / Kompozisyon") + 1, value=fabric_comp_val).alignment = align_left_wrap
-        ws.cell(row=idx, column=headers.index("Kumaş Tedarikçisi") + 1, value=fabric_supplier_val).alignment = align_left
-        
-        c_w = ws.cell(row=idx, column=col_idx_width, value=fabric_width_val)
-        c_w.alignment = align_center
-        
-        c_g = ws.cell(row=idx, column=col_idx_weight, value=fabric_weight_val)
-        c_g.alignment = align_center
+        # 4. Kumaş Bilgileri Sütunları (Kumaşçı, Kalite Kodu, Kalite Adı, Varyant, Renk, Karışım, Ağırlık, En)
+        ws.cell(row=idx, column=headers.index("Kumaşçı") + 1, value=fabric_supplier_val).alignment = align_left
+        ws.cell(row=idx, column=headers.index("Kalite Kodu") + 1, value=fabric_qcode_val).alignment = align_center
+        ws.cell(row=idx, column=headers.index("Kalite Adı") + 1, value=fabric_qname_val).alignment = align_left_wrap
+        ws.cell(row=idx, column=headers.index("Varyant") + 1, value=fabric_variant_val).alignment = align_center
+        ws.cell(row=idx, column=headers.index("Renk") + 1, value=fabric_color_val).alignment = align_center
+        ws.cell(row=idx, column=headers.index("Karışım") + 1, value=fabric_comp_val).alignment = align_left_wrap
+        ws.cell(row=idx, column=headers.index("Ağırlık") + 1, value=fabric_weight_val).alignment = align_center
+        ws.cell(row=idx, column=headers.index("En") + 1, value=fabric_width_val).alignment = align_center
         
         # Kumaş Metrajları (TÜM RAKAMLAR ORTALI)
         c_ord_f = ws.cell(row=idx, column=col_idx_ordered_fabric, value=fabric_ordered_m if fabric_ordered_m else None)
@@ -2234,7 +2290,7 @@ def api_confirm_import(req: ConfirmImportRequest, user: Dict[str, Any] = Depends
             po_num = str(item.get("po_number") or f"PO-{datetime.now().strftime('%Y%m%d')}").strip()
             po_groups.setdefault(po_num, []).append(item)
 
-        for po_num, items_list in po_groups.items():
+        for po_num, items_list in reversed(list(po_groups.items())):
             first_item = items_list[0]
             cust_name = first_item.get("customer_name") or "Müşteri"
             brand = first_item.get("brand") or "Marka"
@@ -2268,7 +2324,11 @@ def api_confirm_import(req: ConfirmImportRequest, user: Dict[str, Any] = Depends
                 article = it.get("fabric_article") or ""
                 ftype = it.get("fabric_type") or ""
                 color_code = str(it.get("color_code") or "").strip()
-                color_name = str(it.get("color_name") or "").strip()
+                raw_color_name = str(it.get("color_name") or "").strip()
+                if color_code and not raw_color_name.startswith(color_code):
+                    color_name = f"{color_code} {raw_color_name}".strip()
+                else:
+                    color_name = raw_color_name or color_code
                 price = float(it.get("unit_price") or 0.0)
                 
                 sizes_dict = it.get("size_distribution") or {}
