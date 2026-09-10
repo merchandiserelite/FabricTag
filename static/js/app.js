@@ -4778,6 +4778,39 @@ createApp({
                 const colorName = (s.color_name || '').toString().trim();
                 const displayColor = (colorCode && colorName && !colorName.startsWith(colorCode)) ? `${colorCode} ${colorName}` : (colorName || colorCode);
 
+                const cleanKumasVal = (v) => {
+                    if (!v) return '';
+                    const sv = String(v).trim();
+                    if (/^ELT\d+$/i.test(sv)) return '';
+                    const up = sv.toUpperCase();
+                    if (['KODSUZ', 'YOK', 'NONE', 'NULL', '-', '—', 'İSİMSİZ', 'ISIMSIZ', 'TANIMSIZ', 'BİLGİSİ YOK', 'BILGISI YOK', 'BİLGİ YOK', 'BILGI YOK', 'BELİRTİLMEDİ', 'BELIRTILMEDI'].includes(up)) return '';
+                    return sv;
+                };
+
+                let kumasci = cleanKumasVal(s.fabric_company_1);
+                let kaliteAdi = cleanKumasVal(s.fabric_quality_name_1);
+                let kaliteKodu = cleanKumasVal(s.fabric_quality_code_1);
+                let varyant = cleanKumasVal(s.fabric_variant_1);
+                let kumasRenk = cleanKumasVal(s.fabric_color_1) || displayColor;
+
+                if (!kumasci && !kaliteAdi && !kaliteKodu) {
+                    let raw = (s.fabric_article || s.fabric_type || '').trim();
+                    raw = raw.replace(/\bELT\d+\b\s*[-–—:]*\s*/gi, '').trim();
+                    const parts = raw.split(' - ').map(p => p.trim()).filter(Boolean);
+                    if (parts.length >= 2) {
+                        kumasci = cleanKumasVal(parts[0]);
+                        const rest = parts[1];
+                        if (rest.includes('(') && rest.includes(')')) {
+                            kaliteAdi = cleanKumasVal(rest.split('(')[0].trim());
+                            kaliteKodu = cleanKumasVal(rest.split('(')[1].split(')')[0].trim());
+                        } else {
+                            kaliteAdi = cleanKumasVal(rest);
+                        }
+                    } else if (parts.length === 1) {
+                        kumasci = cleanKumasVal(parts[0]);
+                    }
+                }
+
                 return {
                     id: s.id,
                     image_url: s.image_url || s.image_url_2 || '',
@@ -4788,6 +4821,11 @@ createApp({
                     style_no: s.style_no || '',
                     color_name: displayColor,
                     fabric_name: s.fabric_article || s.fabric_type || '',
+                    kumasci: kumasci || '',
+                    kalite_adi: kaliteAdi || '',
+                    kalite_kodu: kaliteKodu || '',
+                    varyant: varyant || '',
+                    kumas_renk: kumasRenk || '',
                     qty: qty,
                     price: price,
                     fb1_price: fb1Price,
@@ -4846,6 +4884,11 @@ createApp({
                 return (r.style_no && r.style_no.toLowerCase().includes(q)) ||
                        (r.color_name && r.color_name.toLowerCase().includes(q)) ||
                        (r.fabric_name && r.fabric_name.toLowerCase().includes(q)) ||
+                       (r.kumasci && r.kumasci.toLowerCase().includes(q)) ||
+                       (r.kalite_adi && r.kalite_adi.toLowerCase().includes(q)) ||
+                       (r.kalite_kodu && r.kalite_kodu.toLowerCase().includes(q)) ||
+                       (r.varyant && r.varyant.toLowerCase().includes(q)) ||
+                       (r.kumas_renk && r.kumas_renk.toLowerCase().includes(q)) ||
                        (r.cust_season && r.cust_season.toLowerCase().includes(q)) ||
                        (r.model_color && r.model_color.toLowerCase().includes(q));
             });

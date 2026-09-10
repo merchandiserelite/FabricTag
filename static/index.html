@@ -7332,9 +7332,12 @@
                             <th class="p-2 border-r border-slate-300 text-center min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">GÖRSEL</th>
                             <th class="p-2 border-r border-slate-300 text-left min-w-[140px]" style="background-color: #FFFF00 !important; color: #000000 !important;">MÜŞTERİ / SEZON</th>
                             <th class="p-2 border-r border-slate-300 text-left min-w-[120px]" style="background-color: #FFFF00 !important; color: #000000 !important;">MODEL - RENK</th>
-                            <th class="p-2 border-r border-slate-300 text-center min-w-[100px]" style="background-color: #FFFF00 !important; color: #000000 !important;">STYLE</th>
                             <th class="p-2 border-r border-slate-300 text-center min-w-[90px]" style="background-color: #FFFF00 !important; color: #000000 !important;">RENK</th>
-                            <th class="p-2 border-r border-slate-300 text-left min-w-[180px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ</th>
+                            <th class="p-2 border-r border-slate-300 text-left min-w-[130px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞÇI</th>
+                            <th class="p-2 border-r border-slate-300 text-left min-w-[130px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KALİTE ADI</th>
+                            <th class="p-2 border-r border-slate-300 text-center min-w-[90px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KALİTE KODU</th>
+                            <th class="p-2 border-r border-slate-300 text-center min-w-[80px]" style="background-color: #FFFF00 !important; color: #000000 !important;">VARYANT</th>
+                            <th class="p-2 border-r border-slate-300 text-center min-w-[90px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ RENGİ</th>
                             <th class="p-2 border-r border-slate-300 text-center min-w-[90px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">QUANTITY</th>
                             <th class="p-2 border-r border-slate-300 text-right min-w-[85px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">PRICE</th>
                             <th class="p-2 border-r border-slate-300 text-right min-w-[85px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ 1 FİYAT</th>
@@ -7379,15 +7382,18 @@
                                 <div class="w-10 h-10 mx-auto rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center cursor-pointer hover:scale-105 transition"
                                      @click="r.image_url ? openCuttingZoom(r) : null"
                                      :title="r.image_url ? 'Büyütmek için tıklayın' : 'Görsel yok'">
-                                    <img v-if="r.image_url" :src="r.image_url" :alt="r.style_no" class="w-full h-full object-cover">
+                                    <img v-if="r.image_url" :src="r.image_url" :alt="r.model_color" class="w-full h-full object-cover">
                                     <span v-else class="text-[9px] text-slate-400 font-bold">Görsel Yok</span>
                                 </div>
                             </td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 font-semibold text-slate-700 dark:text-slate-300">{{ r.cust_season }}</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 font-mono text-slate-600 dark:text-slate-400">{{ r.model_color }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-bold text-slate-900 dark:text-white">{{ r.style_no }}</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-semibold text-indigo-600 dark:text-indigo-400">{{ r.color_name }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 truncate max-w-[200px]" :title="r.fabric_name">{{ r.fabric_name }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300 truncate max-w-[150px]" :title="r.kumasci">{{ r.kumasci }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300 truncate max-w-[140px]" :title="r.kalite_adi">{{ r.kalite_adi }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-mono text-slate-600 dark:text-slate-400">{{ r.kalite_kodu }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center text-slate-600 dark:text-slate-400">{{ r.varyant }}</td>
+                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-medium text-slate-700 dark:text-slate-300">{{ r.kumas_renk }}</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-black text-slate-900 dark:text-white">{{ (r.qty || 0).toLocaleString('tr-TR') }}</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-black text-emerald-600 dark:text-emerald-400">{{ formatCurrencyVal(r.price, '€') }}</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.fb1_price) }}</td>
@@ -7426,7 +7432,7 @@
                     <!-- GENEL TOPLAM SATIRI -->
                     <tfoot class="sticky bottom-0 z-10 bg-amber-100 dark:bg-slate-800 font-black text-slate-900 dark:text-white border-t-2 border-slate-400 shadow-inner">
                         <tr class="h-10 text-[11px]">
-                            <td colspan="6" class="p-2.5 text-right border-r border-slate-300 dark:border-slate-700 tracking-wider">GENEL TOPLAM:</td>
+                            <td colspan="9" class="p-2.5 text-right border-r border-slate-300 dark:border-slate-700 tracking-wider">GENEL TOPLAM:</td>
                             <td class="p-2.5 text-center border-r border-slate-300 dark:border-slate-700 text-xs font-black">{{ (budgetTotals.total_qty || 0).toLocaleString('tr-TR') }}</td>
                             <td colspan="29" class="p-2 border-r border-slate-300 dark:border-slate-700 bg-amber-50/50 dark:bg-slate-850"></td>
                             <td class="p-2.5 text-right border-r border-slate-300 dark:border-slate-700 font-black text-slate-900 dark:text-white">{{ formatNumber2Dec(budgetTotals.total_maliyet_tl) }} ₺</td>
@@ -7441,7 +7447,7 @@
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20260910_1635"></script>
+<script src="/static/js/app.js?v=20260910_1700"></script>
 
 </body>
 </html>

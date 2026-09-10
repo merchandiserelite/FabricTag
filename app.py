@@ -1611,7 +1611,7 @@ def api_export_styles_excel_get(ids: Optional[str] = Query(None), authorization:
     if authorization:
         t = authorization.replace("Bearer ", "").strip()
         user = get_current_user(t)
-    company_id = user.get("company_id") if user else 1
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
     
     style_ids = None
     if ids:
@@ -1628,7 +1628,7 @@ def api_export_styles_excel_post(req: ExportExcelRequest, authorization: Optiona
     if authorization:
         t = authorization.replace("Bearer ", "").strip()
         user = get_current_user(t)
-    company_id = user.get("company_id") if user else 1
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
     
     return generate_styles_excel_workbook(req.style_ids, company_id)
 
@@ -1639,6 +1639,9 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
     conn = get_db()
     c = conn.cursor()
     
+    # Safe company_id fallback
+    cid = company_id if company_id is not None else 1
+
     if style_ids and len(style_ids) > 0:
         placeholders = ",".join("?" for _ in style_ids)
         order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
@@ -1647,42 +1650,75 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
                o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
         FROM styles s
         JOIN orders o ON s.order_id = o.id
-        WHERE s.company_id = ? AND s.id IN ({placeholders})
+        WHERE (s.company_id = ? OR s.company_id IS NULL) AND s.id IN ({placeholders})
         ORDER BY {order_by_clause}
         """
-        params = [company_id] + style_ids
+        params = [cid] + style_ids
     else:
         sql = """
         SELECT s.*, 
                o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
         FROM styles s
         JOIN orders o ON s.order_id = o.id
-        WHERE s.company_id = ?
+        WHERE (s.company_id = ? OR s.company_id IS NULL)
         ORDER BY o.id DESC, s.id ASC
         """
-        params = [company_id]
+        params = [cid]
         
     c.execute(sql, tuple(params))
     styles = [dict(r) for r in c.fetchall()]
+
+    all_style_ids = [s["id"] for s in styles]
+    fl_by_style = {}
+    if all_style_ids:
+        pl_ids = ",".join("?" for _ in all_style_ids)
+        c.execute(f"SELECT * FROM fabric_links WHERE style_id IN ({pl_ids}) ORDER BY id ASC", tuple(all_style_ids))
+        for fl in c.fetchall():
+            sid = fl["style_id"]
+            if sid not in fl_by_style:
+                fl_by_style[sid] = dict(fl)
     conn.close()
+
+    # FabricTag global cache
+    ft_map = {}
+    try:
+        ft_conn = FabricTagConnector.get_connection()
+        if ft_conn:
+            ft_c = ft_conn.cursor()
+            ft_c.execute("SELECT id, internal_code, company_name, quality_name, quality_code, design_code, color FROM fabrics")
+            for f_row in ft_c.fetchall():
+                f_d = dict(f_row)
+                if f_d.get("id"):
+                    ft_map[str(f_d["id"])] = f_d
+                if f_d.get("internal_code"):
+                    ft_map[f_d["internal_code"].upper()] = f_d
+                if f_d.get("quality_code"):
+                    ft_map[f_d["quality_code"].upper()] = f_d
+            ft_conn.close()
+    except Exception:
+        pass
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Bütçe Tablosu"
     ws.views.sheetView[0].showGridLines = True
-    ws.freeze_panes = "H2"
+    ws.freeze_panes = "K2"
 
     first_cust = (styles[0].get("customer_name") or styles[0].get("brand") or "ÜRETİM") if styles else "ÜRETİM"
     first_season = (styles[0].get("season") or "") if styles else ""
     title_col_1 = f"{first_cust}  {first_season} SMS".strip() or "BÜTÇE LİSTESİ"
 
+    # Headers: Style removed, Kumaş expanded into Kumaşçı, Kalite Adı, Kalite Kodu, Varyant, Renk (49 columns total)
     headers = [
         "Görsel",
         title_col_1,
         "Model - Renk",
-        "Style",
         "Renk",
-        "Kumaş",
+        "Kumaşçı",
+        "Kalite Adı",
+        "Kalite Kodu",
+        "Varyant",
+        "Kumaş Rengi",
         "QUANTITY",
         "PRICE ",
         "KUMAŞ 1  FİYAT",
@@ -1924,15 +1960,67 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
         color_code = str(s.get("color_code") or "").strip()
         color_name = str(s.get("color_name") or "").strip()
         model_color = f"{style_no}-{color_code or color_name}"
-        fabric_name = str(s.get("fabric_article") or s.get("fabric_type") or "")
         cust_season = f"{s.get('customer_name') or ''} {s.get('season') or ''}".strip()
+        display_color = (f"{color_code} {color_name}".strip()) if (color_code and color_name and not color_name.startswith(color_code)) else (color_name or color_code)
+
+        # Resolve Fabric Details (Kumaşçı, Kalite Adı, Kalite Kodu, Varyant, Kumaş Rengi)
+        fl = fl_by_style.get(s["id"], {})
+        f_meta = None
+        if fl.get("fabrictag_id") and str(fl["fabrictag_id"]) in ft_map:
+            f_meta = ft_map[str(fl["fabrictag_id"])]
+        if not f_meta:
+            raw_art = str(s.get("fabric_article") or s.get("fabric_type") or "")
+            m_elt = re.search(r'ELT\d+', raw_art, re.IGNORECASE)
+            if m_elt and m_elt.group(0).upper() in ft_map:
+                f_meta = ft_map[m_elt.group(0).upper()]
+
+        def clean_kumas_val(v):
+            if not v: return ""
+            sv = str(v).strip()
+            if re.match(r'^ELT\d+$', sv, re.IGNORECASE):
+                return ""
+            if sv.upper() in ["KODSUZ", "YOK", "NONE", "NULL", "-", "—", "İSİMSİZ", "ISIMSIZ", "TANIMSIZ", "BİLGİSİ YOK", "BILGISI YOK", "BİLGİ YOK", "BILGI YOK", "BELİRTİLMEDİ", "BELIRTILMEDI"]:
+                return ""
+            return sv
+
+        kumasci = ""
+        kalite_adi = ""
+        kalite_kodu = ""
+        varyant = ""
+        kumas_renk = ""
+
+        if f_meta:
+            kumasci = clean_kumas_val(f_meta.get("company_name"))
+            kalite_adi = clean_kumas_val(f_meta.get("quality_name"))
+            kalite_kodu = clean_kumas_val(f_meta.get("quality_code"))
+            varyant = clean_kumas_val(f_meta.get("design_code"))
+            kumas_renk = clean_kumas_val(f_meta.get("color") or display_color)
+        else:
+            raw = str(s.get("fabric_article") or s.get("fabric_type") or "")
+            raw = re.sub(r'\bELT\d+\b\s*[-–—:]*\s*', '', raw, flags=re.IGNORECASE).strip()
+            parts = [p.strip() for p in raw.split(" - ") if p.strip()]
+            if len(parts) >= 2:
+                kumasci = clean_kumas_val(parts[0])
+                rest = parts[1]
+                if "(" in rest and ")" in rest:
+                    kalite_adi = clean_kumas_val(rest.split("(")[0].strip())
+                    kalite_kodu = clean_kumas_val(rest.split("(")[1].split(")")[0].strip())
+                else:
+                    kalite_adi = clean_kumas_val(rest)
+            elif len(parts) == 1:
+                kumasci = clean_kumas_val(parts[0])
+            varyant = clean_kumas_val(s.get("fabric_variant_1"))
+            kumas_renk = clean_kumas_val(display_color)
 
         row_data = [
             cust_season,
             model_color,
-            style_no,
-            color_code or color_name,
-            fabric_name,
+            display_color,
+            kumasci,
+            kalite_adi,
+            kalite_kodu,
+            varyant,
+            kumas_renk,
             qty if qty else None,
             price if price else None,
             fb1_price if fb1_price else 0,
@@ -1975,30 +2063,30 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
             order_toplam if order_toplam else 0
         ]
 
-        # Populate columns 2 to 46 (column 1 is Görsel)
+        # Populate columns 2 to 49 (column 1 is Görsel)
         for c_idx_offset, val in enumerate(row_data, start=2):
             c_cell = ws.cell(row=idx, column=c_idx_offset, value=val)
             c_cell.fill = current_fill
             c_cell.border = cell_border
             c_cell.font = font_normal
 
-            if c_idx_offset in [2, 3, 6]:
+            if c_idx_offset in [2, 3, 5, 6]:
                 c_cell.alignment = align_left
-            elif c_idx_offset in [4, 5]:
+            elif c_idx_offset in [4, 7, 8, 9]:
                 c_cell.alignment = align_center
                 c_cell.font = font_bold
-            elif c_idx_offset == 7:  # QUANTITY
+            elif c_idx_offset == 10:  # QUANTITY
                 c_cell.alignment = align_center
                 c_cell.font = font_bold
                 c_cell.number_format = "#,##0"
-            elif c_idx_offset in [8, 43]:  # PRICE
+            elif c_idx_offset in [11, 46]:  # PRICE
                 c_cell.alignment = align_right
                 c_cell.font = font_bold
                 c_cell.number_format = "#,##0.00"
-            elif c_idx_offset in [42]:  # EUR RATE
+            elif c_idx_offset in [45]:  # EUR RATE
                 c_cell.alignment = align_center
                 c_cell.number_format = "#,##0.00"
-            elif c_idx_offset in [40, 41, 44, 45, 46]:  # Maliyet and Totals
+            elif c_idx_offset in [43, 44, 47, 48, 49]:  # Maliyet and Totals
                 c_cell.alignment = align_right
                 c_cell.font = font_bold
                 c_cell.number_format = "#,##0.00"
@@ -2012,32 +2100,32 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
     tot_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
     tot_font = Font(name="Segoe UI", size=10, bold=True, color="000000")
     
-    ws.merge_cells(start_row=tot_row, start_column=1, end_row=tot_row, end_column=6)
+    ws.merge_cells(start_row=tot_row, start_column=1, end_row=tot_row, end_column=9)
     cell_tot_lbl = ws.cell(row=tot_row, column=1, value="GENEL TOPLAM:")
     cell_tot_lbl.font = tot_font
     cell_tot_lbl.alignment = Alignment(horizontal="right", vertical="center")
     
-    c_tot_qty = ws.cell(row=tot_row, column=7, value=total_qty)
+    c_tot_qty = ws.cell(row=tot_row, column=10, value=total_qty)
     c_tot_qty.font = tot_font
     c_tot_qty.alignment = align_center
     c_tot_qty.number_format = "#,##0"
     
-    c_tot_tl = ws.cell(row=tot_row, column=44, value=total_maliyet_tl_sum)
+    c_tot_tl = ws.cell(row=tot_row, column=47, value=total_maliyet_tl_sum)
     c_tot_tl.font = tot_font
     c_tot_tl.alignment = align_right
     c_tot_tl.number_format = "#,##0.00"
     
-    c_tot_eur = ws.cell(row=tot_row, column=45, value=total_maliyet_eur_sum)
+    c_tot_eur = ws.cell(row=tot_row, column=48, value=total_maliyet_eur_sum)
     c_tot_eur.font = tot_font
     c_tot_eur.alignment = align_right
     c_tot_eur.number_format = "#,##0.00"
     
-    c_tot_order = ws.cell(row=tot_row, column=46, value=total_order_sum)
+    c_tot_order = ws.cell(row=tot_row, column=49, value=total_order_sum)
     c_tot_order.font = tot_font
     c_tot_order.alignment = align_right
     c_tot_order.number_format = "#,##0.00"
     
-    for c_i in range(1, 47):
+    for c_i in range(1, 50):
         c_tot = ws.cell(row=tot_row, column=c_i)
         c_tot.fill = tot_fill
         c_tot.border = Border(top=Side(style="medium", color="475569"), bottom=Side(style="double", color="475569"))
@@ -2045,19 +2133,22 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
     ws.column_dimensions["A"].width = 18  # Görsel
     ws.column_dimensions["B"].width = 24  # Müşteri / Sezon
     ws.column_dimensions["C"].width = 20  # Model - Renk
-    ws.column_dimensions["D"].width = 14  # Style
-    ws.column_dimensions["E"].width = 16  # Renk
-    ws.column_dimensions["F"].width = 30  # Kumaş
-    ws.column_dimensions["G"].width = 14  # Quantity
-    ws.column_dimensions["H"].width = 14  # Price
-    ws.column_dimensions["O"].width = 16  # Kumaş Toplam
-    ws.column_dimensions["AN"].width = 16 # Maliyet TL
-    ws.column_dimensions["AO"].width = 16 # Maliyet EUR
-    ws.column_dimensions["AP"].width = 12 # Euro Kuru
-    ws.column_dimensions["AQ"].width = 14 # Price
-    ws.column_dimensions["AR"].width = 20 # Toplam Maliyet TL +6%
-    ws.column_dimensions["AS"].width = 20 # Toplam Maliyet EUR +6%
-    ws.column_dimensions["AT"].width = 18 # Order Toplamı
+    ws.column_dimensions["D"].width = 16  # Renk
+    ws.column_dimensions["E"].width = 22  # Kumaşçı
+    ws.column_dimensions["F"].width = 22  # Kalite Adı
+    ws.column_dimensions["G"].width = 16  # Kalite Kodu
+    ws.column_dimensions["H"].width = 16  # Varyant
+    ws.column_dimensions["I"].width = 18  # Kumaş Rengi
+    ws.column_dimensions["J"].width = 14  # Quantity
+    ws.column_dimensions["K"].width = 14  # Price
+    ws.column_dimensions["R"].width = 16  # Kumaş Toplam
+    ws.column_dimensions["AQ"].width = 16 # Maliyet TL
+    ws.column_dimensions["AR"].width = 16 # Maliyet EUR
+    ws.column_dimensions["AS"].width = 12 # Euro Kuru
+    ws.column_dimensions["AT"].width = 14 # Price
+    ws.column_dimensions["AU"].width = 20 # Toplam Maliyet TL +6%
+    ws.column_dimensions["AV"].width = 20 # Toplam Maliyet EUR +6%
+    ws.column_dimensions["AW"].width = 18 # Order Toplamı
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -2076,7 +2167,7 @@ def api_export_budget_excel_get(ids: Optional[str] = Query(None), authorization:
     if authorization:
         t = authorization.replace("Bearer ", "").strip()
         user = get_current_user(t)
-    company_id = user.get("company_id") if user else 1
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
     
     style_ids = None
     if ids:
@@ -2093,7 +2184,7 @@ def api_export_budget_excel_post(req: ExportExcelRequest, authorization: Optiona
     if authorization:
         t = authorization.replace("Bearer ", "").strip()
         user = get_current_user(t)
-    company_id = user.get("company_id") if user else 1
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
     
     return generate_budget_excel_workbook(req.style_ids, company_id)
 
