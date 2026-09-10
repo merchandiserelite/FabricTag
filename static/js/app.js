@@ -1484,19 +1484,9 @@ createApp({
             }
 
             // Case 2: Birim Gramaj girilmişse (KG)
+            // Formül: Adet * yüzde fazlası * birim gramaj / 1000 (Kumaş 1 ve Kumaş 2 için)
             if (uGrams > 0) {
-                const widthRaw = slot === 2 ? (item.fabrictag_width_2 || item.fabric_width_2) : (item.fabrictag_width || item.fabric_width);
-                const weightRaw = slot === 2 ? (item.fabrictag_weight_2 || item.fabric_weight_2) : (item.fabrictag_weight || item.fabric_weight);
-
-                const ftWeight = parseFloat(extractCleanDimension(weightRaw)) || 0;
-                const ftWidth = parseFloat(extractCleanDimension(widthRaw)) || 0;
-
-                let totalKg = 0;
-                if (ftWeight > 0 && ftWidth > 0) {
-                    totalKg = (totalQty * uGrams * wasteMultiplier * ftWeight * ftWidth) / 10000000000;
-                } else {
-                    totalKg = (totalQty * uGrams * wasteMultiplier) / 1000;
-                }
+                const totalKg = (totalQty * wasteMultiplier * uGrams) / 1000.0;
                 const rounded = Math.round(totalKg * 10) / 10;
                 return {
                     value: rounded,
@@ -5132,6 +5122,22 @@ createApp({
                 if (!style.size_map) style.size_map = {};
                 style.size_map[sizeName] = q;
                 style.total_quantity = res.new_total;
+
+                if (!style.fabric_order_manual_override && (style.unit_meters || style.unit_grams)) {
+                    const c1 = calculateFabricOrder(style, 1);
+                    style.fabric_ordered_meters = c1.value;
+                    style.fabric_order_unit = c1.unit;
+                    await updateCellWithLog(style.id, 'fabric_ordered_meters', c1.value, `Beden revizyonu sonrası Kumaş 1 hesaplandı (${c1.formatted})`);
+                    await updateCellWithLog(style.id, 'fabric_order_unit', c1.unit, 'Kumaş 1 Birimi');
+                }
+                if (!style.fabric_order_manual_override_2 && (style.unit_meters_2 || style.unit_grams_2)) {
+                    const c2 = calculateFabricOrder(style, 2);
+                    style.fabric_ordered_meters_2 = c2.value;
+                    style.fabric_order_unit_2 = c2.unit;
+                    await updateCellWithLog(style.id, 'fabric_ordered_meters_2', c2.value, `Beden revizyonu sonrası Kumaş 2 hesaplandı (${c2.formatted})`);
+                    await updateCellWithLog(style.id, 'fabric_order_unit_2', c2.unit, 'Kumaş 2 Birimi');
+                }
+
                 loadStats();
                 refreshIcons();
             } catch (e) {
