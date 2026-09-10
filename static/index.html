@@ -5977,14 +5977,16 @@
         </div>
 
         <!-- 2. FORMA ÖZEL A4 WYSIWYG SAYFA VE TABLO ALANI -->
-        <div class="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-6 flex flex-col items-center bg-slate-900/40">
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-6 bg-slate-900/40 min-h-0 block">
             
             <div id="kumas-bilgi-sheet-container"
-                 class="a4-sheet border border-slate-400 shadow-2xl bg-white text-black transition-all mx-auto overflow-hidden"
+                 class="a4-sheet border border-slate-400 shadow-2xl bg-white text-black transition-all mx-auto mb-12"
                  :style="{
                      width: kumasBilgiOrientation === 'portrait' ? '198mm' : '285mm',
                      minHeight: kumasBilgiOrientation === 'portrait' ? '280mm' : '195mm',
-                     maxWidth: '100%'
+                     maxWidth: '100%',
+                     height: 'auto',
+                     overflow: 'visible'
                  }"
                  style="background-color: #ffffff !important; color: #000000 !important;">
                 
@@ -6464,14 +6466,16 @@
         </div>
 
         <!-- YAZDIRMA TABLOSU ALANI (GERÇEK A4 KAĞIT ÖLÇÜLERİNDE BİREBİR WYSIWYG ÖNİZLEME) -->
-        <div class="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-6 flex flex-col items-center bg-slate-900/40">
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-6 bg-slate-900/40 min-h-0 block">
             
             <div id="carsaf-sheet-container"
-                 class="a4-sheet border border-slate-400 shadow-2xl bg-white text-black transition-all mx-auto overflow-hidden"
+                 class="a4-sheet border border-slate-400 shadow-2xl bg-white text-black transition-all mx-auto mb-12"
                  :style="{
                      width: carsafPrintOrientation === 'portrait' ? '198mm' : '285mm',
                      minHeight: carsafPrintOrientation === 'portrait' ? '280mm' : '195mm',
-                     maxWidth: '100%'
+                     maxWidth: '100%',
+                     height: 'auto',
+                     overflow: 'visible'
                  }"
                  style="background-color: #ffffff !important; color: #000000 !important;">
                 
@@ -6706,11 +6710,11 @@
         </div>
 
         <!-- YAZDIRMA ALANI (A4 YATAY / LANDSCAPE FORMATLI CANLI ÖNİZLEME VE BASKI DÜZENİ) -->
-        <div class="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-6 flex flex-col items-center bg-slate-900/40">
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-6 bg-slate-900/40 min-h-0 block">
             
             <div id="haftalik-program-sheet-container"
-                 class="a4-sheet border border-slate-400 shadow-2xl bg-white text-black transition-all mx-auto overflow-hidden p-4 sm:p-6 space-y-6"
-                 style="width: 285mm; min-height: 195mm; max-width: 100%; background-color: #ffffff !important; color: #000000 !important;">
+                 class="a4-sheet border border-slate-400 shadow-2xl bg-white text-black transition-all mx-auto mb-12 p-4 sm:p-6 space-y-6"
+                 style="width: 285mm; min-height: 195mm; height: auto; overflow: visible; max-width: 100%; background-color: #ffffff !important; color: #000000 !important;">
                 
                 <div v-if="!haftalikProgramWeeks || !haftalikProgramWeeks.length" class="py-20 text-center text-slate-400 font-medium italic">
                     Seçili hafta aralığında gösterilecek sipariş veya hafta kaydı bulunamadı.
@@ -7251,7 +7255,7 @@
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20260910_0900"></script>
+<script src="/static/js/app.js?v=20260910_0930"></script>
 
 </body>
 </html>

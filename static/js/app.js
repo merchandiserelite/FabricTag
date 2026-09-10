@@ -1772,7 +1772,7 @@ createApp({
             if (!val) return '';
             const v = String(val).trim();
             const u = v.toUpperCase();
-            if (['KODSUZ', 'YOK', 'NONE', 'NULL', '-', 'İSİMSİZ', 'ISIMSIZ', 'TANIMSIZ'].includes(u)) return '';
+            if (['KODSUZ', 'YOK', 'NONE', 'NULL', '-', '—', 'İSİMSİZ', 'ISIMSIZ', 'TANIMSIZ', 'BİLGİSİ YOK', 'BILGISI YOK', 'BİLGİ YOK', 'BILGI YOK', 'BELİRTİLMEDİ', 'BELIRTILMEDI'].includes(u)) return '';
             return v;
         };
 
@@ -1813,7 +1813,11 @@ createApp({
                 }
             }
 
-            return { supplier, code, name, variant, color };
+            let en = cleanFabricField(slot === 2 ? (item.fabric_width_2 || item.fabric_link_2?.width) : (item.fabric_width_1 || item.fabric_width || item.fabric_link?.width));
+            let gramaj = cleanFabricField(slot === 2 ? (item.unit_grams_2 || item.fabric_link_2?.weight) : (item.unit_grams_1 || item.unit_grams || item.fabric_link?.weight));
+            let composition = cleanFabricField(slot === 2 ? (item.composition_2 || item.fabric_link_2?.composition) : (item.composition_1 || item.composition || item.fabric_link?.composition));
+
+            return { supplier, code, name, variant, color, en, width: en, gramaj, composition };
         };
 
         const kumasSiparisList = computed(() => {
@@ -6072,47 +6076,77 @@ createApp({
 
         const getCostFabricDisplay = (fb) => {
             if (!fb) return '';
-            let qName = cleanFabricField(fb.quality_name);
+            let supplier = cleanFabricField(fb.supplier);
             let qCode = cleanFabricField(fb.quality_code);
+            let qName = cleanFabricField(fb.quality_name || fb.quality);
             let variant = cleanFabricField(fb.variant);
             let color = cleanFabricField(fb.color);
+            let en = cleanFabricField(fb.width || fb.en);
+            let gramaj = cleanFabricField(fb.gramaj || fb.weight);
+            let composition = cleanFabricField(fb.composition);
 
-            // Eksikse kumaş deposunda fb.code ile ara
-            if ((!qName || !qCode || !variant || !color) && fb.code && fabricsList.value && fabricsList.value.length > 0) {
-                const cleanCode = String(fb.code).trim().toUpperCase();
+            // Eksikse kumaş deposunda fb.code veya qCode ile ara
+            const searchCode = cleanFabricField(fb.code) || qCode;
+            if (searchCode && fabricsList.value && fabricsList.value.length > 0) {
+                const cleanCode = String(searchCode).trim().toUpperCase();
                 const foundFab = fabricsList.value.find(f => 
                     String(f.internal_code || '').trim().toUpperCase() === cleanCode ||
-                    String(f.code || '').trim().toUpperCase() === cleanCode
+                    String(f.code || '').trim().toUpperCase() === cleanCode ||
+                    (f.quality_code && String(f.quality_code).trim().toUpperCase() === cleanCode)
                 );
                 if (foundFab) {
-                    if (!qName) qName = cleanFabricField(foundFab.quality_name || foundFab.fabric_name || foundFab.name);
+                    if (!supplier) supplier = cleanFabricField(foundFab.company_name || foundFab.supplier);
                     if (!qCode) qCode = cleanFabricField(foundFab.quality_code || foundFab.fabric_code);
+                    if (!qName) qName = cleanFabricField(foundFab.quality_name || foundFab.fabric_name || foundFab.name);
                     if (!variant) variant = cleanFabricField(foundFab.design_code || foundFab.variant);
-                    if (!color) color = cleanFabricField(foundFab.color);
+                    if (!color) color = cleanFabricField(foundFab.color || foundFab.color_name);
+                    if (!en) en = cleanFabricField(foundFab.width || foundFab.en);
+                    if (!gramaj) gramaj = cleanFabricField(foundFab.weight || foundFab.gramaj);
+                    if (!composition) composition = cleanFabricField(foundFab.composition);
                 }
             }
 
             // Hala eksikse ve model yüklüyse model üzerinden tamamla
-            if ((!qName || !qCode || !variant || !color) && costStyle.value) {
+            if (costStyle.value) {
                 const s = costStyle.value;
                 const isSecond = fb.title && (fb.title.includes('2') || fb.title.includes('İkinci'));
                 const d = extractFabricDetails(s, isSecond ? 2 : 1);
-                if (!qName) qName = cleanFabricField(d.name || (isSecond ? s.fabric_type_2 : s.fabric_type));
+                const defD = parseFabricDetails(s, isSecond);
+                if (!supplier) supplier = cleanFabricField(d.supplier || defD.supplier);
                 if (!qCode) qCode = cleanFabricField(d.code);
+                if (!qName) qName = cleanFabricField(d.name || defD.quality || (isSecond ? s.fabric_type_2 : s.fabric_type));
                 if (!variant) variant = cleanFabricField(d.variant);
-                if (!color) color = cleanFabricField(d.color);
+                if (!color) color = cleanFabricField(d.color || s.color_name);
+                if (!en) en = cleanFabricField(d.width || d.en || (isSecond ? s.fabric_width_2 : s.fabric_width));
+                if (!gramaj) gramaj = cleanFabricField(defD.gramaj || (isSecond ? s.unit_grams_2 : s.unit_grams));
+                if (!composition) composition = cleanFabricField(defD.composition || (isSecond ? s.composition_2 : s.composition));
             }
 
-            // Eski kalite alanı temizse yedek olarak kullan
-            if (!qName && fb.quality) {
-                qName = cleanFabricField(fb.quality);
+            // Temizlik ve biçimlendirme:
+            if (en) {
+                en = en.replace(/^(en|genişlik)[:\s]*/i, '').trim();
+                en = cleanFabricField(en);
+                if (en && !isNaN(en)) en = `${en} cm`;
+            }
+            if (gramaj) {
+                gramaj = gramaj.replace(/^(gr|gramaj|weight)[:\s]*/i, '').trim();
+                gramaj = cleanFabricField(gramaj);
+                if (gramaj && !isNaN(gramaj)) gramaj = `${gramaj} gr`;
+            }
+            if (composition) {
+                composition = cleanFabricField(normalizeComposition(composition));
             }
 
+            // Sıra: Kumaşçının adı / Kalite kodu / Kalite adı / Varyant / Renk / En / Gramaj / Karışım
             const parts = [];
-            if (qName) parts.push(qName);
+            if (supplier) parts.push(supplier);
             if (qCode) parts.push(qCode);
+            if (qName) parts.push(qName);
             if (variant) parts.push(variant);
             if (color) parts.push(color);
+            if (en) parts.push(en);
+            if (gramaj) parts.push(gramaj);
+            if (composition) parts.push(composition);
 
             return parts.join(' / ');
         };
