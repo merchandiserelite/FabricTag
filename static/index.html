@@ -7,6 +7,8 @@
     <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>TexFlow - Akıllı Tekstil Üretim & Çarşaf Yönetim Sistemi</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="shortcut icon" href="/static/favicon.ico">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -276,7 +278,8 @@
             #kumas-bilgi-print-modal,
             #carsaf-print-modal,
             #haftalik-program-print-modal,
-            #kumas-siparis-print-modal {
+            #kumas-siparis-print-modal,
+            #cutting-slip-modal {
                 position: absolute !important;
                 left: 0 !important;
                 top: 0 !important;
@@ -301,13 +304,18 @@
             #haftalik-program-sheet-container,
             #haftalik-program-sheet-container *,
             #kumas-siparis-sheet-container,
-            #kumas-siparis-sheet-container * {
+            #kumas-siparis-sheet-container *,
+            #cutting-slip-print-area,
+            #cutting-slip-print-area * {
                 visibility: visible !important;
             }
             #kumas-bilgi-print-modal > div:not(.no-print),
             #carsaf-print-modal > div:not(.no-print),
             #haftalik-program-print-modal > div:not(.no-print),
             #kumas-siparis-print-modal > div:not(.no-print),
+            #cutting-slip-modal > div:not(.no-print),
+            #cutting-slip-print-area,
+            .cutting-slip-sheet,
             #kumas-bilgi-print-modal .a4-sheet,
             #carsaf-print-modal .a4-sheet,
             #haftalik-program-print-modal .a4-sheet,
@@ -343,7 +351,9 @@
             #haftalik-program-print-modal .no-print,
             #haftalik-program-print-modal .no-print *,
             #kumas-siparis-print-modal .no-print,
-            #kumas-siparis-print-modal .no-print * {
+            #kumas-siparis-print-modal .no-print *,
+            #cutting-slip-modal .no-print,
+            #cutting-slip-modal .no-print * {
                 display: none !important;
                 visibility: hidden !important;
                 height: 0 !important;
@@ -458,9 +468,7 @@
 
         <div class="w-full max-w-md bg-slate-900/95 border border-slate-800 rounded-2xl shadow-2xl p-8 backdrop-blur-xl">
             <div class="flex items-center justify-center gap-3 mb-6">
-                <div class="w-12 h-12 rounded-xl bg-theme-light border border-theme flex items-center justify-center text-theme">
-                    <i data-lucide="layers" class="w-7 h-7"></i>
-                </div>
+                <img src="/static/texflow_logo.png" alt="TexFlow Logo" class="w-12 h-12 rounded-xl object-cover shadow-lg border border-emerald-500/30">
                 <div>
                     <h1 class="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
                         TexFlow <span class="text-xs bg-theme-light text-theme px-2 py-0.5 rounded-full border border-theme">PRO</span>
@@ -522,10 +530,7 @@
             
             <div class="h-16 px-5 flex items-center justify-between border-b shrink-0"
                  :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
-                <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-xl bg-theme-light border border-theme flex items-center justify-center text-theme">
-                        <i data-lucide="layers" class="w-5 h-5"></i>
-                    </div>
+                    <img src="/static/texflow_logo.png" alt="TexFlow Logo" class="w-9 h-9 rounded-xl object-cover shadow-sm border border-emerald-500/30">
                     <div>
                         <div class="font-extrabold text-sm flex items-center gap-1.5" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
                             TexFlow <span class="text-[10px] bg-theme-light text-theme px-1.5 py-0.2 rounded font-mono">v2.9</span>
@@ -3253,6 +3258,15 @@
                                         <i data-lucide="x" class="w-3.5 h-3.5"></i>
                                     </button>
                                 </div>
+
+                                <!-- KESİM FİŞİ BUTONU -->
+                                <button @click="openCuttingSlipModal()"
+                                        class="px-3.5 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white flex items-center gap-2 shadow-sm transition active:scale-95 shrink-0 cursor-pointer"
+                                        title="Seçili veya filtrelenen modelin Kesim Fişini görüntüle, yazdır veya Excel'e aktar">
+                                    <i data-lucide="file-text" class="w-4 h-4"></i>
+                                    <span>Kesim Fişi</span>
+                                </button>
+
                                 <div class="px-3 py-2 rounded-xl text-xs font-bold shrink-0 border"
                                      :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'">
                                     {{ filteredCuttingStyles.length }} / {{ styles.length }} Model
@@ -3346,6 +3360,13 @@
                                         <span v-else-if="cuttingSaveSuccessId === s.id" class="text-xs text-emerald-500 flex items-center gap-1 font-bold">
                                             <i data-lucide="check" class="w-3.5 h-3.5"></i> Kaydedildi
                                         </span>
+                                        <button @click="openCuttingSlipModal(s)"
+                                                class="px-2.5 py-1.5 rounded-xl text-xs font-bold border transition shadow-sm active:scale-95 flex items-center gap-1 cursor-pointer"
+                                                :class="isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-purple-300 border-purple-500/30' : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200'"
+                                                title="Bu modelin Kesim Fişini Aç">
+                                            <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+                                            <span>Fiş</span>
+                                        </button>
                                         <button @click="saveCuttingRow(s, true)"
                                                 :disabled="cuttingSavingId === s.id"
                                                 class="px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white transition shadow-sm active:scale-95 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
@@ -4439,17 +4460,32 @@
                     <h3 class="text-base font-bold">Model Fotoğrafları Yönetimi (Ön & Arka / Detay)</h3>
                     <p class="text-xs text-slate-400">{{ selectedStyle?.customer_name }} | {{ selectedStyle?.po_number }} - Style {{ selectedStyle?.style_no }} ({{ selectedStyle?.color_name }})</p>
                 </div>
-                <button @click="imageModalOpen = false" class="text-slate-400 hover:text-slate-200"><i data-lucide="x" class="w-5 h-5"></i></button>
+                <div class="flex items-center gap-2">
+                    <span class="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                        <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i>
+                        <span>Ekran Görüntüsü: <b>Ctrl + V</b></span>
+                    </span>
+                    <button @click="imageModalOpen = false" class="text-slate-400 hover:text-slate-200 cursor-pointer p-1" title="Kapat">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- Yan Yana 1. ve 2. Görsel Alanı -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
                 <!-- 1. GÖRSEL (ANA GÖRSEL - ÇARŞAFTA GÖZÜKEN) -->
-                <div class="p-4 rounded-2xl border flex flex-col items-center space-y-3"
-                     :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                <div class="p-4 rounded-2xl border flex flex-col items-center space-y-3 cursor-pointer transition-all"
+                     @click="activeImageSlot = 1"
+                     :class="[
+                         isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200',
+                         activeImageSlot === 1 ? 'ring-2 ring-purple-500/60' : ''
+                     ]">
                     <div class="flex justify-between items-center w-full">
-                        <span class="text-xs font-bold text-theme">1. Görsel (Ana Fotoğraf)</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-xs font-bold text-theme">1. Görsel (Ana Fotoğraf)</span>
+                            <span v-if="activeImageSlot === 1" class="text-[9px] bg-purple-500 text-white px-1.5 py-0.2 rounded font-bold">Aktif Pano Hedefi</span>
+                        </div>
                         <span class="text-[10px] bg-theme-light text-theme px-1.5 py-0.5 rounded font-mono">Çarşaf Listesinde Gözüken</span>
                     </div>
 
@@ -4459,18 +4495,30 @@
                         <div v-else class="text-center p-4 space-y-1 text-slate-400">
                             <i data-lucide="image-plus" class="w-10 h-10 mx-auto opacity-50 text-theme"></i>
                             <div class="text-xs font-semibold">1. Fotoğraf Yüklenmedi</div>
-                            <div class="text-[10px]">Aşağıdan fotoğraf seçin veya sürükleyin</div>
+                            <div class="text-[10px]">Aşağıdan seçin, sürükleyin veya <b>Ctrl + V</b> ile yapıştırın</div>
                         </div>
                     </div>
 
                     <div class="w-full flex items-center justify-between gap-2 pt-1">
-                        <label class="flex-1 cursor-pointer py-2.5 px-3 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600 text-slate-950 dark:text-white text-xs font-extrabold transition flex items-center justify-center gap-1.5 shadow-sm text-center">
+                        <!-- DOSYA SEÇ BUTONU -->
+                        <label class="flex-1 cursor-pointer py-2 px-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600 text-slate-950 dark:text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm text-center"
+                               title="Bilgisayardan dosya seçip yükleyin">
                             <i data-lucide="upload" class="w-4 h-4 text-slate-950 dark:text-white"></i>
-                            <span class="text-slate-950 dark:text-white font-extrabold">{{ selectedStyle?.image_url ? 'Fotoğrafı Değiştir' : 'Fotoğraf Seç / Yükle' }}</span>
+                            <span class="text-slate-950 dark:text-white font-bold">{{ selectedStyle?.image_url ? 'Fotoğraf Seç' : 'Fotoğraf Seç' }}</span>
                             <input type="file" @change="uploadStyleImageSlot($event, 1)" accept="image/*" class="hidden">
                         </label>
-                        <button v-if="selectedStyle?.image_url" @click="deleteStyleImageSlot(1)"
-                                class="px-3.5 py-2.5 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 rounded-xl border border-red-200 dark:border-red-500/30 transition flex items-center gap-1 shrink-0 text-xs font-bold shadow-sm" title="1. Görseli Sil">
+
+                        <!-- EKRAN GÖRÜNTÜSÜ / PANO YAPIŞTIR BUTONU -->
+                        <button type="button" @click.stop="pasteStyleImageSlot(1)"
+                                class="flex-1 py-2 px-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm text-center cursor-pointer active:scale-95"
+                                title="Ekran alıntısı (Win + Shift + S) aldıktan sonra panodaki görseli buraya yapıştırın (veya klavyeden Ctrl + V)">
+                            <i data-lucide="clipboard-paste" class="w-4 h-4"></i>
+                            <span>Yapıştır</span>
+                            <span class="text-[9px] bg-purple-800/80 px-1 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V</span>
+                        </button>
+
+                        <button v-if="selectedStyle?.image_url" @click.stop="deleteStyleImageSlot(1)"
+                                class="px-3 py-2 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 rounded-xl border border-red-200 dark:border-red-500/30 transition flex items-center gap-1 shrink-0 text-xs font-bold shadow-sm" title="1. Görseli Sil">
                             <i data-lucide="trash-2" class="w-4 h-4"></i>
                             <span>Sil</span>
                         </button>
@@ -4478,10 +4526,17 @@
                 </div>
 
                 <!-- 2. GÖRSEL (DETAY / ARKA FOTOĞRAF) -->
-                <div class="p-4 rounded-2xl border flex flex-col items-center space-y-3"
-                     :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                <div class="p-4 rounded-2xl border flex flex-col items-center space-y-3 cursor-pointer transition-all"
+                     @click="activeImageSlot = 2"
+                     :class="[
+                         isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200',
+                         activeImageSlot === 2 ? 'ring-2 ring-amber-500/60' : ''
+                     ]">
                     <div class="flex justify-between items-center w-full">
-                        <span class="text-xs font-bold text-amber-500">2. Görsel (Arka / Detay)</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-xs font-bold text-amber-500">2. Görsel (Arka / Detay)</span>
+                            <span v-if="activeImageSlot === 2" class="text-[9px] bg-amber-500 text-slate-950 px-1.5 py-0.2 rounded font-bold">Aktif Pano Hedefi</span>
+                        </div>
                         <span class="text-[10px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded font-mono">İkinci Detay Fotoğrafı</span>
                     </div>
 
@@ -4491,24 +4546,35 @@
                         <div v-else class="text-center p-4 space-y-1 text-slate-400">
                             <i data-lucide="image-plus" class="w-10 h-10 mx-auto opacity-50 text-amber-500"></i>
                             <div class="text-xs font-semibold">2. Fotoğraf Yüklenmedi</div>
-                            <div class="text-[10px]">İkinci açıyı / detayı ekleyin</div>
+                            <div class="text-[10px]">İkinci açıyı ekleyin veya <b>Yapıştır</b>'a tıklayın</div>
                         </div>
                     </div>
 
                     <div class="w-full flex items-center justify-between gap-2 pt-1">
-                        <label class="flex-1 cursor-pointer py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition flex items-center justify-center gap-1.5 shadow-sm text-center">
+                        <!-- DOSYA SEÇ BUTONU -->
+                        <label class="flex-1 cursor-pointer py-2 px-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm text-center"
+                               title="Bilgisayardan dosya seçip yükleyin">
                             <i data-lucide="upload" class="w-4 h-4 text-slate-950"></i>
-                            <span class="text-slate-950 font-extrabold">{{ selectedStyle?.image_url_2 ? 'Detay Fotoğrafını Değiştir' : 'Detay Fotoğrafı Seç / Yükle' }}</span>
+                            <span class="text-slate-950 font-bold">{{ selectedStyle?.image_url_2 ? 'Fotoğraf Seç' : 'Fotoğraf Seç' }}</span>
                             <input type="file" @change="uploadStyleImageSlot($event, 2)" accept="image/*" class="hidden">
                         </label>
-                        <button v-if="selectedStyle?.image_url_2" @click="deleteStyleImageSlot(2)"
-                                class="px-3.5 py-2.5 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 rounded-xl border border-red-200 dark:border-red-500/30 transition flex items-center gap-1 shrink-0 text-xs font-bold shadow-sm" title="2. Görseli Sil">
+
+                        <!-- EKRAN GÖRÜNTÜSÜ / PANO YAPIŞTIR BUTONU -->
+                        <button type="button" @click.stop="pasteStyleImageSlot(2)"
+                                class="flex-1 py-2 px-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm text-center cursor-pointer active:scale-95"
+                                title="Ekran alıntısı (Win + Shift + S) aldıktan sonra panodaki görseli 2. görsel olarak yapıştırın">
+                            <i data-lucide="clipboard-paste" class="w-4 h-4"></i>
+                            <span>Yapıştır</span>
+                            <span class="text-[9px] bg-amber-800/80 px-1 py-0.5 rounded font-mono hidden sm:inline">Pano</span>
+                        </button>
+
+                        <button v-if="selectedStyle?.image_url_2" @click.stop="deleteStyleImageSlot(2)"
+                                class="px-3 py-2 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 rounded-xl border border-red-200 dark:border-red-500/30 transition flex items-center gap-1 shrink-0 text-xs font-bold shadow-sm" title="2. Görseli Sil">
                             <i data-lucide="trash-2" class="w-4 h-4"></i>
                             <span>Sil</span>
                         </button>
                     </div>
                 </div>
-
 
             </div>
 
@@ -7444,10 +7510,347 @@
             </div>
         </div>
 
+        <!-- ========================================================================= -->
+        <!-- MODAL 13: KESİMHANE & PASTAL KESİM FİŞİ (A4 YATAY BASKI & EXCEL ŞABLONU) -->
+        <!-- ========================================================================= -->
+        <div v-if="cuttingSlipModalOpen"
+             id="cutting-slip-modal"
+             class="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col p-2 sm:p-4 overflow-y-auto select-none animate-fadeIn">
+
+            <!-- MODAL KONTROL ÇUBUĞU (Yazdırma Esnasında Gizlenir) -->
+            <div class="no-print relative w-full max-w-[1100px] mx-auto mb-3 px-4 py-3 sm:pr-14 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3 shrink-0"
+                 :class="isDarkMode ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200 text-slate-900'">
+                
+                <!-- SAĞ ÜST KÖŞE KAPATMA BUTONU (X) -->
+                <button @click="closeCuttingSlipModal"
+                        class="absolute top-2.5 sm:top-3 right-3 sm:right-4 p-1.5 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer z-20 flex items-center justify-center"
+                        title="Kapat (ESC)">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+                
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-500 flex items-center justify-center shadow-inner">
+                        <i data-lucide="scissors" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-sm font-black text-purple-600 dark:text-purple-400">Kesimhane Kesim Fişi</h3>
+                            <span v-if="activeSlipModel" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">
+                                {{ activeSlipModel.colors.length }} Renk / Varyant
+                            </span>
+                            <span v-if="activeSlipModel" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                Toplam: {{ getSlipModelGrandTotal(activeSlipModel) }} Adet
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-400">
+                            Masaüstü Kesim Fişi formatında A4 yatay baskı ve Excel (.xlsx) çıktısı
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2.5 flex-wrap">
+                    <!-- Model Seçici Açılır Liste -->
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-slate-400 font-medium">Model:</span>
+                        <select v-model="selectedCuttingSlipModelKey"
+                                class="text-xs font-semibold py-1.5 px-2.5 rounded-xl border outline-none transition focus:ring-2 focus:ring-purple-500/40 max-w-xs sm:max-w-sm truncate cursor-pointer"
+                                :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                            <option v-for="m in cuttingSlipModels" :key="m.key" :value="m.key">
+                                {{ m.customer_name }} — {{ m.brand }} — {{ m.style_no }} ({{ m.colors.length }} Renk)
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Fiş Tarihi Kutusu -->
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-slate-400 font-medium">Tarih:</span>
+                        <input type="text"
+                               v-model="cuttingSlipDate"
+                               class="w-24 text-center text-xs font-mono font-bold py-1.5 px-2 rounded-xl border outline-none transition focus:ring-2 focus:ring-purple-500/40"
+                               :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
+                               title="Kesim Fişi Tarihi">
+                    </div>
+
+                    <!-- Satır Yüksekliği / Sayfaya Sığdırma Butonları -->
+                    <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <span class="text-[10px] text-slate-400 font-bold px-1">Boyut:</span>
+                        <button @click="slipRowDensity = 'auto'"
+                                type="button"
+                                class="px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                                :class="slipRowDensity === 'auto' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'"
+                                title="Renk adedine göre tek A4 sayfasına otomatik ayarla">
+                            ⚡ Oto
+                        </button>
+                        <button @click="slipRowDensity = 'tight'"
+                                type="button"
+                                class="px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                                :class="slipRowDensity === 'tight' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'"
+                                title="7-9 renkli modeller için sıkışık (tek sayfa)">
+                            Sıkışık
+                        </button>
+                        <button @click="slipRowDensity = 'compact'"
+                                type="button"
+                                class="px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                                :class="slipRowDensity === 'compact' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'"
+                                title="Orta boy satırlar">
+                            Orta
+                        </button>
+                        <button @click="slipRowDensity = 'normal'"
+                                type="button"
+                                class="px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                                :class="slipRowDensity === 'normal' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'"
+                                title="Geniş satırlar">
+                            Geniş
+                        </button>
+                    </div>
+
+                    <!-- Yazdır Butonu -->
+                    <button @click="printCuttingSlip"
+                            class="h-9 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-md active:scale-95 cursor-pointer select-none"
+                            title="A4 Yatay formatında yazdır">
+                        <i data-lucide="printer" class="w-4 h-4"></i>
+                        <span>Yazdır</span>
+                    </button>
+
+                    <!-- Excel Olarak Kaydet Butonu -->
+                    <button @click="exportCuttingSlipExcel"
+                            class="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-md active:scale-95 cursor-pointer select-none"
+                            title="Masaüstündeki şablon formatında Excel (.xlsx) olarak indir">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                        <span>Excel Olarak Kaydet</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- KESİM FİŞİ A4 YATAY SAYFASI (Önizleme & Baskı Alanı) -->
+            <div id="cutting-slip-sheet-container" class="flex-1 min-h-0 w-full overflow-auto py-2">
+                <div v-if="!activeSlipModel" class="p-12 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl max-w-xl mx-auto border">
+                    <i data-lucide="info" class="w-10 h-10 mx-auto mb-2 text-purple-400"></i>
+                    <p class="font-bold">Görüntülenecek model bulunamadı.</p>
+                </div>
+
+                <div v-else
+                     id="cutting-slip-print-area"
+                     class="cutting-slip-sheet max-w-[1060px] w-full mx-auto bg-white text-black p-4 sm:p-6 rounded shadow-2xl border border-slate-300 font-sans"
+                     style="color: #000000 !important; background-color: #ffffff !important;">
+
+                    <!-- BAŞLIK: KESİM FİŞİ -->
+                    <div class="text-center font-bold tracking-wider uppercase"
+                         :class="effectiveSlipDensity === 'tight' ? 'text-xl pb-1.5' : 'text-2xl pb-2.5'"
+                         style="font-family: Arial, sans-serif;">
+                        KESİM FİŞİ
+                    </div>
+
+                    <!-- ÜST BİLGİ TABLOSU (MÜŞTERİ, MARKA, TARİH) -->
+                    <table class="w-full border-collapse text-xs sm:text-sm" style="border: 1px solid #000000;">
+                        <tbody>
+                            <!-- Satır 1: MÜŞTERİ & TARİH -->
+                            <tr :class="effectiveSlipDensity === 'tight' ? 'h-7' : 'h-8'" style="border-bottom: 1px solid #000000;">
+                                <td class="px-2.5 py-0.5 font-bold text-right bg-slate-50 uppercase text-[11px] sm:text-xs" style="border-right: 1px solid #000000; width: 110px;">
+                                    MÜŞTERİ:
+                                </td>
+                                <td class="px-3 py-0.5 font-bold uppercase text-xs sm:text-sm" style="border-right: 1px solid #000000;">
+                                    {{ activeSlipModel.customer_name || '-' }}
+                                </td>
+                                <td class="px-2 py-0.5 font-bold text-center bg-slate-50 uppercase text-[11px] sm:text-xs" style="border-right: 1px solid #000000; width: 90px;">
+                                    TARİH
+                                </td>
+                                <td class="px-2 py-0.5 text-center font-mono font-bold text-xs sm:text-sm" style="width: 110px;">
+                                    {{ cuttingSlipDate }}
+                                </td>
+                            </tr>
+                            <!-- Satır 2: MARKA -->
+                            <tr :class="effectiveSlipDensity === 'tight' ? 'h-7' : 'h-8'">
+                                <td class="px-2.5 py-0.5 font-bold text-right bg-slate-50 uppercase text-[11px] sm:text-xs" style="border-right: 1px solid #000000; width: 110px;">
+                                    MARKA:
+                                </td>
+                                <td colspan="3" class="px-3 py-0.5 font-bold uppercase text-xs sm:text-sm">
+                                    {{ activeSlipModel.brand || '-' }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- ORTA BLOK: RESİM KUTUSU (SOL) + TEKNİK BAŞLIKLAR (SAĞ) -->
+                    <table class="w-full border-collapse text-xs sm:text-sm" style="border: 1px solid #000000; margin-top: -1px;">
+                        <tbody>
+                            <tr>
+                                <!-- SOL: MODEL RESMİ KUTUSU (A4:A8 BİRLEŞİK ALANI - TAM ORTALI & ÇİZGİLER NET) -->
+                                <td class="p-2 text-center align-middle bg-white"
+                                    :style="{
+                                        borderRight: '1px solid #000000',
+                                        borderTop: '1px solid #000000',
+                                        borderBottom: '1px solid #000000',
+                                        width: '210px',
+                                        height: effectiveSlipDensity === 'tight' ? '125px' : (effectiveSlipDensity === 'compact' ? '145px' : '165px'),
+                                        verticalAlign: 'middle',
+                                        textAlign: 'center'
+                                    }">
+                                    <div class="w-full h-full flex items-center justify-center m-auto overflow-hidden"
+                                         :style="{
+                                             maxHeight: effectiveSlipDensity === 'tight' ? '115px' : (effectiveSlipDensity === 'compact' ? '135px' : '155px'),
+                                             maxWidth: '195px',
+                                             margin: 'auto'
+                                         }">
+                                        <img v-if="activeSlipModel.image_url"
+                                             :src="activeSlipModel.image_url"
+                                             class="object-contain block m-auto"
+                                             :style="{
+                                                 maxHeight: effectiveSlipDensity === 'tight' ? '110px' : (effectiveSlipDensity === 'compact' ? '130px' : '145px'),
+                                                 maxWidth: '185px',
+                                                 margin: 'auto',
+                                                 display: 'block'
+                                             }"
+                                             alt="Model Görseli">
+                                        <div v-else class="text-xs text-slate-400 font-bold p-3 border border-dashed border-slate-300 rounded flex flex-col items-center justify-center gap-1 w-full h-full">
+                                            <i data-lucide="image" class="w-5 h-5 opacity-40"></i>
+                                            <span>[ RESİM ]</span>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <!-- SAĞ: ARTICLE VE BOŞ BIRAKILAN KUMAŞ/METRAJ/EN/GRAMAJ BAŞLIKLARI -->
+                                <td class="p-0 align-top">
+                                    <table class="w-full border-collapse text-xs sm:text-sm h-full">
+                                        <tbody>
+                                            <!-- ARTICLE -->
+                                            <tr :style="{ borderBottom: '1px solid #000000', height: effectiveSlipDensity === 'tight' ? '25px' : (effectiveSlipDensity === 'compact' ? '29px' : '33px') }">
+                                                <td class="px-3 py-0.5 font-bold uppercase text-[11px] sm:text-xs" style="border-right: 1px solid #000000; width: 140px;">
+                                                    ARTICLE :
+                                                </td>
+                                                <td class="px-3 py-0.5 font-extrabold tracking-wide font-mono"
+                                                    :class="effectiveSlipDensity === 'tight' ? 'text-sm sm:text-base' : 'text-base sm:text-lg'"
+                                                    style="font-family: Calibri, sans-serif;">
+                                                    {{ activeSlipModel.style_no || '-' }}
+                                                </td>
+                                            </tr>
+                                            <!-- KUMAŞ KG -->
+                                            <tr :style="{ borderBottom: '1px solid #000000', height: effectiveSlipDensity === 'tight' ? '25px' : (effectiveSlipDensity === 'compact' ? '29px' : '33px') }">
+                                                <td class="px-3 py-0.5 font-medium uppercase text-[11px] sm:text-xs" style="border-right: 1px solid #000000; width: 140px;">
+                                                    KUMAŞ KG :
+                                                </td>
+                                                <td class="px-3 py-0.5"></td>
+                                            </tr>
+                                            <!-- METRAJ -->
+                                            <tr :style="{ borderBottom: '1px solid #000000', height: effectiveSlipDensity === 'tight' ? '25px' : (effectiveSlipDensity === 'compact' ? '29px' : '33px') }">
+                                                <td class="px-3 py-0.5 font-medium uppercase text-[11px] sm:text-xs" style="border-right: 1px solid #000000; width: 140px;">
+                                                    METRAJ :
+                                                </td>
+                                                <td class="px-3 py-0.5"></td>
+                                            </tr>
+                                            <!-- EN -->
+                                            <tr :style="{ borderBottom: '1px solid #000000', height: effectiveSlipDensity === 'tight' ? '25px' : (effectiveSlipDensity === 'compact' ? '29px' : '33px') }">
+                                                <td class="px-3 py-0.5 font-medium uppercase text-[11px] sm:text-xs" style="border-right: 1px solid #000000; width: 140px;">
+                                                    EN :
+                                                </td>
+                                                <td class="px-3 py-0.5"></td>
+                                            </tr>
+                                            <!-- GRAMAJ -->
+                                            <tr :style="{ height: effectiveSlipDensity === 'tight' ? '25px' : (effectiveSlipDensity === 'compact' ? '29px' : '33px') }">
+                                                <td class="px-3 py-0.5 font-medium uppercase text-[11px] sm:text-xs" style="border-right: 1px solid #000000; width: 140px;">
+                                                    GRAMAJ:
+                                                </td>
+                                                <td class="px-3 py-0.5"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- BOŞLUK SATIRI (Row 9) -->
+                    <div :class="effectiveSlipDensity === 'tight' ? 'h-2' : 'h-3'"></div>
+
+                    <!-- ALT ASORTİ & SİPARİŞ ADETLERİ TABLOSU -->
+                    <table class="w-full border-collapse text-center text-xs" style="border: 2px solid #000000;">
+                        <thead>
+                            <!-- BEDEN BAŞLIKLARI SATIRI (Row 10 - KOMPLE SARI ZEMİN #FFFF00) -->
+                            <tr class="font-bold text-sm print-header-yellow"
+                                :class="effectiveSlipDensity === 'tight' ? 'h-8' : (effectiveSlipDensity === 'compact' ? 'h-9' : 'h-10')"
+                                style="background-color: #FFFF00 !important; color: #000000 !important; border-bottom: 1px solid #000000; border-top: 2px solid #000000;">
+                                <th class="px-2 py-1 text-center min-w-[170px] print-header-yellow"
+                                    style="background-color: #FFFF00 !important; color: #000000 !important; border: 1px solid #000000; border-left: 2px solid #000000;">
+                                    RENK / VARYANT
+                                </th>
+                                <th class="px-1 py-1 w-10 print-header-yellow" style="background-color: #FFFF00 !important; border: 1px solid #000000; width: 40px;"></th>
+                                <th v-for="sz in activeSlipModel.sizesList" :key="'slipth-'+sz"
+                                    class="px-2 py-1 font-mono font-extrabold min-w-[55px] print-header-yellow"
+                                    :class="effectiveSlipDensity === 'tight' ? 'text-xs sm:text-sm' : (effectiveSlipDensity === 'compact' ? 'text-sm sm:text-base' : 'text-base sm:text-lg')"
+                                    style="background-color: #FFFF00 !important; color: #000000 !important; border: 1px solid #000000;">
+                                    {{ sz }}
+                                </th>
+                                <!-- Örnek Excel'deki gibi boş ekstra kolon (SARI) -->
+                                <th class="px-1 py-1 w-10 print-header-yellow" style="background-color: #FFFF00 !important; border: 1px solid #000000; width: 40px;"></th>
+                                <th class="px-3 py-1 font-extrabold min-w-[85px] print-header-yellow"
+                                    :class="effectiveSlipDensity === 'tight' ? 'text-xs sm:text-sm' : (effectiveSlipDensity === 'compact' ? 'text-sm sm:text-base' : 'text-base sm:text-lg')"
+                                    style="background-color: #FFFF00 !important; color: #000000 !important; border: 2px solid #000000;">
+                                    TOPLAM
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template v-for="(col, cIdx) in activeSlipModel.colors" :key="'colrow-'+col.id">
+                                <!-- 1. SATIR: RENK SİPARİŞ ADETLERİ -->
+                                <tr :class="effectiveSlipDensity === 'tight' ? 'h-6' : (effectiveSlipDensity === 'compact' ? 'h-8' : 'h-10')"
+                                    :style="cIdx > 0 ? 'border-top: 2.5px solid #000000;' : 'border-top: 1px solid #000000;'">
+                                    <td class="px-2 py-0.5 text-center font-bold uppercase tracking-tight"
+                                        :class="effectiveSlipDensity === 'tight' ? 'text-[10px] sm:text-[11px]' : 'text-xs'"
+                                        style="border: 1px solid #000000; border-left: 2px solid #000000;">
+                                        {{ col.color_name }}
+                                    </td>
+                                    <td class="px-1 py-0.5 bg-white" style="border: 1px solid #000000; width: 40px;"></td>
+                                    <td v-for="sz in activeSlipModel.sizesList" :key="'colq-'+col.id+'-'+sz"
+                                        class="px-1 py-0.5 font-mono font-bold"
+                                        :class="effectiveSlipDensity === 'tight' ? 'text-xs sm:text-sm' : (effectiveSlipDensity === 'compact' ? 'text-sm sm:text-base' : 'text-base sm:text-lg')"
+                                        style="border: 1px solid #000000;">
+                                        {{ col.sizes[sz] !== undefined ? col.sizes[sz] : '' }}
+                                    </td>
+                                    <td class="px-1 py-0.5 bg-white" style="border: 1px solid #000000; width: 40px;"></td>
+                                    <td class="px-2 py-0.5 font-mono font-black bg-slate-50"
+                                        :class="effectiveSlipDensity === 'tight' ? 'text-xs sm:text-sm' : (effectiveSlipDensity === 'compact' ? 'text-sm sm:text-base' : 'text-base sm:text-lg')"
+                                        style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 2px solid #000000;">
+                                        {{ col.total }}
+                                    </td>
+                                </tr>
+
+                                <!-- 2. SATIR: 1. EXTRA BOŞ KUTUCUK SATIRI -->
+                                <tr :class="effectiveSlipDensity === 'tight' ? 'h-5' : (effectiveSlipDensity === 'compact' ? 'h-7' : 'h-9')"
+                                    class="bg-white"
+                                    style="border-bottom: 1px solid #000000;">
+                                    <td class="px-2 py-0.5" style="border: 1px solid #000000; border-left: 2px solid #000000; border-bottom: 1px solid #000000;"></td>
+                                    <td class="px-1 py-0.5" style="border: 1px solid #000000; border-bottom: 1px solid #000000; width: 40px;"></td>
+                                    <td v-for="sz in activeSlipModel.sizesList" :key="'colempty1-'+col.id+'-'+sz"
+                                        class="px-1 py-0.5" style="border: 1px solid #000000; border-bottom: 1px solid #000000;"></td>
+                                    <td class="px-1 py-0.5" style="border: 1px solid #000000; border-bottom: 1px solid #000000; width: 40px;"></td>
+                                    <td class="px-2 py-0.5"
+                                        style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 2px solid #000000;"></td>
+                                </tr>
+
+                                <!-- 3. SATIR: 2. EXTRA BOŞ KUTUCUK SATIRI (HER RENK BİTİMİNDE ALT ÇİZGİSİ BOLD) -->
+                                <tr :class="effectiveSlipDensity === 'tight' ? 'h-5' : (effectiveSlipDensity === 'compact' ? 'h-7' : 'h-9')"
+                                    class="bg-white"
+                                    style="border-bottom: 2.5px solid #000000;">
+                                    <td class="px-2 py-0.5" style="border: 1px solid #000000; border-left: 2px solid #000000; border-bottom: 2.5px solid #000000;"></td>
+                                    <td class="px-1 py-0.5" style="border: 1px solid #000000; border-bottom: 2.5px solid #000000; width: 40px;"></td>
+                                    <td v-for="sz in activeSlipModel.sizesList" :key="'colempty2-'+col.id+'-'+sz"
+                                        class="px-1 py-0.5" style="border: 1px solid #000000; border-bottom: 2.5px solid #000000;"></td>
+                                    <td class="px-1 py-0.5" style="border: 1px solid #000000; border-bottom: 2.5px solid #000000; width: 40px;"></td>
+                                    <td class="px-2 py-0.5"
+                                        style="border-top: 1px solid #000000; border-bottom: 2.5px solid #000000; border-left: 1px solid #000000; border-right: 2px solid #000000;"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+
+                </div>
+            </div>
+        </div>
+
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20260910_1725"></script>
+<script src="/static/js/app.js?v=20260911_1235"></script>
 
 </body>
 </html>

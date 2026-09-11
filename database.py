@@ -9,8 +9,13 @@ import os
 import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
+import sys
 
-BASE_DIR = Path(__file__).resolve().parent
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 UPLOADS_DIR = DATA_DIR / "uploads"
@@ -257,17 +262,7 @@ def init_db():
     if "shipped_quantity" not in size_cols:
         cursor.execute("ALTER TABLE size_distributions ADD COLUMN shipped_quantity INTEGER DEFAULT 0")
 
-    # Safe menu insertion for yukleme_adetleri
-    cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = 'yukleme_adetleri'")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
-        VALUES (1, 'yukleme_adetleri', 'Yükleme Adetleri', 'Shipment Quantities', 'truck', '/yukleme-adetleri', 6, 1, '["superadmin","admin","merchandiser","cutting","shipping"]')
-        """)
-        # Push subsequent menus down
-        cursor.execute("UPDATE dynamic_menus SET sort_order = sort_order + 1 WHERE menu_key != 'yukleme_adetleri' AND sort_order >= 6")
-
-    # Default Seed Data if empty
+    # Default Seed Data if empty (Seed company first to satisfy foreign keys)
     cursor.execute("SELECT COUNT(*) FROM companies")
     if cursor.fetchone()[0] == 0:
         cursor.execute("""
@@ -303,8 +298,18 @@ def init_db():
         # Depo
         cursor.execute("""
         INSERT INTO users (company_id, username, email, password_hash, full_name, role)
-        VALUES (?, 'depo', 'depo@elitetekstil.com', ?, 'Kumaş Depo Sorumlusu', 'fabric_warehouse')
+        VALUES (?, 'depo', 'depo@elitetekstil.com', ?, 'Kumaş & Aksesuar Depo', 'warehouse')
         """, (company_id, hash_password('123456'),))
+
+    # Safe menu insertion for yukleme_adetleri
+    cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = 'yukleme_adetleri'")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("""
+        INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
+        VALUES (1, 'yukleme_adetleri', 'Yükleme Adetleri', 'Shipment Quantities', 'truck', '/yukleme-adetleri', 6, 1, '["superadmin","admin","merchandiser","cutting","shipping"]')
+        """)
+        # Push subsequent menus down
+        cursor.execute("UPDATE dynamic_menus SET sort_order = sort_order + 1 WHERE menu_key != 'yukleme_adetleri' AND sort_order >= 6")
 
         # Default Menus
         default_menus = [

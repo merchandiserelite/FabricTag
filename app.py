@@ -5,6 +5,7 @@ Custom Dynamic Columns (+ Sütun Ekle), Save Changes & Discard Buttons
 """
 
 import os
+import sys
 import json
 import shutil
 import re
@@ -52,8 +53,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
+    STATIC_DIR = BASE_DIR / "static"
+    if not STATIC_DIR.exists():
+        STATIC_DIR = Path(sys.executable).resolve().parent / "static"
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+    STATIC_DIR = BASE_DIR / "static"
+
 STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -2481,6 +2489,284 @@ def api_update_cutting(req: CuttingUpdateRequest, user: Dict[str, Any] = Depends
         "actual_unit_meters": actual_unit_m,
         "cutting_date": now_str
     }
+
+
+# ----------------- KESİM FİŞİ EXCEL DIŞA AKTARIM -----------------
+
+class CuttingSlipColorItem(BaseModel):
+    name: str
+    quantities: List[Any] = []
+    total: Optional[int] = 0
+
+class CuttingSlipExportRequest(BaseModel):
+    customer_name: Optional[str] = ""
+    brand: Optional[str] = ""
+    style_no: Optional[str] = ""
+    date: Optional[str] = ""
+    image_url: Optional[str] = ""
+    sizes: List[str] = []
+    colors: List[CuttingSlipColorItem] = []
+
+@app.post("/api/cutting/export-slip-excel")
+def api_export_cutting_slip_excel(req: CuttingSlipExportRequest):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sayfa1"
+
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    thin = Side(border_style="thin", color="000000")
+    medium = Side(border_style="medium", color="000000")
+    box_border = Border(top=thin, left=thin, right=thin, bottom=thin)
+
+    col_widths = {'A': 22, 'B': 24}
+    num_sizes = len(req.sizes)
+    total_cols = max(10, 2 + num_sizes + 2)
+    for ci in range(1, total_cols + 1):
+        col_letter = get_column_letter(ci)
+        if col_letter in col_widths:
+            ws.column_dimensions[col_letter].width = col_widths[col_letter]
+        elif ci == total_cols:
+            ws.column_dimensions[col_letter].width = 15
+        elif ci == total_cols - 1:
+            ws.column_dimensions[col_letter].width = 10
+        else:
+            ws.column_dimensions[col_letter].width = 12
+
+    last_col_letter = get_column_letter(total_cols)
+    second_last_col_letter = get_column_letter(total_cols - 1)
+
+    # Row 1: KESİM FİŞİ
+    ws.row_dimensions[1].height = 30
+    ws.merge_cells(f"A1:{last_col_letter}1")
+    cell_a1 = ws["A1"]
+    cell_a1.value = "KESİM FİŞİ"
+    cell_a1.font = Font(name="Arial", size=20, bold=True)
+    cell_a1.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Row 2: MÜŞTERİ & TARİH
+    ws.row_dimensions[2].height = 25
+    ws["A2"].value = "MÜŞTERİ:"
+    ws["A2"].font = Font(name="Arial", size=14, bold=True)
+    ws["A2"].alignment = Alignment(horizontal="right", vertical="center")
+    ws["A2"].border = box_border
+
+    ws["B2"].value = req.customer_name or ""
+    ws["B2"].font = Font(name="Arial", size=14, bold=False)
+    ws["B2"].alignment = Alignment(horizontal="left", vertical="center")
+    ws["B2"].border = box_border
+
+    for ci in range(3, total_cols - 1):
+        ws[f"{get_column_letter(ci)}2"].border = box_border
+
+    ws[f"{second_last_col_letter}2"].value = "TARİH"
+    ws[f"{second_last_col_letter}2"].font = Font(name="Arial", size=14, bold=True)
+    ws[f"{second_last_col_letter}2"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"{second_last_col_letter}2"].border = box_border
+
+    ws[f"{last_col_letter}2"].value = req.date or datetime.now().strftime("%d.%m.%Y")
+    ws[f"{last_col_letter}2"].font = Font(name="Arial", size=14, bold=False)
+    ws[f"{last_col_letter}2"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"{last_col_letter}2"].border = box_border
+
+    # Row 3: MARKA
+    ws.row_dimensions[3].height = 25
+    ws["A3"].value = "MARKA:"
+    ws["A3"].font = Font(name="Arial", size=14, bold=True)
+    ws["A3"].alignment = Alignment(horizontal="right", vertical="center")
+    ws["A3"].border = box_border
+
+    ws["B3"].value = req.brand or ""
+    ws["B3"].font = Font(name="Arial", size=14, bold=False)
+    ws["B3"].alignment = Alignment(horizontal="left", vertical="center")
+    ws["B3"].border = box_border
+
+    for ci in range(3, total_cols + 1):
+        ws[f"{get_column_letter(ci)}3"].border = box_border
+
+    # Rows 4 to 8: Image box
+    ws.merge_cells("A4:A8")
+    for r in range(4, 9):
+        ws.row_dimensions[r].height = 26
+        for ci in range(1, total_cols + 1):
+            ws[f"{get_column_letter(ci)}{r}"].border = box_border
+
+    img_added = False
+    if req.image_url:
+        clean_img_url = req.image_url.split("?")[0].lstrip("/")
+        possible_paths = [
+            BASE_DIR / clean_img_url,
+            BASE_DIR / "data" / clean_img_url,
+            BASE_DIR / "data" / "uploads" / clean_img_url.replace("uploads/", ""),
+            BASE_DIR / clean_img_url.replace("uploads/", "data/uploads/")
+        ]
+        for p in possible_paths:
+            if p.exists() and p.is_file():
+                try:
+                    openpyxl_img = OpenpyxlImage(str(p))
+                    with PILImage.open(str(p)) as pil_img:
+                        orig_w, orig_h = pil_img.size
+                        ratio = min(150.0 / max(1, orig_w), 125.0 / max(1, orig_h))
+                        openpyxl_img.width = int(orig_w * ratio)
+                        openpyxl_img.height = int(orig_h * ratio)
+                    ws.add_image(openpyxl_img, "A4")
+                    img_added = True
+                    break
+                except Exception as ex:
+                    print("Error adding image to excel:", ex)
+    if not img_added:
+        ws["A4"].value = "[ RESİM ]"
+        ws["A4"].font = Font(name="Arial", size=12, color="888888")
+        ws["A4"].alignment = Alignment(horizontal="center", vertical="center")
+
+    # Row 4: ARTICLE
+    ws["B4"].value = "ARTICLE     :"
+    ws["B4"].font = Font(name="Arial", size=14, bold=True)
+    ws["B4"].alignment = Alignment(horizontal="left", vertical="center")
+    
+    ws.merge_cells(f"C4:{second_last_col_letter}4")
+    ws["C4"].value = req.style_no or ""
+    ws["C4"].font = Font(name="Calibri", size=18, bold=True)
+    ws["C4"].alignment = Alignment(horizontal="left", vertical="center")
+
+    # Row 5: KUMAŞ KG
+    ws["B5"].value = "KUMAŞ KG :"
+    ws["B5"].font = Font(name="Arial", size=14, bold=False)
+    ws["B5"].alignment = Alignment(horizontal="left", vertical="center")
+    ws.merge_cells(f"C5:{last_col_letter}5")
+
+    # Row 6: METRAJ
+    ws["B6"].value = "METRAJ      :"
+    ws["B6"].font = Font(name="Arial", size=14, bold=False)
+    ws["B6"].alignment = Alignment(horizontal="left", vertical="center")
+    ws.merge_cells(f"C6:{last_col_letter}6")
+
+    # Row 7: EN
+    ws["B7"].value = "EN :"
+    ws["B7"].font = Font(name="Arial", size=14, bold=False)
+    ws["B7"].alignment = Alignment(horizontal="left", vertical="center")
+    ws.merge_cells(f"C7:{last_col_letter}7")
+
+    # Row 8: GRAMAJ
+    ws["B8"].value = "GRAMAJ:"
+    ws["B8"].font = Font(name="Arial", size=14, bold=False)
+    ws["B8"].alignment = Alignment(horizontal="left", vertical="center")
+    ws.merge_cells(f"C8:{last_col_letter}8")
+
+    # Row 9: spacer
+    ws.row_dimensions[9].height = 12
+
+    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+    # Row 10: Size Headers (KOMPLE SARI ZEMİN #FFFF00)
+    ws.row_dimensions[10].height = 28
+    for ci in range(1, total_cols + 1):
+        c_letter = get_column_letter(ci)
+        ws[f"{c_letter}10"].fill = yellow_fill
+        ws[f"{c_letter}10"].border = Border(
+            top=medium,
+            bottom=thin,
+            left=medium if ci == 1 else thin,
+            right=medium if ci == total_cols else thin
+        )
+
+    ws["A10"].value = "RENK / VARYANT"
+    ws["A10"].font = Font(name="Arial", size=11, bold=True)
+    ws["A10"].alignment = Alignment(horizontal="center", vertical="center")
+
+    size_col_letters = [get_column_letter(3 + idx) for idx in range(num_sizes)]
+    for sc, sz in zip(size_col_letters, req.sizes):
+        ws[f"{sc}10"].value = sz
+        ws[f"{sc}10"].font = Font(name="Arial", size=16, bold=True)
+        ws[f"{sc}10"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"{last_col_letter}10"].value = "TOPLAM"
+    ws[f"{last_col_letter}10"].font = Font(name="Arial", size=16, bold=True)
+    ws[f"{last_col_letter}10"].alignment = Alignment(horizontal="center", vertical="center")
+
+    # Dynamic row heights based on color count so 9 colors fit on 1 A4 page
+    # Aradaki boşluk satırı silindiğinden her renk 3 satırdan oluşur
+    num_colors = max(1, len(req.colors))
+    if num_colors >= 7:
+        row_h_qty = 22
+        row_h_empty = 20
+    elif num_colors >= 4:
+        row_h_qty = 26
+        row_h_empty = 24
+    else:
+        row_h_qty = 30
+        row_h_empty = 28
+
+    cur_row = 11
+    for c_idx, col_info in enumerate(req.colors):
+        # Quantity row
+        ws.row_dimensions[cur_row].height = row_h_qty
+        top_border_style = thin if c_idx == 0 else medium
+        for ci in range(1, total_cols + 1):
+            c_letter = get_column_letter(ci)
+            ws[f"{c_letter}{cur_row}"].border = Border(
+                top=top_border_style,
+                bottom=thin,
+                left=medium if ci == 1 else thin,
+                right=medium if ci == total_cols else thin
+            )
+
+        ws[f"A{cur_row}"].value = col_info.name
+        ws[f"A{cur_row}"].font = Font(name="Arial", size=10 if num_colors >= 7 else 11, bold=True)
+        ws[f"A{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        
+        for sc, q in zip(size_col_letters, col_info.quantities):
+            val = int(q) if (q is not None and str(q).isdigit()) else (q if q else "")
+            ws[f"{sc}{cur_row}"].value = val
+            ws[f"{sc}{cur_row}"].font = Font(name="Arial", size=13 if num_colors >= 7 else 16, bold=False)
+            ws[f"{sc}{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        
+        ws[f"{last_col_letter}{cur_row}"].value = col_info.total
+        ws[f"{last_col_letter}{cur_row}"].font = Font(name="Arial", size=13 if num_colors >= 7 else 16, bold=True)
+        ws[f"{last_col_letter}{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        
+        # 1. Extra Boş Kutucuk Satırı
+        cur_row += 1
+        ws.row_dimensions[cur_row].height = row_h_empty
+        for ci in range(1, total_cols + 1):
+            c_letter = get_column_letter(ci)
+            ws[f"{c_letter}{cur_row}"].border = Border(
+                top=thin,
+                bottom=thin,
+                left=medium if ci == 1 else thin,
+                right=medium if ci == total_cols else thin
+            )
+
+        # 2. Extra Boş Kutucuk Satırı (HER RENK BİTİMİNDE ALT ÇİZGİSİ BOLD / MEDIUM)
+        cur_row += 1
+        ws.row_dimensions[cur_row].height = row_h_empty
+        for ci in range(1, total_cols + 1):
+            c_letter = get_column_letter(ci)
+            ws[f"{c_letter}{cur_row}"].border = Border(
+                top=thin,
+                bottom=medium,
+                left=medium if ci == 1 else thin,
+                right=medium if ci == total_cols else thin
+            )
+        
+        # Renk bitiminden sonra doğrudan sonraki satıra geç (aradaki boşluk kaldırıldı)
+        cur_row += 1
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    clean_style = re.sub(r'[^a-zA-Z0-9_-]', '_', req.style_no or 'Model')
+    filename = f"KESIM_FISI_{clean_style}.xlsx"
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 class ShippingSizeItem(BaseModel):
