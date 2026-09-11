@@ -80,7 +80,7 @@ class OrderParserEngine:
         full_pdf_text = "\n".join(all_pages_text)
 
         # 1. ANNA VAN TOOR DETECTION
-        if "Anna van Toor" in full_pdf_text or "annavantoor.nl" in full_pdf_text or "Retail magazijn" in full_pdf_text:
+        if "Anna van Toor" in full_pdf_text or "annavantoor.nl" in full_pdf_text or "Retail magazijn" in full_pdf_text or "Moscow magazijn" in full_pdf_text:
             return cls.parse_pdf_anna_van_toor(pdf_path, full_pdf_text)
 
         # 2. SARTO FASHION DETECTION
@@ -110,6 +110,7 @@ class OrderParserEngine:
         High-Precision Coordinate-Based Parser for Anna van Toor B.V. Purchase Orders.
         Uses pdfplumber to precisely align size columns (prevents left-shifting into blank cells)
         and preserves each individual channel row (Webshop, Shops, Wholesale, Stock).
+        Supports multi-table pages and multiple models across pages.
         """
         pdf_path = str(pdf_path_or_reader) if isinstance(pdf_path_or_reader, (str, Path)) else None
         items = []
@@ -117,138 +118,147 @@ class OrderParserEngine:
         if pdf_path and Path(pdf_path).exists():
             try:
                 with pdfplumber.open(pdf_path) as pdf:
+                    doc_text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+                    
+                    po_m = re.search(r"Order\s*number:\s*(\d+)", doc_text, re.I)
+                    po_number = po_m.group(1) if po_m else "7500"
+                    
+                    date_m = re.search(r"Date:\s*(\d{1,2}[-./]\d{1,2}[-./]\d{4})", doc_text, re.I)
+                    order_date = cls.normalize_date_str(date_m.group(1)) if date_m else ""
+                    
+                    disp_m = re.search(r"(?:Dispatch|Delivery)\s*date\s*(?:\([A-Z]+\))?:\s*(\d{1,2}[-./]\d{1,2}[-./]\d{4})", doc_text, re.I)
+                    delivery_date = cls.normalize_date_str(disp_m.group(1)) if disp_m else ""
+                    
+                    wh_m = re.search(r"Warehouse:\s*([^\r\n]+)", doc_text, re.I)
+                    delivery_terms = wh_m.group(1).strip() if wh_m else "Retail magazijn"
+
+                    last_style = ""
+                    last_brand = "Anna"
+                    last_season = "27-01"
+                    last_item_group = "Giyim"
+
                     for p_idx, page in enumerate(pdf.pages):
-                        text = page.extract_text() or ""
                         words = page.extract_words()
                         
-                        if "Anna van Toor" not in text and "annavantoor" not in text and "Retail magazijn" not in text:
+                        # Locate all table column headers anchored by 'Quantity'
+                        qty_hdrs = [w for w in words if w['text'] == 'Quantity' and 420 <= w['x0'] <= 490]
+                        qty_hdrs.sort(key=lambda w: w['top'])
+                        if not qty_hdrs:
                             continue
                             
-                        po_m = re.search(r"Order\s*number:\s*(\d+)", text, re.I)
-                        po_number = po_m.group(1) if po_m else "7500"
-                        
-                        date_m = re.search(r"Date:\s*(\d{1,2}[-./]\d{1,2}[-./]\d{4})", text, re.I)
-                        order_date = cls.normalize_date_str(date_m.group(1)) if date_m else ""
-                        
-                        disp_m = re.search(r"Dispatch\s*date\s*(?:\(ETD\))?:\s*(\d{1,2}[-./]\d{1,2}[-./]\d{4})", text, re.I)
-                        delivery_date = cls.normalize_date_str(disp_m.group(1)) if disp_m else ""
-                        
-                        wh_m = re.search(r"Warehouse:\s*([^\r\n]+)", text, re.I)
-                        delivery_terms = wh_m.group(1).strip() if wh_m else "Retail magazijn"
-                        
-                        style_m = re.search(r"([0-9]{2}[-\w]+(?:-[A-Za-z0-9]+)?)\s*\(([^)]+)\)", text)
-                        style_no = style_m.group(1) if style_m else ""
-                        
-                        brand_m = re.search(r"Brand:\s*([^\r\n\s]+)", text, re.I)
-                        brand = brand_m.group(1) if brand_m else "Anna"
-                        
-                        season_m = re.search(r"Season:\s*([^\r\n\s]+)", text, re.I)
-                        season = season_m.group(1) if season_m else "27-01"
-                        
-                        item_group_m = re.search(r"Item\s*group:\s*([^\r\n]+)", text, re.I)
-                        item_group = item_group_m.group(1).strip() if item_group_m else "Giyim"
-                        item_group = re.split(r"\b(?:XS|Theme|Season)\b", item_group, flags=re.I)[0].strip()
-                        
-                        # Find the header word 'Quantity' to anchor size column headers
-                        qty_hdr = next((w for w in words if w['text'] == 'Quantity' and 230 <= w['top'] <= 285), None)
-                        if not qty_hdr:
-                            continue
+                        for b_idx, q_hdr in enumerate(qty_hdrs):
+                            hdr_y = q_hdr['top']
+                            prev_y = qty_hdrs[b_idx - 1]['top'] if b_idx > 0 else 0
                             
-                        hdr_y = qty_hdr['top']
-                        size_hdr_words = [w for w in words if abs(w['top'] - hdr_y) <= 3 and w['x1'] < qty_hdr['x0']]
-                        size_hdr_words.sort(key=lambda w: w['x0'])
-                        
-                        col_centers = {}
-                        for w in size_hdr_words:
-                            col_centers[w['text']] = (w['x0'] + w['x1']) / 2
-                        col_centers['Quantity'] = (qty_hdr['x0'] + qty_hdr['x1']) / 2
-                        
-                        qty_words = [w for w in words if abs(w['x0'] - qty_hdr['x0']) < 18 and w['text'].isdigit() and w['top'] > hdr_y + 10]
-                        qty_words.sort(key=lambda w: w['top'])
-                        
-                        # Filter out Total / summary rows
-                        clean_qty_words = []
-                        for qw in qty_words:
-                            row_words = [w for w in words if abs(w['top'] - qw['top']) <= 8]
-                            row_text_lower = " ".join(w['text'].lower() for w in row_words)
-                            if any(kw in row_text_lower for kw in ['total', 'quantities', 'pieces', 'goods']):
-                                continue
-                            clean_qty_words.append(qw)
+                            # Block header words above this table header and below the previous table
+                            block_header_words = [w for w in words if prev_y < w['top'] < hdr_y]
+                            header_text = " ".join(w['text'] for w in sorted(block_header_words, key=lambda w: (w['top'], w['x0'])))
                             
-                        for idx, q_word in enumerate(clean_qty_words):
-                            r_top = q_word['top']
-                            row_words = [w for w in words if abs(w['top'] - r_top) <= 8]
-                            row_qty = int(q_word['text'])
-                            
-                            # Initialise sizes to 0 for all headers
-                            sizes = {sz: 0 for sz in col_centers if sz != 'Quantity'}
-                                    
-                            for w in row_words:
-                                if not w['text'].isdigit() or w == q_word:
-                                    continue
-                                val = int(w['text'])
-                                w_cx = (w['x0'] + w['x1']) / 2
+                            style_m = re.search(r"([0-9]{2,3}[-\w]+(?:-[A-Za-z0-9]+)?)\s*\(([^)]+)\)", header_text)
+                            if style_m:
+                                last_style = style_m.group(1)
                                 
-                                # Find closest header center (within 22pt tolerance)
-                                best_sz = None
-                                min_d = 999
-                                for sz_name, cx in col_centers.items():
-                                    if sz_name == 'Quantity': continue
-                                    d = abs(w_cx - cx)
-                                    if d < min_d and d < 22:
-                                        min_d = d
-                                        best_sz = sz_name
-                                if best_sz:
-                                    sizes[best_sz] = val
+                            brand_m = re.search(r"Brand:\s*([^\r\n\s]+)", header_text, re.I)
+                            if brand_m:
+                                last_brand = brand_m.group(1)
+                                
+                            season_m = re.search(r"Season:\s*([^\r\n\s]+)", header_text, re.I)
+                            if season_m:
+                                last_season = season_m.group(1)
+                                
+                            item_group_m = re.search(r"Item\s*group:\s*([^\r\n]+)", header_text, re.I)
+                            if item_group_m:
+                                last_item_group = item_group_m.group(1).strip()
+                                last_item_group = re.split(r"\b(?:XS|Theme|Season|Brand)\b", last_item_group, flags=re.I)[0].strip()
+                                
+                            # Table bottom: Total row for this table block
+                            total_word = next((w for w in words if w['text'] == 'Total' and w['x0'] < 100 and w['top'] > hdr_y), None)
+                            table_bottom = total_word['top'] if total_word else (qty_hdrs[b_idx+1]['top'] if b_idx+1 < len(qty_hdrs) else page.height)
+                            
+                            # Size header columns
+                            size_hdr_words = [w for w in words if abs(w['top'] - hdr_y) <= 4 and w['x1'] < q_hdr['x0']]
+                            size_hdr_words.sort(key=lambda w: w['x0'])
+                            
+                            col_centers = {w['text']: (w['x0'] + w['x1']) / 2 for w in size_hdr_words}
+                            col_centers['Quantity'] = (q_hdr['x0'] + q_hdr['x1']) / 2
+                            
+                            # Quantity column numbers for this block
+                            data_qty_words = [w for w in words if abs(w['x0'] - q_hdr['x0']) < 18 and w['text'].isdigit() and hdr_y + 10 < w['top'] < table_bottom - 2]
+                            data_qty_words.sort(key=lambda w: w['top'])
+                            
+                            for idx, qw in enumerate(data_qty_words):
+                                r_top = qw['top']
+                                row_words = [w for w in words if abs(w['top'] - r_top) <= 8]
+                                row_qty = int(qw['text'])
+                                
+                                # Initialise sizes to 0 for all headers
+                                sizes = {sz: 0 for sz in col_centers if sz != 'Quantity'}
+                                        
+                                for w in row_words:
+                                    if not w['text'].isdigit() or w == qw:
+                                        continue
+                                    val = int(w['text'])
+                                    w_cx = (w['x0'] + w['x1']) / 2
                                     
-                            # Color code (e.g. 431-2 or 650-2)
-                            color_code = ""
-                            for w in row_words:
-                                if re.match(r"^\d+-\d+$", w['text']):
-                                    color_code = w['text']
-                                    break
-                                    
-                            # Color name
-                            color_words = [w['text'] for w in sorted(row_words, key=lambda x: x['x0']) if w['x1'] < 75 and not w['text'].isdigit()]
-                            prev_color_words = [w['text'] for w in words if abs(w['top'] - (r_top - 9)) <= 4 and w['x1'] < 75 and not w['text'].isdigit()]
-                            all_color = prev_color_words + color_words
-                            color_name = " ".join(dict.fromkeys(all_color)).replace("Dessin", "").strip() or "Standart"
-                            
-                            # Channel / comments
-                            prev_top = clean_qty_words[idx - 1]['top'] if idx > 0 else hdr_y
-                            next_top = clean_qty_words[idx + 1]['top'] if idx + 1 < len(clean_qty_words) else r_top + 18
-                            min_y = (prev_top + r_top) / 2 if idx > 0 else hdr_y + 4
-                            max_y = (r_top + next_top) / 2 if idx + 1 < len(clean_qty_words) else r_top + 18
-                            
-                            comm_words = [w for w in words if min_y <= w['top'] < max_y and 565 <= w['x0'] < 645]
-                            comm_words.sort(key=lambda w: (round(w['top']/4), w['x0']))
-                            comment_str = " ".join(w['text'] for w in comm_words).strip()
-                            
-                            items.append({
-                                "source_type": "PDF_ANNA_VAN_TOOR",
-                                "po_number": po_number,
-                                "customer_name": "Anna van Toor B.V.",
-                                "brand": brand,
-                                "season": season,
-                                "order_date": order_date or "17.08.2026",
-                                "delivery_date": delivery_date or "06.11.2026",
-                                "delivery_terms": delivery_terms,
-                                "payment_terms": "days nett",
-                                "style_no": style_no,
-                                "description": item_group or "Blazer",
-                                "fabric_composition": "Örme / Dokuma",
-                                "color_code": color_code,
-                                "color_name": color_name,
-                                "unit_price": 0.0,
-                                "total_quantity": row_qty,
-                                "total_amount": 0.0,
-                                "currency": "EUR",
-                                "size_distribution": sizes,
-                                "notes": comment_str,
-                                "status": "Planlama aşamasında"
-                            })
-                if items:
-                    return {"type": "PDF_ANNA_VAN_TOOR", "count": len(items), "data": items}
+                                    # Find closest header center (within 22pt tolerance)
+                                    best_sz = None
+                                    min_d = 999
+                                    for sz_name, cx in col_centers.items():
+                                        if sz_name == 'Quantity': continue
+                                        d = abs(w_cx - cx)
+                                        if d < min_d and d < 22:
+                                            min_d = d
+                                            best_sz = sz_name
+                                    if best_sz:
+                                        sizes[best_sz] = val
+                                        
+                                # Color code (e.g. 412-1 or 233-1)
+                                color_code = ""
+                                for w in row_words:
+                                    if re.match(r"^\d+-\d+$", w['text']):
+                                        color_code = w['text']
+                                        break
+                                        
+                                # Color name: non-digit words around row top with x1 < 75 sorted by vertical then horizontal position
+                                cw = [w for w in words if r_top - 10 <= w['top'] <= r_top + 10 and w['x1'] < 75 and not w['text'].isdigit()]
+                                cw.sort(key=lambda w: (round(w['top'], 1), w['x0']))
+                                color_name = " ".join(dict.fromkeys(w['text'] for w in cw)).replace("Dessin", "").strip() or "Standart"
+                                
+                                # Channel / comments
+                                prev_r_top = data_qty_words[idx - 1]['top'] if idx > 0 else hdr_y
+                                next_r_top = data_qty_words[idx + 1]['top'] if idx + 1 < len(data_qty_words) else table_bottom
+                                min_y = (prev_r_top + r_top) / 2 if idx > 0 else hdr_y + 4
+                                max_y = (r_top + next_r_top) / 2 if idx + 1 < len(data_qty_words) else table_bottom
+                                
+                                comm_words = [w for w in words if min_y <= w['top'] < max_y and 565 <= w['x0'] < 645]
+                                comm_words.sort(key=lambda w: (round(w['top']/4), w['x0']))
+                                comment_str = " ".join(w['text'] for w in comm_words).strip()
+                                
+                                items.append({
+                                    "source_type": "PDF_ANNA_VAN_TOOR",
+                                    "po_number": po_number,
+                                    "customer_name": "Anna van Toor B.V.",
+                                    "brand": last_brand,
+                                    "season": last_season,
+                                    "order_date": order_date or "17.08.2026",
+                                    "delivery_date": delivery_date or "06.11.2026",
+                                    "delivery_terms": delivery_terms,
+                                    "payment_terms": "days nett",
+                                    "style_no": last_style,
+                                    "description": last_item_group or "Blazer",
+                                    "fabric_composition": "Örme / Dokuma",
+                                    "color_code": color_code,
+                                    "color_name": color_name,
+                                    "unit_price": 0.0,
+                                    "total_quantity": row_qty,
+                                    "total_amount": 0.0,
+                                    "currency": "EUR",
+                                    "size_distribution": sizes,
+                                    "notes": comment_str,
+                                    "status": "Planlama aşamasında"
+                                })
+                    if items:
+                        return {"type": "PDF_ANNA_VAN_TOOR", "count": len(items), "data": items}
             except Exception as e:
                 print(f"pdfplumber Anna van Toor error: {e}")
 
