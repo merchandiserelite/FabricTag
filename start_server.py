@@ -23,10 +23,23 @@ def get_local_ip():
     except Exception:
         return "127.0.0.1"
 
-def open_browser(port):
-    time.sleep(1.2)
+def wait_for_server_and_open_browser(port, timeout=25):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.4)
+                if s.connect_ex(('127.0.0.1', port)) == 0:
+                    time.sleep(0.2)
+                    url = f"http://localhost:{port}"
+                    print(f"\n🌐 Sunucu hazır, tarayıcı açılıyor: {url}")
+                    webbrowser.open(url)
+                    return
+        except Exception:
+            pass
+        time.sleep(0.25)
     url = f"http://localhost:{port}"
-    print(f"\n🌐 Tarayıcı açılıyor: {url}")
+    print(f"\n🌐 Tarayıcı açılıyor (zaman aşımı fallback): {url}")
     webbrowser.open(url)
 
 if __name__ == "__main__":
@@ -43,7 +56,15 @@ if __name__ == "__main__":
     print("   üzerinde çalışacak şekilde ayarlandı. Her iki sistem aynı anda çalışabilir.")
     print("=" * 65)
 
-    threading.Thread(target=open_browser, args=(port,), daemon=True).start()
+    threading.Thread(target=wait_for_server_and_open_browser, args=(port,), daemon=True).start()
 
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True, log_level="info")
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=port,
+        reload=True,
+        reload_dirs=["."],
+        reload_excludes=["dist/**", "build/**", "data/uploads/**", ".git/**", "scratch/**", "__pycache__/**"],
+        log_level="info"
+    )
 

@@ -1,0 +1,1 @@
+Redirecting to /@vue/compiler-dom@3.5.42/dist/compiler-dom.global.prod.js

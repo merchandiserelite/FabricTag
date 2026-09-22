@@ -22,10 +22,13 @@ UPLOADS_DIR = DATA_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 DB_PATH = DATA_DIR / "texflow.db"
 
-# FabricTag Database Path (Portable: checks neighboring fabric-label-system first)
-_ft_local = BASE_DIR.parent / "fabric-label-system" / "database.db"
-if _ft_local.exists():
-    FABRICTAG_DB_PATH = _ft_local
+# FabricTag Database Path (Portable: checks neighboring FabricTag package or dev folder)
+_ft_neighbor_pkg = BASE_DIR.parent / "FabricTag" / "database.db"
+_ft_neighbor_dev = BASE_DIR.parent / "fabric-label-system" / "database.db"
+if _ft_neighbor_pkg.exists():
+    FABRICTAG_DB_PATH = _ft_neighbor_pkg
+elif _ft_neighbor_dev.exists():
+    FABRICTAG_DB_PATH = _ft_neighbor_dev
 else:
     FABRICTAG_DB_PATH = Path(os.environ.get("FABRICTAG_DB_PATH", r"C:\Users\ASLI CELIK\.gemini\antigravity\scratch\fabric-label-system\database.db"))
 
@@ -168,6 +171,7 @@ def init_db():
         accessory_3 TEXT,
         accessory_4 TEXT,
         
+        channel TEXT DEFAULT '',
         status TEXT DEFAULT 'Hazırlık',
         custom_fields_json TEXT DEFAULT '{}',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -245,6 +249,33 @@ def init_db():
     )
     """)
 
+    # 10. Freeform Cost Studies (Serbest Fiyat Çalışmaları)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS free_cost_studies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_id INTEGER DEFAULT 1,
+        season TEXT,
+        customer_name TEXT,
+        brand TEXT,
+        model_no TEXT,
+        color TEXT,
+        fabric_supplier TEXT,
+        fabric_name TEXT,
+        fabric_code TEXT,
+        fabric_color TEXT,
+        fabric_width TEXT,
+        cost_data_json TEXT DEFAULT '{}',
+        kumas_total_tl REAL DEFAULT 0.0,
+        imalat_total_tl REAL DEFAULT 0.0,
+        unit_cost_tl REAL DEFAULT 0.0,
+        unit_price_target REAL DEFAULT 0.0,
+        target_currency TEXT DEFAULT 'EUR',
+        created_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # Safe migrations for cut and shipping tracking
     cursor.execute("PRAGMA table_info(styles)")
     style_cols = [r[1] for r in cursor.fetchall()]
@@ -256,6 +287,8 @@ def init_db():
         cursor.execute("ALTER TABLE styles ADD COLUMN cutting_date TEXT")
     if "shipping_date" not in style_cols:
         cursor.execute("ALTER TABLE styles ADD COLUMN shipping_date TEXT")
+    if "channel" not in style_cols:
+        cursor.execute("ALTER TABLE styles ADD COLUMN channel TEXT DEFAULT ''")
 
     cursor.execute("PRAGMA table_info(size_distributions)")
     size_cols = [r[1] for r in cursor.fetchall()]
@@ -301,28 +334,48 @@ def init_db():
         VALUES (?, 'depo', 'depo@elitetekstil.com', ?, 'Kumaş & Aksesuar Depo', 'warehouse')
         """, (company_id, hash_password('123456'),))
 
+    cursor.execute("SELECT id FROM companies LIMIT 1")
+    crow = cursor.fetchone()
+    company_id = crow[0] if crow else 1
+
     # Safe menu insertion for yukleme_adetleri
     cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = 'yukleme_adetleri'")
     if cursor.fetchone()[0] == 0:
         cursor.execute("""
         INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
-        VALUES (1, 'yukleme_adetleri', 'Yükleme Adetleri', 'Shipment Quantities', 'truck', '/yukleme-adetleri', 6, 1, '["superadmin","admin","merchandiser","cutting","shipping"]')
-        """)
+        VALUES (?, 'yukleme_adetleri', 'Yükleme Adetleri', 'Shipment Quantities', 'truck', '/yukleme-adetleri', 6, 1, '["superadmin","admin","merchandiser","cutting","shipping"]')
+        """, (company_id,))
         # Push subsequent menus down
         cursor.execute("UPDATE dynamic_menus SET sort_order = sort_order + 1 WHERE menu_key != 'yukleme_adetleri' AND sort_order >= 6")
 
-        # Default Menus
+    # Safe menu insertion for serbest_fiyat (always positioned right below yukleme_adetleri)
+    cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = 'serbest_fiyat'")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("SELECT sort_order FROM dynamic_menus WHERE menu_key = 'yukleme_adetleri'")
+        row = cursor.fetchone()
+        y_order = row[0] if row else 6
+        target_order = y_order + 1
+        cursor.execute("UPDATE dynamic_menus SET sort_order = sort_order + 1 WHERE menu_key != 'serbest_fiyat' AND sort_order >= ?", (target_order,))
+        cursor.execute("""
+        INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
+        VALUES (?, 'serbest_fiyat', 'Serbest Fiyat Çalışması', 'Freeform Costing', 'calculator', '/serbest-fiyat', ?, 1, '["superadmin","admin","merchandiser"]')
+        """, (company_id, target_order))
+
+    # Default Menus if table was empty
+    cursor.execute("SELECT COUNT(*) FROM dynamic_menus")
+    if cursor.fetchone()[0] == 0:
         default_menus = [
             ("dashboard", "Genel Bakış / Dashboard", "Dashboard", "layout-dashboard", "/", 1, '["superadmin","admin","merchandiser","cutting","fabric_warehouse","sewing"]'),
             ("carsaf_liste", "Üretim Çarşaf Listesi", "Master Production Sheet", "table-properties", "/carsaf", 2, '["superadmin","admin","merchandiser","cutting","fabric_warehouse"]'),
             ("siparis_yukle", "Sipariş Yükle (PDF/Excel)", "Import Order (PDF/Excel)", "file-up", "/siparis-yukle", 3, '["superadmin","admin","merchandiser"]'),
             ("fabrictag_entegrasyon", "FabricTag Kumaş Deposu", "FabricTag Swatches", "layers", "/fabrictag", 4, '["superadmin","admin","merchandiser","fabric_warehouse"]'),
             ("kesimhane", "Kesimhane & Pastal Föyü", "Cutting Floor", "scissors", "/kesimhane", 5, '["superadmin","admin","cutting"]'),
-            ("audit_logs", "Değişiklik Tarihçesi (Audit Log)", "Audit Logs", "history", "/audit-logs", 6, '["superadmin","admin","merchandiser"]'),
-            ("menu_yonetimi", "Menü & Alan Özelleştirme", "Custom Fields & Menu Config", "sliders-horizontal", "/ayarlar/menuler", 7, '["superadmin","admin"]'),
+            ("yukleme_adetleri", "Yükleme Adetleri", "Shipment Quantities", "truck", "/yukleme-adetleri", 6, '["superadmin","admin","merchandiser","cutting","shipping"]'),
+            ("serbest_fiyat", "Serbest Fiyat Çalışması", "Freeform Costing", "calculator", "/serbest-fiyat", 7, '["superadmin","admin","merchandiser"]'),
+            ("audit_logs", "Değişiklik Tarihçesi (Audit Log)", "Audit Logs", "history", "/audit-logs", 8, '["superadmin","admin","merchandiser"]'),
+            ("menu_yonetimi", "Menü & Alan Özelleştirme", "Custom Fields & Menu Config", "sliders-horizontal", "/ayarlar/menuler", 9, '["superadmin","admin"]'),
             ("superadmin_panel", "Süper Admin & Lisanslama", "Super Admin & Licensing", "shield-alert", "/superadmin", 99, '["superadmin"]')
         ]
-
         for key, tr, en, icon, path, order, roles in default_menus:
             cursor.execute("""
             INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)

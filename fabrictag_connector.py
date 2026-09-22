@@ -8,11 +8,19 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 import os
+import sys
 
-_base_dir = Path(__file__).resolve().parent
-_ft_local = _base_dir.parent / "fabric-label-system" / "database.db"
-if _ft_local.exists():
-    FABRICTAG_DB_PATH = _ft_local
+if getattr(sys, 'frozen', False):
+    _base_dir = Path(sys.executable).resolve().parent
+else:
+    _base_dir = Path(__file__).resolve().parent
+
+_ft_neighbor_pkg = _base_dir.parent / "FabricTag" / "database.db"
+_ft_neighbor_dev = _base_dir.parent / "fabric-label-system" / "database.db"
+if _ft_neighbor_pkg.exists():
+    FABRICTAG_DB_PATH = _ft_neighbor_pkg
+elif _ft_neighbor_dev.exists():
+    FABRICTAG_DB_PATH = _ft_neighbor_dev
 else:
     FABRICTAG_DB_PATH = Path(os.environ.get("FABRICTAG_DB_PATH", r"C:\Users\ASLI CELIK\.gemini\antigravity\scratch\fabric-label-system\database.db"))
 
@@ -121,7 +129,8 @@ class FabricTagConnector:
         return True
 
     @classmethod
-    def add_received_batch(cls, fabric_id: int, amount: str, date_str: Optional[str] = None, note: str = "") -> dict:
+    def add_received_batch(cls, fabric_id: int, amount: str, date_str: Optional[str] = None, note: str = "",
+                           unit_price: str = "", currency: str = "EUR", exchange_rate: str = "", vat_rate: float = 10.0) -> dict:
         conn = cls.get_connection()
         if not conn:
             return {}
@@ -144,7 +153,11 @@ class FabricTagConnector:
                 "id": 1,
                 "amount": row[1],
                 "date": (dt and dt[0]) or datetime.now().strftime("%d.%m.%Y"),
-                "note": "1. Giriş"
+                "note": "1. Giriş",
+                "unit_price": "",
+                "currency": "EUR",
+                "exchange_rate": "",
+                "vat_rate": 10.0
             })
         conn.close()
 
@@ -153,7 +166,11 @@ class FabricTagConnector:
             "id": int(datetime.now().timestamp() * 1000),
             "amount": str(amount).strip(),
             "date": final_date,
-            "note": note.strip()
+            "note": note.strip(),
+            "unit_price": str(unit_price or "").strip(),
+            "currency": str(currency or "EUR").strip(),
+            "exchange_rate": str(exchange_rate or "").strip(),
+            "vat_rate": float(vat_rate if vat_rate is not None else 10.0)
         })
         cls.update_received_meters(fabric_id, "", final_date, batches=batches)
         
@@ -166,6 +183,47 @@ class FabricTagConnector:
             except ValueError:
                 pass
         return {"batches": batches, "received_meters": str(round(total, 2)), "received_date": final_date}
+
+    @classmethod
+    def update_received_batch(cls, fabric_id: int, batch_id: int, update_data: dict) -> dict:
+        conn = cls.get_connection()
+        if not conn:
+            return {}
+        c = conn.cursor()
+        c.execute("SELECT received_batches_json FROM fabrics WHERE id = ?", (fabric_id,))
+        row = c.fetchone()
+        batches = []
+        import json
+        if row and row[0]:
+            try:
+                batches = json.loads(row[0])
+            except Exception:
+                batches = []
+        conn.close()
+
+        updated = False
+        for b in batches:
+            if b.get("id") == batch_id:
+                for k, v in update_data.items():
+                    if k in ["amount", "date", "note", "unit_price", "currency", "exchange_rate", "vat_rate"]:
+                        b[k] = v
+                updated = True
+                break
+
+        if updated:
+            cls.update_received_meters(fabric_id, "", "", batches=batches)
+
+        total = 0.0
+        last_date = ""
+        for b in batches:
+            try:
+                amt_clean = str(b.get("amount", 0)).replace(",", ".").replace("M", "").replace("m", "").replace("KG", "").replace("kg", "").strip()
+                total += float(amt_clean)
+            except ValueError:
+                pass
+            if b.get("date"):
+                last_date = b.get("date")
+        return {"batches": batches, "received_meters": str(round(total, 2)) if total > 0 else "", "received_date": last_date}
 
     @classmethod
     def delete_received_batch(cls, fabric_id: int, batch_id: int) -> dict:
@@ -197,6 +255,7 @@ class FabricTagConnector:
             if b.get("date"):
                 last_date = b.get("date")
         return {"batches": batches, "received_meters": str(round(total, 2)) if total > 0 else "", "received_date": last_date}
+
 
 
     @classmethod
