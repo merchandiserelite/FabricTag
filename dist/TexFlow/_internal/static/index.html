@@ -2337,11 +2337,15 @@
                                             </template>
 
 
-                                            <!-- 2. Marka (KUTUCUKSUZ, SADE VE ŞIK METİN) -->
+                                            <!-- 2. Marka (ELLE DEĞİŞTİRİLEBİLİR & OTOMATİK TAMAMLAMALI) -->
                                             <template v-else-if="col.key === 'brand'">
-                                                <span class="font-medium truncate block" :title="item.brand" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">
-                                                    {{ item.brand || '-' }}
-                                                </span>
+                                                <input :value="item.brand"
+                                                       list="dl-brands"
+                                                       @change="onBrandChange(item, $event)"
+                                                       @keydown.enter="$event.target.blur()"
+                                                       class="w-full bg-transparent border-0 outline-none focus:bg-slate-500/10 hover:bg-slate-500/5 px-1 py-0.5 rounded text-xs font-medium transition truncate"
+                                                       :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'"
+                                                       placeholder="Marka...">
                                             </template>
 
                                             <!-- 2.1 Kanal (YAZILANLARDAN OTOMATİK TAMAMLAMALI & SERBEST GİRİŞ) -->
@@ -4835,6 +4839,277 @@
                             </div>
                         </div>
                     </div>
+                </section>
+
+                <!-- 7. MENÜ & ALAN ÖZELLEŞTİRME & TAM SİSTEM YEDEKLEME PANELİ -->
+                <section v-if="activeMenu === 'menu_yonetimi'" class="space-y-6 w-full max-w-[1600px] mx-auto px-1 sm:px-4 pb-16">
+                    
+                    <!-- Üst Başlık & Hızlı Manuel Yedekleme Butonları -->
+                    <div class="p-6 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition shadow-sm"
+                         :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-500 shrink-0">
+                                <i data-lucide="database" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-black tracking-tight flex items-center gap-2" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                    Menü & Özelleştirme - Tam Sistem Yedekleme
+                                </h3>
+                                <p class="text-xs text-slate-400 mt-0.5">
+                                    Veritabanındaki tüm tablolar (Çarşaf listesi, siparişler, modeller, varyantlar, beden dağılımları, pastal/kesimhane, kumaş bağlantıları, maliyet çalışmaları, kullanıcılar) ve sistem yükleme dosyaları eksiksiz yedeklenir.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                            <!-- Bilgisayardan Yedek Dosyası Yükleme -->
+                            <label class="px-3.5 py-2.5 rounded-xl border text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm"
+                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'">
+                                <i data-lucide="upload" class="w-4 h-4 text-indigo-400"></i>
+                                <span>{{ backupUploadLoading ? 'Yükleniyor...' : 'Yedek Yükle (.zip)' }}</span>
+                                <input type="file" @change="handleBackupFileUpload" accept=".zip" class="hidden" :disabled="backupUploadLoading">
+                            </label>
+
+                            <!-- Listeyi Yenile -->
+                            <button @click="loadBackups" class="p-2.5 rounded-xl border text-slate-400 hover:text-indigo-500 transition cursor-pointer"
+                                    :class="isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-300'" title="Yedek Listesini Yenile">
+                                <i data-lucide="refresh-cw" class="w-4 h-4" :class="{'animate-spin': backupLoading}"></i>
+                            </button>
+
+                            <!-- Şimdi Tam Sistem Yedeği Al -->
+                            <button @click="createBackupNow" :disabled="backupCreating"
+                                    class="flex items-center gap-2 px-5 py-2.5 rounded-xl btn-theme text-xs font-bold transition shadow-lg hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50">
+                                <span v-if="backupCreating" class="animate-spin">⏳</span>
+                                <i v-else data-lucide="save" class="w-4 h-4"></i>
+                                <span>{{ backupCreating ? 'Yedek Alınıyor (Lütfen Bekleyin)...' : 'Şimdi Tam Sistem Yedeği Al' }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Otomatik Zamanlanmış Yedekleme & Güvenlik Ayarları (2 Kolon) -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        
+                        <!-- Sol Kart: Otomatik Günlük Yedekleme Saatleri -->
+                        <div class="p-5 rounded-2xl border transition shadow-sm space-y-4"
+                             :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                            <div class="flex items-center justify-between pb-3 border-b" :class="isDarkMode ? 'border-slate-800' : 'border-slate-100'">
+                                <div class="flex items-center gap-2.5">
+                                    <i data-lucide="clock" class="w-5 h-5 text-indigo-400"></i>
+                                    <div>
+                                        <h4 class="text-sm font-bold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">Otomatik Günlük Yedekleme Programı</h4>
+                                        <p class="text-[11px] text-slate-400">Belirlenen saatlerde arka planda sistem sessizce tam yedek alır.</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Toggle Switch -->
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" v-model="backupConfig.enabled" @change="saveBackupSettings" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                                    <span class="ml-2 text-xs font-bold" :class="backupConfig.enabled ? 'text-emerald-400' : 'text-slate-400'">
+                                        {{ backupConfig.enabled ? 'Aktif' : 'Pasif' }}
+                                    </span>
+                                </label>
+                            </div>
+
+                            <!-- Tanımlı Saatler Rozetleri -->
+                            <div class="space-y-2">
+                                <label class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">
+                                    Yedek Alınacak Saatler:
+                                </label>
+                                <div class="flex flex-wrap items-center gap-2 min-h-[38px] p-2 rounded-xl border"
+                                     :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                    <span v-for="timeStr in backupConfig.times" :key="timeStr"
+                                          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-mono font-bold text-xs shadow-sm"
+                                          :class="isDarkMode ? 'bg-indigo-900/40 text-indigo-300 border border-indigo-700/50' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'">
+                                        <i data-lucide="alarm-clock" class="w-3.5 h-3.5 text-indigo-400"></i>
+                                        <span>{{ timeStr }}</span>
+                                        <button @click="removeBackupTime(timeStr)" title="Bu saati kaldır" class="text-slate-400 hover:text-rose-400 ml-1 font-bold">×</button>
+                                    </span>
+                                    <span v-if="!backupConfig.times || backupConfig.times.length === 0" class="text-xs text-amber-400 italic">
+                                        Saat tanımlı değil. Lütfen aşağıdan saat ekleyin.
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Saat Ekleme Kontrolü -->
+                            <div class="flex items-center gap-2 pt-1">
+                                <div class="relative flex-1">
+                                    <input type="time" v-model="newBackupTime"
+                                           class="w-full px-3.5 py-2 rounded-xl border text-xs font-mono font-bold transition outline-none"
+                                           :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-indigo-500' : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-500'">
+                                </div>
+                                <button @click="addBackupTime"
+                                        class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0">
+                                    <i data-lucide="plus" class="w-4 h-4"></i>
+                                    <span>Saat Ekle</span>
+                                </button>
+                            </div>
+
+                            <!-- Hızlı Şablonlar -->
+                            <div class="pt-2 border-t flex flex-wrap items-center gap-2 text-[11px]" :class="isDarkMode ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'">
+                                <span class="font-semibold">Hızlı Şablonlar:</span>
+                                <button @click="backupConfig.times = ['13:00', '17:00']; saveBackupSettings();"
+                                        class="px-2.5 py-1 rounded-lg border hover:border-indigo-500 hover:text-indigo-400 transition"
+                                        :class="isDarkMode ? 'border-slate-700 bg-slate-800/60' : 'border-slate-200 bg-slate-100'">
+                                    ⭐ 13:00 & 17:00 (Varsayılan)
+                                </button>
+                                <button @click="backupConfig.times = ['09:00', '13:00', '17:00', '21:00']; saveBackupSettings();"
+                                        class="px-2.5 py-1 rounded-lg border hover:border-indigo-500 hover:text-indigo-400 transition"
+                                        :class="isDarkMode ? 'border-slate-700 bg-slate-800/60' : 'border-slate-200 bg-slate-100'">
+                                    Günde 4 Kez (9-13-17-21)
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Sağ Kart: Saklama Limiti & Güvenlik Politikası -->
+                        <div class="p-5 rounded-2xl border transition shadow-sm space-y-4 flex flex-col justify-between"
+                             :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                            <div class="space-y-4">
+                                <div class="flex items-center gap-2.5 pb-3 border-b" :class="isDarkMode ? 'border-slate-800' : 'border-slate-100'">
+                                    <i data-lucide="shield-check" class="w-5 h-5 text-emerald-400"></i>
+                                    <div>
+                                        <h4 class="text-sm font-bold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">Saklama & Emniyet Politikası</h4>
+                                        <p class="text-[11px] text-slate-400">Disk alanı yönetimi ve geri yükleme güvenlik kuralları.</p>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">
+                                            Maksimum Saklanacak Otomatik Yedek Sayısı:
+                                        </label>
+                                        <span class="text-xs font-bold text-theme font-mono">{{ backupConfig.retention_count || 30 }} Adet</span>
+                                    </div>
+                                    <input type="range" min="5" max="100" step="5" v-model.number="backupConfig.retention_count" @change="saveBackupSettings"
+                                           class="w-full accent-indigo-600 cursor-pointer">
+                                    <p class="text-[11px] text-slate-400">
+                                        ℹ️ Belirlenen limit aşıldığında sistem en eski otomatik yedekleri güvenle temizler. Manuel aldığınız yedekleriniz ve geri yükleme emniyet yedekleriniz hiçbir zaman otomatik silinmez.
+                                    </p>
+                                </div>
+
+                                <div class="p-3.5 rounded-xl border flex items-center justify-between"
+                                     :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                    <div class="space-y-0.5">
+                                        <div class="text-xs font-bold" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">Sistem Yükleme Dosyalarını Dahil Et</div>
+                                        <div class="text-[10.5px] text-slate-400">Sipariş PDF'leri, Excel dosyaları ve model resimleri arşive eklenir</div>
+                                    </div>
+                                    <input type="checkbox" v-model="backupConfig.include_uploads" @change="saveBackupSettings"
+                                           class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                                </div>
+                            </div>
+
+                            <div class="pt-3 border-t flex items-center justify-between" :class="isDarkMode ? 'border-slate-800' : 'border-slate-100'">
+                                <div class="text-[11px] text-slate-400 flex items-center gap-1.5">
+                                    <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
+                                    <span>Son Yedek: <strong class="text-slate-200">{{ backupConfig.last_backup_time || 'Henüz alınmadı' }}</strong></span>
+                                </div>
+                                <button @click="saveBackupSettings"
+                                        class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition border border-slate-700 flex items-center gap-1.5 cursor-pointer">
+                                    <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i>
+                                    <span>Ayarları Kaydet</span>
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Mevcut Yedek Dosyaları Tablosu -->
+                    <div class="rounded-2xl border shadow-sm overflow-hidden"
+                         :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                        <div class="p-4 border-b flex items-center justify-between" :class="isDarkMode ? 'border-slate-800 bg-slate-950/40' : 'border-slate-100 bg-slate-50'">
+                            <div class="flex items-center gap-2.5">
+                                <i data-lucide="archive" class="w-5 h-5 text-indigo-400"></i>
+                                <div>
+                                    <h4 class="text-sm font-bold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                        Mevcut Sistem Yedekleri ({{ backupsList.length }} Adet)
+                                    </h4>
+                                    <p class="text-[11px] text-slate-400">İstediğiniz yedeği bilgisayarınıza indirebilir veya tek tıkla geri yükleyebilirsiniz.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto custom-scrollbar">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="border-b uppercase text-[10.5px] tracking-wider font-bold"
+                                       :class="isDarkMode ? 'bg-slate-950 text-slate-400 border-slate-800' : 'bg-slate-100 text-slate-700 border-slate-200'">
+                                    <tr>
+                                        <th class="p-3.5 whitespace-nowrap min-w-[280px]">Yedek Dosya Adı</th>
+                                        <th class="p-3.5 whitespace-nowrap min-w-[160px]">Oluşturulma Tarihi</th>
+                                        <th class="p-3.5 whitespace-nowrap min-w-[130px]">Tür</th>
+                                        <th class="p-3.5 whitespace-nowrap min-w-[100px]">Boyut</th>
+                                        <th class="p-3.5 text-right whitespace-nowrap min-w-[180px]">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y" :class="isDarkMode ? 'divide-slate-800' : 'divide-slate-100'">
+                                    <tr v-for="b in backupsList" :key="b.filename" class="hover:bg-slate-500/5 transition">
+                                        <td class="p-3.5 font-medium flex items-center gap-2.5" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                            <div class="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                                                <i data-lucide="file-archive" class="w-4 h-4"></i>
+                                            </div>
+                                            <div>
+                                                <div class="font-mono font-bold text-xs">{{ b.filename }}</div>
+                                                <div class="text-[10px] text-slate-400">Tam Sistem (Veritabanı + Yükleme Dosyaları)</div>
+                                            </div>
+                                        </td>
+                                        <td class="p-3.5 font-mono text-slate-400 whitespace-nowrap">
+                                            {{ b.created_at }}
+                                        </td>
+                                        <td class="p-3.5 whitespace-nowrap">
+                                            <span v-if="b.backup_type === 'Otomatik'"
+                                                  class="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                                ⏰ Otomatik
+                                            </span>
+                                            <span v-else-if="b.backup_type === 'Manuel'"
+                                                  class="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                                👤 Manuel
+                                            </span>
+                                            <span v-else
+                                                  class="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                                🛡️ {{ b.backup_type }}
+                                            </span>
+                                        </td>
+                                        <td class="p-3.5 font-mono font-bold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">
+                                            {{ b.size_formatted }}
+                                        </td>
+                                        <td class="p-3.5 text-right whitespace-nowrap space-x-1.5">
+                                            <!-- İndir -->
+                                            <button @click="downloadBackup(b.filename)"
+                                                    class="px-3 py-1.5 rounded-xl border font-bold text-xs transition inline-flex items-center gap-1.5 cursor-pointer"
+                                                    :class="isDarkMode ? 'border-slate-700 text-indigo-400 hover:bg-slate-800' : 'border-slate-300 text-indigo-600 hover:bg-slate-50'"
+                                                    title="Yedeği Bilgisayara İndir">
+                                                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                                                <span>İndir</span>
+                                            </button>
+
+                                            <!-- Geri Yükle -->
+                                            <button @click="openRestoreModal(b)"
+                                                    class="px-3 py-1.5 rounded-xl border border-amber-500/30 font-bold text-xs text-amber-400 hover:bg-amber-500/10 transition inline-flex items-center gap-1.5 cursor-pointer"
+                                                    title="Sistemi Bu Yedeğe Döndür">
+                                                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-amber-400"></i>
+                                                <span>Geri Yükle</span>
+                                            </button>
+
+                                            <!-- Sil -->
+                                            <button @click="deleteBackupItem(b.filename)"
+                                                    class="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
+                                                    title="Yedeği Sil">
+                                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+
+                                    <tr v-if="!backupsList || backupsList.length === 0">
+                                        <td colspan="5" class="p-8 text-center text-slate-400">
+                                            <i data-lucide="database" class="w-10 h-10 mx-auto mb-2 text-slate-500 opacity-50"></i>
+                                            <div class="text-sm font-semibold">Henüz kayıtlı bir sistem yedeği bulunmuyor.</div>
+                                            <p class="text-xs text-slate-500 mt-1">Yukarıdaki <strong>"Şimdi Tam Sistem Yedeği Al"</strong> butonuna tıklayarak ilk yedeğinizi anında oluşturabilirsiniz.</p>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                 </section>
 
                 <!-- 8. KULLANICI & YETKİ YÖNETİMİ PANELİ (RBAC) -->
@@ -9128,6 +9403,50 @@
             </form>
         </div>
     </div>
+
+    <!-- GERİ YÜKLEME (RESTORE) ONAY MODALI -->
+    <div v-if="backupRestoreModalOpen" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div class="w-full max-w-md rounded-2xl border shadow-2xl p-6 space-y-4 transition"
+             :class="isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'">
+            
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-amber-400">Sistem Geri Yükleme Onayı</h3>
+                    <p class="text-xs text-slate-400">Lütfen bu kritik işlemi onaylayın</p>
+                </div>
+            </div>
+
+            <div class="p-3.5 rounded-xl border space-y-2 text-xs"
+                 :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                <div class="text-slate-400">Seçilen Yedek:</div>
+                <div class="font-mono font-bold text-indigo-400 break-all">{{ selectedBackupForRestore ? selectedBackupForRestore.filename : '' }}</div>
+                <div class="text-slate-400">Tarih: <strong class="text-slate-200">{{ selectedBackupForRestore ? selectedBackupForRestore.created_at : '' }}</strong></div>
+                <div class="text-slate-400">Boyut: <strong class="text-slate-200">{{ selectedBackupForRestore ? selectedBackupForRestore.size_formatted : '' }}</strong></div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-start gap-2">
+                <i data-lucide="shield-check" class="w-4 h-4 shrink-0 mt-0.5"></i>
+                <span><strong>Emniyet Garantisi:</strong> İşlem başlamadan önce sistem mevcut durumunuzun otomatik bir emniyet yedeğini alacaktır. Hiçbir veri silinmez veya kaybolmaz.</span>
+            </div>
+
+            <div class="flex items-center justify-end gap-2.5 pt-2">
+                <button type="button" @click="backupRestoreModalOpen = false" :disabled="backupRestoring"
+                        class="px-4 py-2 rounded-xl border text-xs font-bold hover:bg-slate-500/10 transition cursor-pointer"
+                        :class="isDarkMode ? 'border-slate-700 text-slate-300' : 'border-slate-300 text-slate-700'">
+                    Vazgeç
+                </button>
+                <button type="button" @click="confirmRestoreBackup" :disabled="backupRestoring"
+                        class="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer flex items-center gap-2">
+                    <span v-if="backupRestoring" class="animate-spin">⏳</span>
+                    <i v-else data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                    <span>{{ backupRestoring ? 'Geri Yükleniyor...' : 'Geri Yüklemeyi Başlat' }}</span>
+                </button>
+            </div>
+        </div>
+    </div>
     
     <!-- KESİMHANE GÖRSEL BÜYÜTME (LIGHTBOX / ZOOM MODAL) -->
         <div v-if="cuttingZoomImage"
@@ -9371,8 +9690,11 @@
                             <span v-if="activeSlipModel" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                                 Toplam: {{ getSlipModelGrandTotal(activeSlipModel) }} Adet
                             </span>
-                            <span v-if="selectedCuttingSlipChannel" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 flex items-center gap-1">
+                            <span v-if="selectedCuttingSlipChannel && selectedCuttingSlipChannel !== '__NONE__'" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 flex items-center gap-1">
                                 <span>Kanal:</span> <b>{{ selectedCuttingSlipChannel }}</b>
+                            </span>
+                            <span v-else-if="selectedCuttingSlipChannel === '__NONE__'" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                                <span>Kanal:</span> <b>Yok (Birleşik)</b>
                             </span>
                         </div>
                         <p class="text-[11px] text-slate-400">
@@ -9405,6 +9727,7 @@
                                 :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
                                 title="Modele ait kanala göre filtrele">
                             <option value="">Hepsi</option>
+                            <option value="__NONE__">Yok</option>
                             <option v-for="ch in activeSlipModelAvailableChannels" :key="ch" :value="ch">
                                 {{ ch }}
                             </option>
@@ -9516,7 +9839,7 @@
                                 </td>
                                 <td colspan="3" class="px-3 py-0.5 font-bold uppercase text-xs sm:text-sm">
                                     {{ activeSlipModel.brand || '-' }}
-                                    <span v-if="selectedCuttingSlipChannel" class="ml-2 font-semibold text-slate-700 text-xs sm:text-sm lowercase">
+                                    <span v-if="selectedCuttingSlipChannel && selectedCuttingSlipChannel !== '__NONE__'" class="ml-2 font-semibold text-slate-700 text-xs sm:text-sm lowercase">
                                         / kanal: <span class="font-bold uppercase">{{ selectedCuttingSlipChannel }}</span>
                                     </span>
                                 </td>

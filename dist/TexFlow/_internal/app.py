@@ -2697,7 +2697,7 @@ def api_update_style_cell(req: StyleUpdateFieldRequest, user: Dict[str, Any] = D
     conn = get_db()
     c = conn.cursor()
 
-    if req.field in ["order_date", "delivery_date", "season"]:
+    if req.field in ["order_date", "delivery_date", "season", "po_number"]:
         c.execute("SELECT order_id FROM styles WHERE id = ?", (req.style_id,))
         order_id = c.fetchone()[0]
         c.execute(f"UPDATE orders SET {req.field} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (req.value, order_id))
@@ -2748,6 +2748,10 @@ def api_update_style_cell(req: StyleUpdateFieldRequest, user: Dict[str, Any] = D
 
     sql = f"UPDATE styles SET {req.field} = ? {extra_sql}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     c.execute(sql, [req.value] + extra_params + [req.style_id])
+
+    if req.field == "brand" and order_id:
+        c.execute("UPDATE orders SET brand = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (req.value, order_id))
+        c.execute("UPDATE styles SET brand = ?, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?", (req.value, order_id))
     
     c.execute("""
     INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
@@ -2883,7 +2887,7 @@ def api_export_cutting_slip_excel(req: CuttingSlipExportRequest):
     medium = Side(border_style="medium", color="000000")
     box_border = Border(top=thin, left=thin, right=thin, bottom=thin)
 
-    has_channel = bool(req.has_channel_info or any(bool(c.channel and str(c.channel).strip()) for c in req.colors))
+    has_channel = bool(req.has_channel_info and any(bool(c.channel and str(c.channel).strip()) for c in req.colors))
     num_sizes = len(req.sizes)
 
     # Kolon yerleşimi:
@@ -2946,8 +2950,9 @@ def api_export_cutting_slip_excel(req: CuttingSlipExportRequest):
     ws["A3"].alignment = Alignment(horizontal="right", vertical="center")
 
     brand_val = req.brand or ""
-    if req.channel:
-        brand_val = f"{brand_val} (Kanal: {req.channel})" if brand_val else f"Kanal: {req.channel}"
+    ch_clean = str(req.channel or "").strip()
+    if ch_clean and ch_clean != '__NONE__' and ch_clean.lower() != 'yok':
+        brand_val = f"{brand_val} (Kanal: {ch_clean})" if brand_val else f"Kanal: {ch_clean}"
     if total_cols > 2:
         ws.merge_cells(f"B3:{last_col_letter}3")
     ws["B3"].value = brand_val
@@ -5313,6 +5318,116 @@ def api_haftalik_program_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+# ----------------- TAM SİSTEM YEDEKLEME & RESTORE (BACKUP) -----------------
+import backup_manager
+
+@app.get("/api/backup/config")
+def api_get_backup_config(user: Dict[str, Any] = Depends(require_user)):
+    return backup_manager.get_backup_config()
+
+@app.post("/api/backup/config")
+def api_save_backup_config(cfg: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+    clean_times = []
+    for t in cfg.get("times", []):
+        t_str = str(t).strip()
+        if re.match(r"^([01]?\d|2[0-3]):[0-5]\d$", t_str):
+            clean_times.append(t_str)
+    
+    clean_cfg = {
+        "enabled": bool(cfg.get("enabled", True)),
+        "times": sorted(list(set(clean_times))),
+        "retention_count": max(1, min(100, int(cfg.get("retention_count", 30)))),
+        "include_uploads": bool(cfg.get("include_uploads", True)),
+        "last_backup_time": backup_manager.get_backup_config().get("last_backup_time")
+    }
+    backup_manager.save_backup_config(clean_cfg)
+    return {"status": "success", "message": "Yedekleme ayarları kaydedildi.", "config": clean_cfg}
+
+@app.get("/api/backup/list")
+def api_list_backups(user: Dict[str, Any] = Depends(require_user)):
+    return {
+        "status": "success",
+        "backups": backup_manager.list_backups(),
+        "config": backup_manager.get_backup_config()
+    }
+
+@app.post("/api/backup/create")
+def api_create_backup(user: Dict[str, Any] = Depends(require_user)):
+    try:
+        username = user.get("username", "Kullanıcı")
+        res = backup_manager.create_full_backup(backup_type="manual", note=f"{username} tarafından manuel yedek alındı.")
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Yedekleme oluşturulamadı: {str(e)}")
+
+@app.get("/api/backup/download/{filename}")
+def api_download_backup(filename: str, user: Dict[str, Any] = Depends(require_user)):
+    safe_name = Path(filename).name
+    target = backup_manager.BACKUPS_DIR / safe_name
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Yedek dosyası bulunamadı.")
+    return FileResponse(
+        str(target),
+        media_type="application/zip",
+        filename=safe_name,
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'}
+    )
+
+@app.post("/api/backup/restore/{filename}")
+def api_restore_backup(filename: str, user: Dict[str, Any] = Depends(require_user)):
+    role = user.get("role", "")
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+        raise HTTPException(status_code=403, detail="Yedekten geri yükleme yetkiniz bulunmamaktadır.")
+    
+    safe_name = Path(filename).name
+    try:
+        res = backup_manager.restore_backup(safe_name)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Geri yükleme hatası: {str(e)}")
+
+@app.delete("/api/backup/{filename}")
+def api_delete_backup(filename: str, user: Dict[str, Any] = Depends(require_user)):
+    safe_name = Path(filename).name
+    target = backup_manager.BACKUPS_DIR / safe_name
+    if target.exists() and target.is_file():
+        try:
+            target.unlink()
+            return {"status": "success", "message": f"{safe_name} yedeği silindi."}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Dosya silinemedi: {e}")
+    raise HTTPException(status_code=404, detail="Yedek dosyası bulunamadı.")
+
+@app.post("/api/backup/upload-restore")
+async def api_upload_and_restore(request: Request, user: Dict[str, Any] = Depends(require_user)):
+    role = user.get("role", "")
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+        raise HTTPException(status_code=403, detail="Yedek yükleme yetkiniz bulunmamaktadır.")
+
+    form = await request.form()
+    f_obj = form.get("file")
+    if not f_obj or not hasattr(f_obj, "filename") or not f_obj.filename:
+        raise HTTPException(status_code=400, detail="Lütfen bir yedek ZIP dosyası seçin.")
+
+    safe_name = f"Uploaded_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{Path(f_obj.filename).name}"
+    save_dest = backup_manager.BACKUPS_DIR / safe_name
+    with open(save_dest, "wb") as buffer:
+        shutil.copyfileobj(f_obj.file, buffer)
+
+    try:
+        res = backup_manager.restore_backup(safe_name)
+        return res
+    except Exception as e:
+        if save_dest.exists():
+            save_dest.unlink()
+        raise HTTPException(status_code=500, detail=f"Yüklenen yedek açılamadı: {e}")
+
+# Start background backup scheduler
+try:
+    backup_manager.start_backup_scheduler()
+except Exception as e:
+    print(f"Failed to start backup scheduler: {e}")
 
 # ----------------- SPA ROOT -----------------
 

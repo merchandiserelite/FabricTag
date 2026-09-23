@@ -2530,6 +2530,22 @@ window.__texflowApp = createApp({
             }
         };
 
+        // MARKA GİRİŞİ & DÜZELTİLMESİ (ELLE YAZILABİLİR, OTOMATİK TAMAMLAMALI, OTOMATİK VERİTABANI GÜNCELLEME)
+        const onBrandChange = async (item, evt) => {
+            const val = (evt.target.value || '').trim();
+            if ((item.brand || '') !== val) {
+                item.brand = val;
+                if (item.order_id) {
+                    (styles.value || []).forEach(s => {
+                        if (s.order_id === item.order_id) {
+                            s.brand = val;
+                        }
+                    });
+                }
+                await updateCellWithLog(item.id, 'brand', val, 'Marka Güncellendi');
+            }
+        };
+
         // Geriye dönük uyumluluk için güvenli fonksiyonlar
         const activeChannelRowId = ref(null);
         const channelQuery = ref('');
@@ -6350,6 +6366,7 @@ window.__texflowApp = createApp({
                 setTimeout(() => scrollToCurrentWeek(false), 120);
             }
             if (menuKey === 'kullanici_yonetimi') loadUsers();
+            if (menuKey === 'menu_yonetimi') loadBackups();
             refreshIcons();
         };
 
@@ -7036,8 +7053,10 @@ window.__texflowApp = createApp({
             if (!modelGroup) return null;
 
             const chFilter = (selectedCuttingSlipChannel.value || '').trim();
+            const ignoreChannel = (chFilter === '__NONE__' || chFilter.toLowerCase() === 'yok');
+
             let filteredStyles = modelGroup.raw_styles || [];
-            if (chFilter) {
+            if (chFilter && !ignoreChannel) {
                 filteredStyles = filteredStyles.filter(s => {
                     const ch = (s.channel || '').toString().trim();
                     return ch === chFilter;
@@ -7061,13 +7080,13 @@ window.__texflowApp = createApp({
                 const normDisplay = normalizeCol(displayColor);
                 const normName = normalizeCol(colName);
                 const normCode = normalizeCol(colCode);
-                const styleChannel = (s.channel || '').toString().trim();
+                const styleChannel = ignoreChannel ? '' : (s.channel || '').toString().trim();
 
                 let existingColor = colors.find(c => {
                     const isSameColor = (normalizeCol(c.color_name) === normDisplay) ||
                         (c.raw_color_name && normName && normalizeCol(c.raw_color_name) === normName &&
                          (!normalizeCol(c.raw_color_code) || !normCode || normalizeCol(c.raw_color_code) === normCode));
-                    const isSameChannel = (c.channel || '') === styleChannel;
+                    const isSameChannel = ignoreChannel ? true : ((c.channel || '') === styleChannel);
                     return isSameColor && isSameChannel;
                 });
 
@@ -7131,7 +7150,8 @@ window.__texflowApp = createApp({
             const finalSizesList = activeSizes.length > 0 ? activeSizes : sortedSizes;
 
             // Varyant bilgisi ile ilk beden arasına eğer kanal bilgisi var ise Kanal sütunu aç
-            const hasChannelInfo = colors.some(c => c.channel && c.channel.trim() !== '');
+            // "Yok" seçildiğinde kanal bilgisi tamamen yok sayılır ve Kanal sütunu gizlenir
+            const hasChannelInfo = !ignoreChannel && colors.some(c => c.channel && c.channel.trim() !== '');
 
             return {
                 key: modelGroup.key,
@@ -7201,18 +7221,21 @@ window.__texflowApp = createApp({
             const m = activeSlipModel.value;
             if (!m) return;
             try {
+                const chFilter = (selectedCuttingSlipChannel.value || '').trim();
+                const ignoreChannel = (chFilter === '__NONE__' || chFilter.toLowerCase() === 'yok');
+
                 const payload = {
                     customer_name: m.customer_name || '',
                     brand: m.brand || '',
                     style_no: m.style_no || '',
-                    channel: selectedCuttingSlipChannel.value || '',
+                    channel: ignoreChannel ? '' : (selectedCuttingSlipChannel.value || ''),
                     date: cuttingSlipDate.value || '',
                     image_url: m.image_url || '',
                     sizes: m.sizesList || [],
-                    has_channel_info: !!m.hasChannelInfo,
+                    has_channel_info: !ignoreChannel && !!m.hasChannelInfo,
                     colors: m.colors.map(c => ({
                         name: c.color_name,
-                        channel: c.channel || '',
+                        channel: ignoreChannel ? '' : (c.channel || ''),
                         quantities: m.sizesList.map(sz => c.sizes[sz] !== undefined ? c.sizes[sz] : ''),
                         total: c.total
                     }))
@@ -7235,7 +7258,7 @@ window.__texflowApp = createApp({
                 const a = document.createElement('a');
                 a.href = url;
                 const cleanName = (m.style_no || 'Model').replace(/[^a-zA-Z0-9_-]/g, '_');
-                const chPart = selectedCuttingSlipChannel.value ? `_${selectedCuttingSlipChannel.value.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+                const chPart = (selectedCuttingSlipChannel.value && !ignoreChannel) ? `_${selectedCuttingSlipChannel.value.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
                 a.download = `KESIM_FISI_${cleanName}${chPart}.xlsx`;
                 document.body.appendChild(a);
                 a.click();
@@ -7382,6 +7405,192 @@ window.__texflowApp = createApp({
                 can_view_fabrictag: true
             }
         });
+
+        // ==========================================
+        // TAM SİSTEM YEDEKLEME & RESTORE (BACKUP)
+        // ==========================================
+        const backupsList = ref([]);
+        const backupConfig = ref({
+            enabled: true,
+            times: ['13:00', '17:00'],
+            retention_count: 30,
+            include_uploads: true,
+            last_backup_time: ''
+        });
+        const backupLoading = ref(false);
+        const backupCreating = ref(false);
+        const newBackupTime = ref('13:00');
+        const backupRestoreModalOpen = ref(false);
+        const selectedBackupForRestore = ref(null);
+        const backupRestoring = ref(false);
+        const backupUploadLoading = ref(false);
+
+        const loadBackups = async () => {
+            backupLoading.value = true;
+            try {
+                const res = await apiFetch('/api/backup/list');
+                if (res && res.status === 'success') {
+                    backupsList.value = res.backups || [];
+                    if (res.config) {
+                        backupConfig.value = { ...backupConfig.value, ...res.config };
+                    }
+                }
+            } catch (err) {
+                console.error('Yedekler yüklenirken hata:', err);
+            } finally {
+                backupLoading.value = false;
+                refreshIcons();
+            }
+        };
+
+        const createBackupNow = async () => {
+            if (backupCreating.value) return;
+            backupCreating.value = true;
+            try {
+                const res = await apiFetch('/api/backup/create', { method: 'POST' });
+                if (res && res.status === 'success') {
+                    alert(`✅ Tam Sistem Yedeği Başarıyla Alındı!\n\nDosya: ${res.filename}\nBoyut: ${res.size_formatted}\nİçerik: Tüm veritabanı tabloları, siparişler, çarşaf listesi ve ${res.uploads_count || 0} adet dosya.`);
+                    await loadBackups();
+                } else {
+                    alert('Yedekleme oluşturulamadı.');
+                }
+            } catch (err) {
+                alert('Yedekleme sırasında hata oluştu: ' + (err.message || err));
+            } finally {
+                backupCreating.value = false;
+                refreshIcons();
+            }
+        };
+
+        const saveBackupSettings = async () => {
+            try {
+                const res = await apiFetch('/api/backup/config', {
+                    method: 'POST',
+                    body: JSON.stringify(backupConfig.value)
+                });
+                if (res && res.status === 'success') {
+                    alert('✅ Otomatik yedekleme ayarları başarıyla kaydedildi.');
+                    if (res.config) backupConfig.value = res.config;
+                }
+            } catch (err) {
+                alert('Ayarlar kaydedilirken hata oluştu: ' + (err.message || err));
+            }
+        };
+
+        const addBackupTime = () => {
+            const t = String(newBackupTime.value || '').trim();
+            if (!t) return;
+            if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(t)) {
+                alert('Lütfen geçerli bir saat girin (Örn: 13:00 veya 17:00)');
+                return;
+            }
+            if (!backupConfig.value.times.includes(t)) {
+                backupConfig.value.times.push(t);
+                backupConfig.value.times.sort();
+                saveBackupSettings();
+            } else {
+                alert('Bu saat zaten listede ekli.');
+            }
+        };
+
+        const removeBackupTime = (t) => {
+            if (backupConfig.value.times.length <= 1) {
+                if (!confirm('Tüm saatleri kaldırmak istediğinize emin misiniz? Otomatik yedekleme için en az bir saat tanımlı olması önerilir.')) {
+                    return;
+                }
+            }
+            backupConfig.value.times = backupConfig.value.times.filter(x => x !== t);
+            saveBackupSettings();
+        };
+
+        const downloadBackup = (filename) => {
+            const url = `/api/backup/download/${encodeURIComponent(filename)}`;
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        const deleteBackupItem = async (filename) => {
+            if (!confirm(`"${filename}" yedeğini diskten kalıcı olarak silmek istediğinize emin misiniz?`)) return;
+            try {
+                const res = await apiFetch(`/api/backup/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+                if (res && res.status === 'success') {
+                    await loadBackups();
+                } else {
+                    alert(res.message || 'Silinemedi');
+                }
+            } catch (err) {
+                alert('Yedek silinirken hata: ' + (err.message || err));
+            }
+        };
+
+        const openRestoreModal = (b) => {
+            selectedBackupForRestore.value = b;
+            backupRestoreModalOpen.value = true;
+            refreshIcons();
+        };
+
+        const confirmRestoreBackup = async () => {
+            if (!selectedBackupForRestore.value) return;
+            backupRestoring.value = true;
+            try {
+                const res = await apiFetch(`/api/backup/restore/${encodeURIComponent(selectedBackupForRestore.value.filename)}`, {
+                    method: 'POST'
+                });
+                if (res && res.status === 'success') {
+                    alert(`✅ Geri Yükleme Başarılı!\n\nSistem "${selectedBackupForRestore.value.filename}" yedeğine döndürüldü.\n\nℹ️ Güvenliğiniz için işlem öncesinde mevcut verilerinizin otomatik bir emniyet yedeği alınmıştır.`);
+                    backupRestoreModalOpen.value = false;
+                    await loadStyles();
+                    await loadBackups();
+                } else {
+                    alert(res.message || 'Geri yükleme başarısız.');
+                }
+            } catch (err) {
+                alert('Geri yükleme hatası: ' + (err.message || err));
+            } finally {
+                backupRestoring.value = false;
+                refreshIcons();
+            }
+        };
+
+        const handleBackupFileUpload = async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!file.name.endsWith('.zip')) {
+                alert('Lütfen sadece TexFlow .zip yedek dosyası seçin.');
+                event.target.value = '';
+                return;
+            }
+            if (!confirm(`"${file.name}" dosyasını sisteme yükleyip tüm veritabanı ve dosyaları bu yedeğe geri döndürmek istediğinize emin misiniz?\n\n(Mevcut verilerinizin güvenliği için önce otomatik emniyet yedeği alınacaktır.)`)) {
+                event.target.value = '';
+                return;
+            }
+            backupUploadLoading.value = true;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await apiFetch('/api/backup/upload-restore', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (res && res.status === 'success') {
+                    alert('✅ Yüklenen yedek başarıyla sisteme aktarıldı ve geri yüklendi!');
+                    await loadStyles();
+                    await loadBackups();
+                } else {
+                    alert('Yedek açılamadı: ' + (res.message || 'Bilinmeyen hata'));
+                }
+            } catch (err) {
+                alert('Yedek yükleme hatası: ' + (err.message || err));
+            } finally {
+                backupUploadLoading.value = false;
+                event.target.value = '';
+                refreshIcons();
+            }
+        };
 
         const loadUsers = async () => {
             if (!hasPermission('can_manage_users')) return;
@@ -9962,6 +10171,7 @@ window.__texflowApp = createApp({
             selectChannelSuggestion,
             handleChannelKeydown,
             onChannelChange,
+            onBrandChange,
 
 
 
@@ -10287,7 +10497,28 @@ window.__texflowApp = createApp({
             openEditFreeCostModal,
             closeFreeCostModal,
             saveFreeCostStudy,
-            deleteFreeCostStudy
+            deleteFreeCostStudy,
+
+            // Backup Exports
+            backupsList,
+            backupConfig,
+            backupLoading,
+            backupCreating,
+            newBackupTime,
+            backupRestoreModalOpen,
+            selectedBackupForRestore,
+            backupRestoring,
+            backupUploadLoading,
+            loadBackups,
+            createBackupNow,
+            saveBackupSettings,
+            addBackupTime,
+            removeBackupTime,
+            downloadBackup,
+            deleteBackupItem,
+            openRestoreModal,
+            confirmRestoreBackup,
+            handleBackupFileUpload
         };
 
 
