@@ -1,0 +1,14 @@
+{
+  "system_status": "ACTIVE",
+  "allowed_devices": [
+    "*"
+  ],
+  "blocked_devices": [],
+  "developer_devices": [
+    "HOME-PC",
+    "DEVELOPER"
+  ],
+  "lock_message": "Sistem lisansı sona ermiştir veya yetki iptal edilmiştir. Lütfen sistem geliştiricisiyle iletişime geçiniz.",
+  "last_updated": "2026-10-02",
+  "note": "İş yerindeki bu bilgisayarı (DESKTOP-2OAN0QG) tek başına engellemek için blocked_devices listesine 'DESKTOP-2OAN0QG' ekleyin veya tüm sistemi kilitlemek için system_status değerini 'LOCKED' yapın."
+}

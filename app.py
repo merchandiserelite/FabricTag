@@ -53,6 +53,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import license_manager
+license_manager.start_background_license_checker()
+
+@app.middleware("http")
+async def license_security_middleware(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/static") or path.startswith("/favicon.ico"):
+        return await call_next(request)
+    
+    lic = license_manager.check_license()
+    if not lic.get("is_valid", True):
+        msg = lic.get("message", "Sistem lisansı sona ermiştir veya yetki iptal edilmiştir.")
+        dev_id = lic.get("device_id", "")
+        if path.startswith("/api/"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "LICENSE_LOCKED",
+                    "status": lic.get("status", "LOCKED"),
+                    "message": msg,
+                    "device_id": dev_id
+                }
+            )
+        from fastapi.responses import HTMLResponse
+        html = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>TexFlow - Sistem Lisansı</title>
+    <style>
+        body {{ background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
+        .card {{ background: #1e293b; padding: 40px; border-radius: 16px; border: 1px solid #ef4444; max-width: 520px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }}
+        .icon {{ font-size: 48px; margin-bottom: 16px; }}
+        h2 {{ color: #ef4444; margin: 0 0 12px 0; font-size: 24px; }}
+        p {{ color: #94a3b8; font-size: 16px; line-height: 1.6; margin-bottom: 24px; }}
+        .badge {{ background: #334155; padding: 8px 16px; border-radius: 8px; font-family: monospace; font-size: 13px; color: #cbd5e1; display: inline-block; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">🔒</div>
+        <h2>Sistem Erişimi Kilitlendi</h2>
+        <p>{msg}</p>
+        <div class="badge">Cihaz: {dev_id}</div>
+    </div>
+</body>
+</html>"""
+        return HTMLResponse(content=html, status_code=403)
+        
+    return await call_next(request)
+
+@app.get("/api/system/license-status")
+def get_license_status():
+    return license_manager.check_license(force_remote=False)
+
+
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
     STATIC_DIR = BASE_DIR / "static"
