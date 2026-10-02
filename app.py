@@ -628,7 +628,7 @@ def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
     if role in ["superadmin", "masterdeveloper"]:
         sql = """
         SELECT s.*, 
-               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date
+               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date, o.status as order_status
         FROM styles s
         JOIN orders o ON s.order_id = o.id
         ORDER BY o.id DESC, s.id ASC
@@ -637,7 +637,7 @@ def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
     else:
         sql = """
         SELECT s.*, 
-               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date
+               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date, o.status as order_status
         FROM styles s
         JOIN orders o ON s.order_id = o.id
         WHERE s.company_id = ?
@@ -1199,6 +1199,21 @@ def safe_price_float(val):
     except Exception:
         return None
 
+def safe_unit_float(val):
+    if val is None or str(val).strip() == "":
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        s_clean = str(val).strip()
+        m = re.search(r'[-+]?[0-9]+[.,]?[0-9]*', s_clean)
+        if m:
+            num_str = m.group(0).replace(",", ".")
+            return float(num_str)
+        return None
+    except Exception:
+        return None
+
 class ExportExcelRequest(BaseModel):
     style_ids: Optional[List[int]] = None
 
@@ -1328,6 +1343,10 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
         "Karışım",
         "Ağırlık",
         "En",
+        "Birim Metraj (M)",
+        "Birim Gramaj (GR)",
+        "Birim Metraj 2 (M)",
+        "Birim Gramaj 2 (GR)",
         "Sipariş Kumaş (M/KG)",
         "Gelen Kumaş (M/KG)",
         "Kumaş Durumu / Termin"
@@ -1573,6 +1592,31 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
         ws.cell(row=idx, column=headers.index("Ağırlık") + 1, value=fabric_weight_val).alignment = align_center
         ws.cell(row=idx, column=headers.index("En") + 1, value=fabric_width_val).alignment = align_center
         
+        # Birim Metraj ve Gramajlar (mt ve gr)
+        u_meters = safe_unit_float(s.get("unit_meters") or s.get("pps_unit_meters"))
+        c_um = ws.cell(row=idx, column=headers.index("Birim Metraj (M)") + 1, value=u_meters)
+        c_um.alignment = align_center
+        if u_meters is not None:
+            c_um.number_format = "#,##0.00"
+
+        u_grams = safe_unit_float(s.get("unit_grams"))
+        c_ug = ws.cell(row=idx, column=headers.index("Birim Gramaj (GR)") + 1, value=u_grams)
+        c_ug.alignment = align_center
+        if u_grams is not None:
+            c_ug.number_format = "#,##0.##"
+
+        u_meters_2 = safe_unit_float(s.get("unit_meters_2"))
+        c_um2 = ws.cell(row=idx, column=headers.index("Birim Metraj 2 (M)") + 1, value=u_meters_2)
+        c_um2.alignment = align_center
+        if u_meters_2 is not None:
+            c_um2.number_format = "#,##0.00"
+
+        u_grams_2 = safe_unit_float(s.get("unit_grams_2"))
+        c_ug2 = ws.cell(row=idx, column=headers.index("Birim Gramaj 2 (GR)") + 1, value=u_grams_2)
+        c_ug2.alignment = align_center
+        if u_grams_2 is not None:
+            c_ug2.number_format = "#,##0.##"
+
         # Kumaş Metrajları (TÜM RAKAMLAR ORTALI)
         c_ord_f = ws.cell(row=idx, column=col_idx_ordered_fabric, value=fabric_ordered_m if fabric_ordered_m else None)
         c_ord_f.alignment = align_center
@@ -1727,7 +1771,7 @@ def api_export_styles_excel_post(req: ExportExcelRequest, authorization: Optiona
 
 # ----------------- ÖZET YAZDIR İMALAT ÇARŞAF EXCEL EXPORT -----------------
 
-def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, title: Optional[str] = None, company_id: int = 1) -> Response:
+def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, title: Optional[str] = None, company_id: int = 1, consolidate: Optional[str] = "0") -> Response:
     conn = get_db()
     c = conn.cursor()
     
@@ -1757,6 +1801,33 @@ def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, 
     c.execute(sql, tuple(params))
     styles = [dict(r) for r in c.fetchall()]
     
+    # Kanalları topla seçeneği aktifse aynı model ve renkteki satırları birleştirip adetleri topla
+    if consolidate in ["1", "true", "True", True]:
+        consolidated = []
+        groups = {}
+        for s in styles:
+            s_cust = (s.get("customer_name") or s.get("brand") or "").strip().upper()
+            s_no = (s.get("style_no") or "").strip().upper()
+            c_code = (s.get("color_code") or "").strip().upper()
+            c_name = (s.get("color_name") or "").strip().upper()
+            group_key = f"{s_cust}___{s_no}___{c_name}___{c_code}"
+            
+            qty = int(s.get("total_quantity") or 0)
+            if group_key not in groups:
+                new_s = dict(s)
+                new_s["total_quantity"] = qty
+                groups[group_key] = new_s
+                consolidated.append(new_s)
+            else:
+                groups[group_key]["total_quantity"] += qty
+                if not groups[group_key].get("image_url") and s.get("image_url"):
+                    groups[group_key]["image_url"] = s.get("image_url")
+                if not groups[group_key].get("image_url_2") and s.get("image_url_2"):
+                    groups[group_key]["image_url_2"] = s.get("image_url_2")
+                if not groups[group_key].get("notes") and s.get("notes"):
+                    groups[group_key]["notes"] = s.get("notes")
+        styles = consolidated
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "İmalat Çarşaf Özeti"
@@ -1975,6 +2046,7 @@ def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, 
 def api_export_carsaf_excel_get(
     ids: Optional[str] = Query(None),
     title: Optional[str] = Query(None),
+    consolidate: Optional[str] = Query("0"),
     authorization: Optional[str] = Header(None)
 ):
     user = None
@@ -1990,7 +2062,7 @@ def api_export_carsaf_excel_get(
         except Exception:
             pass
             
-    return generate_carsaf_print_excel_workbook(style_ids, title, company_id)
+    return generate_carsaf_print_excel_workbook(style_ids, title, company_id, consolidate)
 
 
 # ----------------- BUDGET EXCEL EXPORT (ÖRNEK BÜTÇE FORMATI) -----------------
@@ -4357,7 +4429,7 @@ def api_create_manual_style(req: CreateManualStyleRequest, user: Dict[str, Any] 
             order_id, company_id, style_no, req.description or "", req.fabric_composition or "",
             req.fabric_article or "", req.color_code or "", req.color_name or "", unit_price, curr,
             total_qty, total_amount, req.unit_meters or "", req.unit_grams or "",
-            req.fabric_wastage_percent or 5.0, req.fabric_ordered_meters or 0.0, req.fabric_order_unit or "M",
+            req.fabric_wastage_percent if req.fabric_wastage_percent is not None else 5.0, req.fabric_ordered_meters or 0.0, req.fabric_order_unit or "M",
             req.status or "Planlamada", user_name, channel
         ))
         style_id = c.lastrowid

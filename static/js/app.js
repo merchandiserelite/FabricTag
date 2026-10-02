@@ -747,16 +747,33 @@ window.__texflowApp = createApp({
             const endK = haftalikProgramEndKey.value;
             const onlyOrders = haftalikProgramOnlyWithOrders.value;
 
+            // Çarşaf listesindeki güncel model sıralaması ve süzgeçler
+            const carsafList = (filteredStyles.value && filteredStyles.value.length > 0)
+                ? filteredStyles.value
+                : (styles.value || []);
+
+            const isCarsafFiltered = filteredStyles.value && filteredStyles.value.length < (styles.value || []).length;
+            const carsafIdSet = isCarsafFiltered ? new Set(carsafList.map(s => s.id)) : null;
+
             const filtered = weeks.filter(w => {
                 if (startK && w.key < startK) return false;
                 if (endK && w.key > endK) return false;
-                if (onlyOrders && (!w.items || w.items.length === 0)) return false;
+                if (onlyOrders) {
+                    const validItems = carsafIdSet
+                        ? (w.items || []).filter(it => carsafIdSet.has(it.id))
+                        : (w.items || []);
+                    if (!validItems.length) return false;
+                }
                 return true;
             });
 
             return filtered.map(w => {
                 const modelMap = {};
-                (w.items || []).forEach(item => {
+                const weekItems = carsafIdSet
+                    ? (w.items || []).filter(it => carsafIdSet.has(it.id))
+                    : (w.items || []);
+
+                weekItems.forEach(item => {
                     const modelCode = (item.style_no || item.model_name || item.article || 'Bilinmeyen').trim();
                     const brand = (item.brand || item.order_brand || item.customer_name || '').trim();
                     const color = (item.color_name || item.color_code || 'Standart').trim();
@@ -781,6 +798,30 @@ window.__texflowApp = createApp({
                 });
 
                 const modelsList = Object.values(modelMap);
+
+                // Modelleri çarşaf listesindeki (filteredStyles) sıralamaya göre yerleştir
+                const getCarsafRank = (m) => {
+                    const mCode = (m.style_no || '').trim().toLowerCase();
+                    const mBrand = (m.brand || '').trim().toLowerCase();
+
+                    let idx = carsafList.findIndex(s => {
+                        const sCode = (s.style_no || s.model_no || s.model_name || s.article || '').trim().toLowerCase();
+                        const sBrand = (s.brand || s.order_brand || s.customer_name || '').trim().toLowerCase();
+                        return sCode === mCode && (!mBrand || !sBrand || sBrand === mBrand);
+                    });
+
+                    if (idx === -1) {
+                        idx = carsafList.findIndex(s => {
+                            const sCode = (s.style_no || s.model_no || s.model_name || s.article || '').trim().toLowerCase();
+                            return sCode === mCode;
+                        });
+                    }
+
+                    return idx === -1 ? 999999 : idx;
+                };
+
+                modelsList.sort((a, b) => getCarsafRank(a) - getCarsafRank(b));
+
                 const weekTotalQty = modelsList.reduce((acc, m) => acc + m.total_quantity, 0);
 
                 // Chunk models into rows of 7
@@ -1680,7 +1721,14 @@ window.__texflowApp = createApp({
         // KUMAŞ SİPARİŞ HESAPLAMA (SLOT 1 VEYA SLOT 2)
         const calculateFabricOrder = (item, slot = 1) => {
             const totalQty = parseInt(item.total_quantity || 0) || 0;
-            const wastage = parseFloat(slot === 2 ? (item.fabric_wastage_percent_2 || 5.0) : (item.fabric_wastage_percent || 5.0)) || 0.0;
+            const rawWastage = slot === 2 ? item.fabric_wastage_percent_2 : item.fabric_wastage_percent;
+            let wastage = 5.0;
+            if (rawWastage !== undefined && rawWastage !== null && String(rawWastage).trim() !== '') {
+                const parsedW = parseFloat(String(rawWastage).replace(',', '.'));
+                if (!isNaN(parsedW)) {
+                    wastage = parsedW;
+                }
+            }
             const wasteMultiplier = 1 + (wastage / 100.0);
 
             const rawUnitMeters = slot === 2 ? item.unit_meters_2 : (item.unit_meters || item.pps_unit_meters);
@@ -1982,7 +2030,8 @@ window.__texflowApp = createApp({
         const isItemCancelled = (item) => {
             if (!item) return false;
             const st = String(item.status || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
-            return st.includes('iptal') || st.includes('cancel');
+            const ost = String(item.order_status || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+            return st.includes('iptal') || st.includes('cancel') || ost.includes('iptal') || ost.includes('cancel');
         };
 
         // ============================================================
@@ -5334,9 +5383,12 @@ window.__texflowApp = createApp({
                         }
                     }
 
-                    const waste = whichFabric === 1
-                        ? (parseFloat(s.fabric_wastage_percent) || 5)
-                        : (parseFloat(s.fabric_wastage_percent_2) || 5);
+                    const rawWaste = whichFabric === 1 ? s.fabric_wastage_percent : s.fabric_wastage_percent_2;
+                    let waste = 5;
+                    if (rawWaste !== undefined && rawWaste !== null && String(rawWaste).trim() !== '') {
+                        const pw = parseFloat(String(rawWaste).replace(',', '.'));
+                        if (!isNaN(pw)) waste = pw;
+                    }
                     const rec = whichFabric === 1
                         ? (parseFloat(s.fabric_received_meters) || 0)
                         : (parseFloat(s.fabric_received_meters_2) || 0);
@@ -5504,8 +5556,14 @@ window.__texflowApp = createApp({
         const carsafPrintModalOpen = ref(false);
         const carsafPrintTitle = ref('ROBERTO SARTO FALL 26 İMALAT');
         const carsafPrintRows = ref([]);
+        const carsafPrintRawList = ref([]);
+        const carsafPrintConsolidateChannels = ref(localStorage.getItem('carsaf_print_consolidate_channels') === 'true');
         const carsafPrintOrientation = ref(localStorage.getItem('carsaf_print_orientation') || 'portrait');
         const carsafPrintRowHeight = ref(parseInt(localStorage.getItem('carsaf_print_row_height')) || 90);
+
+        const carsafPrintTotalQty = computed(() => {
+            return (carsafPrintRows.value || []).reduce((acc, r) => acc + (parseFloat(r.total_quantity) || 0), 0);
+        });
 
         const defaultPrintColWidths = {
             image: 20,
@@ -5601,7 +5659,17 @@ window.__texflowApp = createApp({
         };
 
 
+        watch(carsafPrintModalOpen, (isOpen) => {
+            if (!isOpen) {
+                const el = document.getElementById('dynamic-print-page-style');
+                if (el) el.remove();
+            }
+        });
+
         const updatePrintPageStyle = () => {
+            const slipStyle = document.getElementById('cutting-slip-dynamic-print-style');
+            if (slipStyle) slipStyle.remove();
+
             let el = document.getElementById('dynamic-print-page-style');
             if (!el) {
                 el = document.createElement('style');
@@ -5626,6 +5694,125 @@ window.__texflowApp = createApp({
             }
         };
 
+
+        const buildCarsafPrintRows = () => {
+            const list = carsafPrintRawList.value || [];
+            if (!list.length) {
+                carsafPrintRows.value = [];
+                return;
+            }
+
+            if (carsafPrintConsolidateChannels.value) {
+                // Kanalları topla: Aynı müşteri, aynı style_no ve aynı varyant/renk tek satırda birleştirilir
+                const groups = {};
+                const orderedGroups = [];
+
+                list.forEach(s => {
+                    const cust = (s.customer_name || s.brand || '').trim().toLowerCase();
+                    const styleNo = (s.style_no || '').trim().toLowerCase();
+                    const colorDisp = (getDisplayColor(s) || s.color_name || s.color_code || '').trim().toLowerCase();
+                    const groupKey = `${cust}___${styleNo}___${colorDisp}`;
+
+                    const qty = parseFloat(s.total_quantity) || 0;
+
+                    let cur = '€';
+                    if (s.currency === 'USD' || s.currency === '$') cur = '$';
+                    else if (s.currency === 'TL' || s.currency === 'TRY' || s.currency === '₺') cur = '₺';
+                    else if (s.currency === 'GBP' || s.currency === '£') cur = '£';
+
+                    let priceStr = '';
+                    if (s.unit_price !== undefined && s.unit_price !== null && s.unit_price !== '') {
+                        const p = parseFloat(s.unit_price);
+                        if (!isNaN(p)) {
+                            priceStr = cur + ' ' + p.toFixed(2).replace('.', ',');
+                        }
+                    }
+
+                    let notesVal = s.notes || '';
+                    if (!notesVal && s.custom_fields_json) {
+                        try {
+                            const parsed = JSON.parse(s.custom_fields_json);
+                            notesVal = parsed.notes || parsed.notlar || '';
+                        } catch (e) {}
+                    }
+
+                    if (!groups[groupKey]) {
+                        const rowObj = {
+                            id: s.id,
+                            ids: [s.id],
+                            image_url: s.image_url || '',
+                            image_url_2: s.image_url_2 || '',
+                            style_no: s.style_no || '',
+                            color_name: getDisplayColor(s),
+                            fabric_article: s.fabric_article || '',
+                            total_quantity: qty,
+                            price_formatted: priceStr,
+                            notes: notesVal
+                        };
+                        groups[groupKey] = rowObj;
+                        orderedGroups.push(rowObj);
+                    } else {
+                        const existing = groups[groupKey];
+                        existing.ids.push(s.id);
+                        existing.total_quantity += qty;
+                        if (!existing.image_url && (s.image_url || s.image_url_2)) {
+                            existing.image_url = s.image_url || '';
+                            existing.image_url_2 = s.image_url_2 || '';
+                        }
+                        if (!existing.price_formatted && priceStr) {
+                            existing.price_formatted = priceStr;
+                        }
+                        if (!existing.notes && notesVal) {
+                            existing.notes = notesVal;
+                        }
+                    }
+                });
+
+                carsafPrintRows.value = orderedGroups;
+            } else {
+                // Kanalları ayrık göster
+                carsafPrintRows.value = list.map(s => {
+                    let cur = '€';
+                    if (s.currency === 'USD' || s.currency === '$') cur = '$';
+                    else if (s.currency === 'TL' || s.currency === 'TRY' || s.currency === '₺') cur = '₺';
+                    else if (s.currency === 'GBP' || s.currency === '£') cur = '£';
+
+                    let priceStr = '';
+                    if (s.unit_price !== undefined && s.unit_price !== null && s.unit_price !== '') {
+                        const p = parseFloat(s.unit_price);
+                        if (!isNaN(p)) {
+                            priceStr = cur + ' ' + p.toFixed(2).replace('.', ',');
+                        }
+                    }
+
+                    let notesVal = s.notes || '';
+                    if (!notesVal && s.custom_fields_json) {
+                        try {
+                            const parsed = JSON.parse(s.custom_fields_json);
+                            notesVal = parsed.notes || parsed.notlar || '';
+                        } catch (e) {}
+                    }
+
+                    return {
+                        id: s.id,
+                        ids: [s.id],
+                        image_url: s.image_url || '',
+                        image_url_2: s.image_url_2 || '',
+                        style_no: s.style_no || '',
+                        color_name: getDisplayColor(s),
+                        fabric_article: s.fabric_article || '',
+                        total_quantity: s.total_quantity || 0,
+                        price_formatted: priceStr,
+                        notes: notesVal
+                    };
+                });
+            }
+        };
+
+        const toggleConsolidateChannels = () => {
+            localStorage.setItem('carsaf_print_consolidate_channels', carsafPrintConsolidateChannels.value ? 'true' : 'false');
+            buildCarsafPrintRows();
+        };
 
         const openCarsafPrintModal = () => {
             // SADECE ÇARŞAF LİSTESİNDE SÜZÜLMÜŞ (FİLTRELENMİŞ) MODELLERİ AL
@@ -5660,40 +5847,8 @@ window.__texflowApp = createApp({
             const seasonText = topSeason || 'FALL 26';
             carsafPrintTitle.value = `${custText} ${seasonText} İMALAT`.toUpperCase();
 
-            carsafPrintRows.value = list.map(s => {
-                let cur = '€';
-                if (s.currency === 'USD' || s.currency === '$') cur = '$';
-                else if (s.currency === 'TL' || s.currency === 'TRY' || s.currency === '₺') cur = '₺';
-                else if (s.currency === 'GBP' || s.currency === '£') cur = '£';
-
-                let priceStr = '';
-                if (s.unit_price !== undefined && s.unit_price !== null && s.unit_price !== '') {
-                    const p = parseFloat(s.unit_price);
-                    if (!isNaN(p)) {
-                        priceStr = cur + ' ' + p.toFixed(2).replace('.', ',');
-                    }
-                }
-
-                let notesVal = s.notes || '';
-                if (!notesVal && s.custom_fields_json) {
-                    try {
-                        const parsed = JSON.parse(s.custom_fields_json);
-                        notesVal = parsed.notes || parsed.notlar || '';
-                    } catch (e) {}
-                }
-
-                return {
-                    id: s.id,
-                    image_url: s.image_url || '',
-                    image_url_2: s.image_url_2 || '',
-                    style_no: s.style_no || '',
-                    color_name: getDisplayColor(s),
-                    fabric_article: s.fabric_article || '',
-                    total_quantity: s.total_quantity || 0,
-                    price_formatted: priceStr,
-                    notes: notesVal
-                };
-            });
+            carsafPrintRawList.value = [...list];
+            buildCarsafPrintRows();
 
             updatePrintPageStyle();
             carsafPrintModalOpen.value = true;
@@ -5723,9 +5878,11 @@ window.__texflowApp = createApp({
                     return;
                 }
 
-                const ids = rows.map(r => r.id).filter(Boolean).join(',');
+                const allIds = rows.flatMap(r => (r.ids && r.ids.length > 0) ? r.ids : [r.id]).filter(Boolean);
+                const ids = allIds.join(',');
                 const title = encodeURIComponent(carsafPrintTitle.value || 'İMALAT ÖZET LİSTESİ');
-                const url = `/api/styles/export-carsaf-excel?ids=${ids}&title=${title}`;
+                const consolidateParam = carsafPrintConsolidateChannels.value ? '&consolidate=1' : '';
+                const url = `/api/styles/export-carsaf-excel?ids=${ids}&title=${title}${consolidateParam}`;
 
                 const a = document.createElement('a');
                 a.href = url;
@@ -6807,7 +6964,7 @@ window.__texflowApp = createApp({
         };
 
         const filteredCuttingStyles = computed(() => {
-            const list = styles.value || [];
+            const list = (styles.value || []).filter(s => !isItemCancelled(s));
             const q = (cuttingSearch.value || '').trim().toLowerCase();
             if (!q) return list;
 
@@ -6968,10 +7125,11 @@ window.__texflowApp = createApp({
         });
 
         const cuttingSlipModels = computed(() => {
-            const list = styles.value || [];
+            const list = (styles.value || []).filter(s => !isItemCancelled(s));
             const groups = {};
 
             for (const s of list) {
+                if (isItemCancelled(s)) continue;
                 const cust = (s.customer_name || 'Bilinmeyen Müşteri').trim();
                 const brand = (s.brand || 'Bilinmeyen Marka').trim();
                 const styleNo = (s.style_no || 'Model Yok').trim();
@@ -7055,7 +7213,7 @@ window.__texflowApp = createApp({
             const chFilter = (selectedCuttingSlipChannel.value || '').trim();
             const ignoreChannel = (chFilter === '__NONE__' || chFilter.toLowerCase() === 'yok');
 
-            let filteredStyles = modelGroup.raw_styles || [];
+            let filteredStyles = (modelGroup.raw_styles || []).filter(s => !isItemCancelled(s));
             if (chFilter && !ignoreChannel) {
                 filteredStyles = filteredStyles.filter(s => {
                     const ch = (s.channel || '').toString().trim();
@@ -7204,17 +7362,61 @@ window.__texflowApp = createApp({
                 }
             }
             cuttingSlipModalOpen.value = true;
+            ensureCuttingSlipPrintStyle();
             nextTick(() => {
                 if (window.lucide) lucide.createIcons();
             });
         };
 
+        const ensureCuttingSlipPrintStyle = () => {
+            // Çakışan veya dikey baskı kalıntısı bırakabilecek tüm dinamik stilleri temizle
+            const conflictingStyleIds = [
+                'dynamic-print-page-style',
+                'kumas-siparis-dynamic-print-style',
+                'kumas-bilgi-dynamic-print-style',
+                'haftalik-program-dynamic-print-style',
+                'fabric-ledger-dynamic-print-style',
+                'cutting-slip-dynamic-print-style'
+            ];
+            conflictingStyleIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.remove();
+            });
+
+            // Kesim fişi için net A4 Landscape (Yatay) kuralı enjekte et
+            const printStyle = document.createElement('style');
+            printStyle.id = 'cutting-slip-dynamic-print-style';
+            printStyle.innerHTML = `
+                @media print {
+                    @page {
+                        size: A4 landscape !important;
+                        margin: 5mm 6mm !important;
+                    }
+                }
+            `;
+            document.head.appendChild(printStyle);
+        };
+
+        watch(cuttingSlipModalOpen, (isOpen) => {
+            if (isOpen) {
+                ensureCuttingSlipPrintStyle();
+            } else {
+                const el = document.getElementById('cutting-slip-dynamic-print-style');
+                if (el) el.remove();
+            }
+        });
+
         const closeCuttingSlipModal = () => {
             cuttingSlipModalOpen.value = false;
+            const el = document.getElementById('cutting-slip-dynamic-print-style');
+            if (el) el.remove();
         };
 
         const printCuttingSlip = () => {
-            window.print();
+            ensureCuttingSlipPrintStyle();
+            setTimeout(() => {
+                window.print();
+            }, 80);
         };
 
         const exportCuttingSlipExcel = async () => {
@@ -8098,12 +8300,10 @@ window.__texflowApp = createApp({
                     const unitRate = toNum(rawRate, currKey === 'TL' ? 1.0 : 56.0);
                     
                     let calculatedVal = 0;
-                    if (it.formula !== undefined && it.formula !== '' && isNaN(Number(it.formula))) {
+                    if (it.formula !== undefined && it.formula !== null && String(it.formula).trim() !== '') {
                         calculatedVal = evalCostFormula(it.formula);
-                    } else if (it.price !== undefined && it.price !== null && it.price !== '') {
+                    } else if (it.price !== undefined && it.price !== null && String(it.price).trim() !== '') {
                         calculatedVal = toNum(it.price);
-                    } else if (it.formula !== undefined && it.formula !== '') {
-                        calculatedVal = evalCostFormula(it.formula);
                     }
                     it.evaluated_price = calculatedVal;
                     it.price = calculatedVal;
@@ -10354,6 +10554,10 @@ window.__texflowApp = createApp({
             printCarsafList,
             isCarsafExportingExcel,
             exportCarsafPrintToExcel,
+            carsafPrintConsolidateChannels,
+            carsafPrintTotalQty,
+            toggleConsolidateChannels,
+            buildCarsafPrintRows,
             isExportingExcel,
             exportOrdersToExcel,
             authChecking,

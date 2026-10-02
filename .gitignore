@@ -1,4 +1,4 @@
-﻿__pycache__/
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
@@ -10,6 +10,26 @@ ENV/
 .system_generated/
 *.log
 *.tmp
+
+# Databases (Never push production databases to git)
 database.db
 production.db
 textile.db
+texflow.db
+data/*.db
+data/texflow.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads & Client orders
+data/uploads/
+uploads/
+scratch/
+dist/
+build/
+*.spec
+
+data/backups/
+*.zip
+scratch_check_*.py
