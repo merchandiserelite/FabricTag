@@ -515,6 +515,48 @@
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
+
+            /* KESİMHANE KESİM FİŞİ A4 YATAY BASKI DÜZENİ */
+            #cutting-slip-modal {
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            #cutting-slip-sheet-container {
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                width: 100% !important;
+            }
+            #cutting-slip-print-area,
+            .cutting-slip-sheet {
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 auto !important;
+                padding: 2mm 3mm !important;
+                border: none !important;
+                box-shadow: none !important;
+                box-sizing: border-box !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            #cutting-slip-print-area * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            #cutting-slip-print-area table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                page-break-inside: auto !important;
+                break-inside: auto !important;
+            }
+            #cutting-slip-print-area tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+
             .no-print,
             .no-print *,
             #kumas-bilgi-print-modal .no-print,
@@ -1027,7 +1069,7 @@
                     
                     <!-- TCMB GÜNCEL DÖVİZ KURLARI (USD, EUR, GBP) -->
                     <div v-if="currencyRates && currencyRates.length" 
-                         class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-xl border transition shadow-sm font-mono"
+                         class="h-9 hidden sm:flex items-center gap-2 px-3 rounded-xl border transition shadow-sm font-mono"
                          :class="isDarkMode ? 'bg-slate-800/90 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-800'"
                          :title="'T.C. Merkez Bankası Güncel Kurları (' + (currencyDate || 'Bugün') + ') - Yenilemek için tıklayın'">
                         
@@ -1057,13 +1099,13 @@
                     </div>
 
                     <!-- YAZI BOYUTU ÖLÇEĞİ (METİNLERİ BÜYÜTÜP KÜÇÜLTÜR, EKRANI DARALTMAZ) -->
-                    <div class="flex items-center rounded-xl border text-xs font-bold transition shadow-sm"
+                    <div class="h-9 flex items-center rounded-xl border text-xs font-bold transition shadow-sm overflow-hidden"
                          :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-800'"
                          title="Yazı Boyutu Ölçeği (Tıklayarak %100 ve Özel Boyut arasında geçiş yapabilirsiniz)">
-                        <button @click="changeZoom(-5)" class="px-2 py-1.5 hover:bg-slate-700/40 rounded-l-xl text-slate-400 hover:text-white font-black text-sm transition select-none cursor-pointer" title="Yazıları Küçült (-5%)">-</button>
+                        <button @click="changeZoom(-5)" class="h-full px-2.5 hover:bg-slate-700/40 text-slate-400 hover:text-white font-black text-sm flex items-center justify-center transition select-none cursor-pointer" title="Yazıları Küçült (-5%)">-</button>
                         
                         <button @click="toggleAutoZoom"
-                                class="px-2.5 py-1 text-xs font-bold transition cursor-pointer select-none tracking-tight font-mono border-x flex items-center gap-1"
+                                class="h-full px-2.5 text-xs font-bold transition cursor-pointer select-none tracking-tight font-mono border-x flex items-center gap-1"
                                 :class="[
                                     isDarkMode ? 'border-slate-700 hover:bg-slate-700/50' : 'border-slate-200 hover:bg-slate-100',
                                     zoomMode === 'auto' ? 'text-emerald-500 font-extrabold' : 'text-theme'
@@ -1074,11 +1116,11 @@
                             <span v-if="zoomMode === 'auto'" class="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-500 font-sans uppercase font-extrabold">Oto</span>
                         </button>
                         
-                        <button @click="changeZoom(5)" class="px-2 py-1.5 hover:bg-slate-700/40 rounded-r-xl text-slate-400 hover:text-white font-black text-sm transition select-none cursor-pointer" title="Yazıları Büyüt (+5%)">+</button>
+                        <button @click="changeZoom(5)" class="h-full px-2.5 hover:bg-slate-700/40 text-slate-400 hover:text-white font-black text-sm flex items-center justify-center transition select-none cursor-pointer" title="Yazıları Büyüt (+5%)">+</button>
                     </div>
 
                     <!-- TEMA RENK SEÇİCİ (GECE/GÜNDÜZ DÜĞMESİ GİBİ ÇERÇEVELİ) -->
-                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl border transition shadow-sm"
+                    <div class="h-9 flex items-center gap-2 px-3 rounded-xl border transition shadow-sm"
                          :class="isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
                          title="Tema Renk Seçenekleri">
                         <button type="button" @click="setTheme('theme-emerald')" style="background-color: #10b981 !important;" class="w-5 h-5 rounded-full transition-all hover:scale-125 cursor-pointer shadow-sm active:scale-95" :class="themeName === 'theme-emerald' ? 'ring-2 ring-emerald-400 scale-110 !opacity-100' : 'opacity-70 hover:opacity-100'" title="Zümrüt Yeşili"></button>
@@ -1089,7 +1131,7 @@
                     </div>
 
                     <!-- GECE / GÜNDÜZ DÜĞMESİ -->
-                    <button @click="toggleDarkMode" class="p-2 rounded-xl border text-xs flex items-center gap-1 transition shadow-sm"
+                    <button @click="toggleDarkMode" class="h-9 w-9 rounded-xl border text-xs flex items-center justify-center transition shadow-sm cursor-pointer"
                             :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-amber-400' : 'bg-white border-slate-200 text-slate-700'"
                             title="Gece / Gündüz Teması">
                         <i :data-lucide="isDarkMode ? 'sun' : 'moon'" class="w-4 h-4"></i>
@@ -1099,7 +1141,7 @@
                     <a href="/api/styles/export-excel"
                        download="Siparisler.xlsx"
                        @click="exportOrdersToExcel($event)"
-                       class="flex items-center gap-1.5 border border-theme bg-theme-light text-theme hover:btn-theme hover:text-white text-xs font-bold px-3.5 py-2 rounded-xl transition shadow-sm cursor-pointer no-underline select-none"
+                       class="h-9 flex items-center gap-1.5 border border-theme bg-theme-light text-theme hover:btn-theme hover:text-white text-xs font-bold px-3.5 rounded-xl transition shadow-sm cursor-pointer no-underline select-none"
                        title="Siparişleri fotoğraflarıyla birlikte modern Excel (.xlsx) tablosuna aktarır">
                         <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
                         <span class="hidden sm:inline">Excele Aktar</span>
@@ -1108,7 +1150,7 @@
 
                     <!-- DEĞİŞİKLİKLERİ KAYDET DÜĞMESİ -->
                     <button @click="saveAllChanges"
-                            class="flex items-center gap-1.5 btn-theme text-white text-xs font-bold px-3.5 py-2 rounded-xl transition shadow-md"
+                            class="h-9 flex items-center gap-1.5 btn-theme text-white text-xs font-bold px-3.5 rounded-xl transition shadow-md cursor-pointer select-none"
                             title="Tüm hücre değişikliklerini ve notları veritabanına kaydeder">
                         <i data-lucide="save" class="w-4 h-4"></i>
                         <span class="hidden sm:inline">Kaydet</span>
@@ -1116,7 +1158,7 @@
 
                     <!-- KAYDETMEDEN ÇIK / İPTAL DÜĞMESİ (ÇERÇEVELİ) -->
                     <button @click="discardChanges"
-                            class="p-2 rounded-xl border text-xs font-semibold transition shadow-sm"
+                            class="h-9 w-9 rounded-xl border text-xs font-semibold flex items-center justify-center transition shadow-sm cursor-pointer"
                             :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'"
                             title="Kaydedilmemiş değişiklikleri iptal edip sayfayı son haline döndürür">
                         <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
@@ -1125,14 +1167,14 @@
                     <!-- SİPARİŞ YÜKLE DÜĞMESİ -->
                     <button v-if="hasPermission('can_create_orders')"
                             @click="activeMenu = 'siparis_yukle'" 
-                            class="flex items-center gap-1.5 btn-theme text-xs font-bold px-3.5 py-2 rounded-xl transition shadow-md cursor-pointer">
+                            class="h-9 flex items-center gap-1.5 btn-theme text-xs font-bold px-3.5 rounded-xl transition shadow-md cursor-pointer select-none">
                         <i data-lucide="file-up" class="w-4 h-4"></i>
                         <span class="hidden sm:inline">Sipariş Yükle</span>
                     </button>
 
                     <!-- ÇIKIŞ YAP DÜĞMESİ (ÜST PANELDE) -->
                     <button @click="logout"
-                            class="p-2 rounded-xl border text-xs font-semibold text-slate-400 hover:text-red-400 hover:border-red-500/40 transition shadow-sm cursor-pointer"
+                            class="h-9 w-9 rounded-xl border text-xs font-semibold text-slate-400 hover:text-red-400 hover:border-red-500/40 flex items-center justify-center transition shadow-sm cursor-pointer"
                             :class="isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
                             title="Oturumu Kapat / Çıkış Yap">
                         <i data-lucide="log-out" class="w-4 h-4"></i>
@@ -8344,7 +8386,7 @@
                 <div>
                     <h3 class="text-sm font-black text-indigo-500">Üretim Çarşaf Listesi Yazdırma Görünümü</h3>
                     <p class="text-[11px] text-slate-400">
-                        {{ carsafPrintRows.length }} Model Listelendi (Süzülenler)
+                        {{ carsafPrintRows.length }} Model Listelendi {{ carsafPrintConsolidateChannels ? '(Kanallar Toplandı' : '(Süzülenler' }} - Toplam: {{ carsafPrintTotalQty.toLocaleString('tr-TR') }} Adet)
                     </p>
                 </div>
             </div>
@@ -8434,6 +8476,17 @@
                     <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 inline mr-1"></i>
                     <span>Sıfırla</span>
                 </button>
+
+                <!-- Kanalları Topla Kutucuğu (Aynı Model & Rengin Farklı Kanallardaki Adetlerini Birleştirir) -->
+                <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-sm cursor-pointer transition select-none"
+                       :class="carsafPrintConsolidateChannels ? 'bg-indigo-600/15 border-indigo-500/50 text-indigo-500 dark:text-indigo-400' : (isDarkMode ? 'bg-slate-800/80 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700')"
+                       title="Aynı model ve renge ait farklı kanallardaki adetleri tek satırda birleştirip toplar">
+                    <input type="checkbox"
+                           v-model="carsafPrintConsolidateChannels"
+                           @change="toggleConsolidateChannels"
+                           class="w-4 h-4 rounded text-indigo-600 focus:ring-0 cursor-pointer accent-indigo-600">
+                    <span class="whitespace-nowrap">Kanalları Topla</span>
+                </label>
 
                 <!-- Yazdır / PDF Butonu -->
                 <button @click="printCarsafList"
@@ -8768,8 +8821,7 @@
                                      style="width: 100%; table-layout: fixed;">
                                     
                                     <div v-for="slotIdx in 7" :key="'en_slot_' + slotIdx"
-                                         class="flex flex-col justify-between"
-                                         :class="slotIdx - 1 < item.rowGroup.chunk.length ? 'bg-white' : 'bg-slate-50/40'">
+                                         class="flex flex-col justify-between bg-white">
                                         
                                         <template v-if="slotIdx - 1 < item.rowGroup.chunk.length">
                                             <div>
@@ -8837,8 +8889,43 @@
                                         </template>
 
                                         <template v-else>
-                                            <div class="h-full min-h-[160px] flex items-center justify-center text-slate-200">
-                                                &nbsp;
+                                            <div class="flex flex-col justify-between h-full bg-white">
+                                                <div>
+                                                    <!-- Boş Marka Satırı (12pt) -->
+                                                    <div class="font-black uppercase py-1 px-1 text-center"
+                                                         style="background-color: #F1F5F9 !important; color: #1E293B !important; font-size: 12pt !important; min-height: 25px; border-bottom: 1px solid #000000 !important; -webkit-print-color-adjust: exact !important;">
+                                                        &nbsp;
+                                                    </div>
+
+                                                    <!-- Boş Model Kodu Satırı (12pt) -->
+                                                    <div class="font-black font-mono py-1 px-1 text-center"
+                                                         style="background-color: #E2E8F0 !important; color: #0F172A !important; font-size: 12pt !important; min-height: 25px; border-bottom: 1px solid #000000 !important; -webkit-print-color-adjust: exact !important;">
+                                                        &nbsp;
+                                                    </div>
+
+                                                    <!-- Boş Model Görseli Alanı (En ve boydan sığacak şekilde) -->
+                                                    <div class="h-[95px] w-full p-1 flex items-center justify-center bg-white"
+                                                         style="background-color: #ffffff !important; border-bottom: 1px solid #000000 !important;">
+                                                        &nbsp;
+                                                    </div>
+
+                                                    <!-- Boş Renk ve Adet Satırları (İç Çizgiler İnce Siyah) -->
+                                                    <div>
+                                                        <div v-for="cIdx in item.rowGroup.maxColors" :key="'empty_en_col_' + cIdx"
+                                                             class="flex items-center justify-between"
+                                                             style="font-size: 12pt !important; min-height: 23px; line-height: 1.2; border-bottom: 1px solid #000000 !important;">
+                                                            <span class="px-1 flex-1" style="border-right: 1px solid #000000 !important; font-size: 12pt !important;">&nbsp;</span>
+                                                            <span class="w-14 shrink-0 text-center" style="font-size: 12pt !important;">&nbsp;</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Boş Model Toplam Adet Bandı (12pt) -->
+                                                <div class="flex items-center justify-between px-1.5 py-0.5 font-black"
+                                                     style="background-color: #ECFDF5 !important; color: #047857 !important; font-size: 12pt !important; border-top: 2px solid #000000 !important; -webkit-print-color-adjust: exact !important;">
+                                                    <span style="font-size: 12pt !important;">TOPLAM</span>
+                                                    <span class="font-mono" style="font-size: 12pt !important;">&nbsp;</span>
+                                                </div>
                                             </div>
                                         </template>
 
@@ -8899,8 +8986,7 @@
                                      style="width: 100%; table-layout: fixed;">
                                     
                                     <div v-for="slotIdx in 7" :key="'slot_' + slotIdx"
-                                         class="flex flex-col justify-between"
-                                         :class="slotIdx - 1 < rowGroup.chunk.length ? 'bg-white' : 'bg-slate-50/40'">
+                                         class="flex flex-col justify-between bg-white">
                                         
                                         <template v-if="slotIdx - 1 < rowGroup.chunk.length">
                                             <div>
@@ -8968,8 +9054,43 @@
                                         </template>
 
                                         <template v-else>
-                                            <div class="h-full min-h-[160px] flex items-center justify-center text-slate-200">
-                                                &nbsp;
+                                            <div class="flex flex-col justify-between h-full bg-white">
+                                                <div>
+                                                    <!-- Boş Marka Satırı (12pt) -->
+                                                    <div class="font-black uppercase py-1 px-1 text-center"
+                                                         style="background-color: #F1F5F9 !important; color: #1E293B !important; font-size: 12pt !important; min-height: 25px; border-bottom: 1px solid #000000 !important; -webkit-print-color-adjust: exact !important;">
+                                                        &nbsp;
+                                                    </div>
+
+                                                    <!-- Boş Model Kodu Satırı (12pt) -->
+                                                    <div class="font-black font-mono py-1 px-1 text-center"
+                                                         style="background-color: #E2E8F0 !important; color: #0F172A !important; font-size: 12pt !important; min-height: 25px; border-bottom: 1px solid #000000 !important; -webkit-print-color-adjust: exact !important;">
+                                                        &nbsp;
+                                                    </div>
+
+                                                    <!-- Boş Model Görseli Alanı (En ve boydan sığacak şekilde) -->
+                                                    <div class="h-[95px] w-full p-1 flex items-center justify-center bg-white"
+                                                         style="background-color: #ffffff !important; border-bottom: 1px solid #000000 !important;">
+                                                        &nbsp;
+                                                    </div>
+
+                                                    <!-- Boş Renk ve Adet Satırları (İç Çizgiler İnce Siyah) -->
+                                                    <div>
+                                                        <div v-for="cIdx in rowGroup.maxColors" :key="'empty_col_' + cIdx"
+                                                             class="flex items-center justify-between"
+                                                             style="font-size: 12pt !important; min-height: 23px; line-height: 1.2; border-bottom: 1px solid #000000 !important;">
+                                                            <span class="px-1 flex-1" style="border-right: 1px solid #000000 !important; font-size: 12pt !important;">&nbsp;</span>
+                                                            <span class="w-14 shrink-0 text-center" style="font-size: 12pt !important;">&nbsp;</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Boş Model Toplam Adet Bandı (12pt) -->
+                                                <div class="flex items-center justify-between px-1.5 py-0.5 font-black"
+                                                     style="background-color: #ECFDF5 !important; color: #047857 !important; font-size: 12pt !important; border-top: 2px solid #000000 !important; -webkit-print-color-adjust: exact !important;">
+                                                    <span style="font-size: 12pt !important;">TOPLAM</span>
+                                                    <span class="font-mono" style="font-size: 12pt !important;">&nbsp;</span>
+                                                </div>
                                             </div>
                                         </template>
 
