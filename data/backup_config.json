@@ -1,11 +1,11 @@
 {
   "enabled": true,
   "times": [
-    "13:00",
-    "17:00",
-    "21:00"
+    "10:00",
+    "14:00",
+    "18:00"
   ],
   "retention_count": 30,
   "include_uploads": true,
-  "last_backup_time": "23.09.2026 13:00:14"
+  "last_backup_time": "02.10.2026 14:00:06"
 }
