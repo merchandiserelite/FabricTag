@@ -35,7 +35,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from database import (
-    get_db, init_db, DB_PATH, UPLOADS_DIR, hash_password, FABRICTAG_DB_PATH
+    get_db, init_db, DB_PATH, UPLOADS_DIR, hash_password, FABRICTAG_DB_PATH,
+    get_carton_templates, get_carton_template_by_id, save_or_update_carton_template, delete_carton_template
 )
 from auth import authenticate_user, get_current_user, logout_user, ROLE_PERMISSIONS
 from parser_engine import OrderParserEngine
@@ -52,6 +53,63 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+import license_manager
+license_manager.start_background_license_checker()
+
+@app.middleware("http")
+async def license_security_middleware(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/static") or path.startswith("/favicon.ico"):
+        return await call_next(request)
+    
+    lic = license_manager.check_license()
+    if not lic.get("is_valid", True):
+        msg = lic.get("message", "Sistem lisansı sona ermiştir veya yetki iptal edilmiştir.")
+        dev_id = lic.get("device_id", "")
+        if path.startswith("/api/"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "LICENSE_LOCKED",
+                    "status": lic.get("status", "LOCKED"),
+                    "message": msg,
+                    "device_id": dev_id
+                }
+            )
+        from fastapi.responses import HTMLResponse
+        html = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>TexFlow - Sistem Lisansı</title>
+    <style>
+        body {{ background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
+        .card {{ background: #1e293b; padding: 40px; border-radius: 16px; border: 1px solid #ef4444; max-width: 520px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }}
+        .icon {{ font-size: 48px; margin-bottom: 16px; }}
+        h2 {{ color: #ef4444; margin: 0 0 12px 0; font-size: 24px; }}
+        p {{ color: #94a3b8; font-size: 16px; line-height: 1.6; margin-bottom: 24px; }}
+        .badge {{ background: #334155; padding: 8px 16px; border-radius: 8px; font-family: monospace; font-size: 13px; color: #cbd5e1; display: inline-block; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">🔒</div>
+        <h2>Sistem Erişimi Kilitlendi</h2>
+        <p>{msg}</p>
+        <div class="badge">Cihaz: {dev_id}</div>
+    </div>
+</body>
+</html>"""
+        return HTMLResponse(content=html, status_code=403)
+        
+    return await call_next(request)
+
+@app.get("/api/system/license-status")
+def get_license_status():
+    return license_manager.check_license(force_remote=False)
+
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
@@ -403,7 +461,7 @@ def api_get_menus(user: Dict[str, Any] = Depends(require_user)):
         m_key = m.get("menu_key")
         
         # 1. Herkese açık operasyonel menüler
-        if m_key in ["carsaf_liste", "fabrictag_entegrasyon", "menu_yonetimi", "kesimhane", "yukleme_adetleri", "serbest_fiyat"]:
+        if m_key in ["carsaf_liste", "fabrictag_entegrasyon", "menu_yonetimi", "kesimhane", "yukleme_adetleri", "serbest_fiyat", "ceki_koli"]:
             allowed_menus.append(m)
             continue
             
@@ -628,7 +686,7 @@ def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
     if role in ["superadmin", "masterdeveloper"]:
         sql = """
         SELECT s.*, 
-               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date
+               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date, o.status as order_status
         FROM styles s
         JOIN orders o ON s.order_id = o.id
         ORDER BY o.id DESC, s.id ASC
@@ -637,7 +695,7 @@ def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
     else:
         sql = """
         SELECT s.*, 
-               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date
+               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date, o.status as order_status
         FROM styles s
         JOIN orders o ON s.order_id = o.id
         WHERE s.company_id = ?
@@ -1199,6 +1257,21 @@ def safe_price_float(val):
     except Exception:
         return None
 
+def safe_unit_float(val):
+    if val is None or str(val).strip() == "":
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        s_clean = str(val).strip()
+        m = re.search(r'[-+]?[0-9]+[.,]?[0-9]*', s_clean)
+        if m:
+            num_str = m.group(0).replace(",", ".")
+            return float(num_str)
+        return None
+    except Exception:
+        return None
+
 class ExportExcelRequest(BaseModel):
     style_ids: Optional[List[int]] = None
 
@@ -1328,6 +1401,10 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
         "Karışım",
         "Ağırlık",
         "En",
+        "Birim Metraj (M)",
+        "Birim Gramaj (GR)",
+        "Birim Metraj 2 (M)",
+        "Birim Gramaj 2 (GR)",
         "Sipariş Kumaş (M/KG)",
         "Gelen Kumaş (M/KG)",
         "Kumaş Durumu / Termin"
@@ -1573,6 +1650,31 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
         ws.cell(row=idx, column=headers.index("Ağırlık") + 1, value=fabric_weight_val).alignment = align_center
         ws.cell(row=idx, column=headers.index("En") + 1, value=fabric_width_val).alignment = align_center
         
+        # Birim Metraj ve Gramajlar (mt ve gr)
+        u_meters = safe_unit_float(s.get("unit_meters") or s.get("pps_unit_meters"))
+        c_um = ws.cell(row=idx, column=headers.index("Birim Metraj (M)") + 1, value=u_meters)
+        c_um.alignment = align_center
+        if u_meters is not None:
+            c_um.number_format = "#,##0.00"
+
+        u_grams = safe_unit_float(s.get("unit_grams"))
+        c_ug = ws.cell(row=idx, column=headers.index("Birim Gramaj (GR)") + 1, value=u_grams)
+        c_ug.alignment = align_center
+        if u_grams is not None:
+            c_ug.number_format = "#,##0.##"
+
+        u_meters_2 = safe_unit_float(s.get("unit_meters_2"))
+        c_um2 = ws.cell(row=idx, column=headers.index("Birim Metraj 2 (M)") + 1, value=u_meters_2)
+        c_um2.alignment = align_center
+        if u_meters_2 is not None:
+            c_um2.number_format = "#,##0.00"
+
+        u_grams_2 = safe_unit_float(s.get("unit_grams_2"))
+        c_ug2 = ws.cell(row=idx, column=headers.index("Birim Gramaj 2 (GR)") + 1, value=u_grams_2)
+        c_ug2.alignment = align_center
+        if u_grams_2 is not None:
+            c_ug2.number_format = "#,##0.##"
+
         # Kumaş Metrajları (TÜM RAKAMLAR ORTALI)
         c_ord_f = ws.cell(row=idx, column=col_idx_ordered_fabric, value=fabric_ordered_m if fabric_ordered_m else None)
         c_ord_f.alignment = align_center
@@ -1727,7 +1829,7 @@ def api_export_styles_excel_post(req: ExportExcelRequest, authorization: Optiona
 
 # ----------------- ÖZET YAZDIR İMALAT ÇARŞAF EXCEL EXPORT -----------------
 
-def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, title: Optional[str] = None, company_id: int = 1) -> Response:
+def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, title: Optional[str] = None, company_id: int = 1, consolidate: Optional[str] = "0") -> Response:
     conn = get_db()
     c = conn.cursor()
     
@@ -1757,6 +1859,33 @@ def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, 
     c.execute(sql, tuple(params))
     styles = [dict(r) for r in c.fetchall()]
     
+    # Kanalları topla seçeneği aktifse aynı model ve renkteki satırları birleştirip adetleri topla
+    if consolidate in ["1", "true", "True", True]:
+        consolidated = []
+        groups = {}
+        for s in styles:
+            s_cust = (s.get("customer_name") or s.get("brand") or "").strip().upper()
+            s_no = (s.get("style_no") or "").strip().upper()
+            c_code = (s.get("color_code") or "").strip().upper()
+            c_name = (s.get("color_name") or "").strip().upper()
+            group_key = f"{s_cust}___{s_no}___{c_name}___{c_code}"
+            
+            qty = int(s.get("total_quantity") or 0)
+            if group_key not in groups:
+                new_s = dict(s)
+                new_s["total_quantity"] = qty
+                groups[group_key] = new_s
+                consolidated.append(new_s)
+            else:
+                groups[group_key]["total_quantity"] += qty
+                if not groups[group_key].get("image_url") and s.get("image_url"):
+                    groups[group_key]["image_url"] = s.get("image_url")
+                if not groups[group_key].get("image_url_2") and s.get("image_url_2"):
+                    groups[group_key]["image_url_2"] = s.get("image_url_2")
+                if not groups[group_key].get("notes") and s.get("notes"):
+                    groups[group_key]["notes"] = s.get("notes")
+        styles = consolidated
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "İmalat Çarşaf Özeti"
@@ -1975,6 +2104,7 @@ def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, 
 def api_export_carsaf_excel_get(
     ids: Optional[str] = Query(None),
     title: Optional[str] = Query(None),
+    consolidate: Optional[str] = Query("0"),
     authorization: Optional[str] = Header(None)
 ):
     user = None
@@ -1990,7 +2120,7 @@ def api_export_carsaf_excel_get(
         except Exception:
             pass
             
-    return generate_carsaf_print_excel_workbook(style_ids, title, company_id)
+    return generate_carsaf_print_excel_workbook(style_ids, title, company_id, consolidate)
 
 
 # ----------------- BUDGET EXCEL EXPORT (ÖRNEK BÜTÇE FORMATI) -----------------
@@ -3213,6 +3343,308 @@ def api_update_shipping(req: ShippingUpdateRequest, user: Dict[str, Any] = Depen
     }
 
 
+# ----------------- PACKING LIST & CARTON LABELS (ÇEKİ LİSTESİ & KOLİ ÜSTÜ) -----------------
+
+class PackingProcessRequest(BaseModel):
+    style_id: int
+    sizes: Dict[str, int]
+    channel: Optional[str] = ""
+    notes: Optional[str] = ""
+
+def find_matching_styles_for_packing(customer: str, style_no: str, color_name: str, limit: int = 15):
+    conn = get_db()
+    c = conn.cursor()
+    norm_style = re.sub(r'[^a-zA-Z0-9]', '', style_no or '').lower()
+    style_prefix = norm_style[:5] if len(norm_style) >= 5 else norm_style
+
+    c.execute("""
+        SELECT s.id, s.order_id, s.style_no, s.color_code, s.color_name, s.total_quantity,
+               o.po_number, o.customer_name, o.brand, o.order_date, o.delivery_date
+        FROM styles s
+        JOIN orders o ON s.order_id = o.id
+        ORDER BY s.id DESC
+    """)
+    all_styles = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    scored = []
+    for s in all_styles:
+        score = 0
+        s_norm = re.sub(r'[^a-zA-Z0-9]', '', s.get('style_no') or '').lower()
+        c_norm = (s.get('customer_name') or '').lower()
+        b_norm = (s.get('brand') or '').lower()
+        col_norm = (s.get('color_name') or '').lower()
+
+        # Customer / Brand match
+        if customer:
+            cust_clean = customer.lower()
+            if cust_clean in c_norm or cust_clean in b_norm:
+                score += 35
+            if 'anna' in cust_clean and ('anna' in c_norm or 'anna' in b_norm):
+                score += 35
+
+        # Style match
+        if norm_style and norm_style == s_norm:
+            score += 100
+        elif style_prefix and style_prefix in s_norm:
+            score += 50
+        elif style_no and any(part in (s.get('style_no') or '').lower() for part in style_no.lower().split('-') if len(part) >= 3):
+            score += 30
+
+        # Color match
+        if color_name:
+            col_target = color_name.lower()
+            if col_norm and (col_target in col_norm or col_norm in col_target):
+                score += 40
+            c_code = color_name.split()[0] if ' ' in color_name else ''
+            if c_code and c_code.lower() in (s.get('color_code') or '').lower():
+                score += 30
+
+        if score > 0:
+            scored.append((score, s))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    best_match = scored[0][1] if scored else (all_styles[0] if all_styles else None)
+    candidates = [item[1] for item in scored[:limit]]
+    return best_match, candidates
+
+@app.post("/api/packing-list/upload")
+async def api_upload_packing_list(
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(require_user)
+):
+    import shutil
+    from pathlib import Path
+
+    file_name = file.filename or "packing_list.xlsx"
+    clean_name = f"packing_{int(datetime.now().timestamp())}_{file_name}"
+    save_path = UPLOADS_DIR / clean_name
+
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    try:
+        parsed_data = OrderParserEngine.parse_packing_list(str(save_path))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Çeki listesi okunamadı: {str(e)}")
+
+    best_match, candidates = find_matching_styles_for_packing(
+        parsed_data.get("customer", ""),
+        parsed_data.get("style_no", ""),
+        parsed_data.get("color", "")
+    )
+
+    return {
+        "status": "success",
+        "file_name": file_name,
+        "parsed_data": parsed_data,
+        "matched_style": best_match,
+        "candidate_styles": candidates
+    }
+
+@app.get("/api/packing-list/sample")
+def api_sample_packing_list(user: Dict[str, Any] = Depends(require_user)):
+    sample_file = BASE_DIR / "scratch" / "Anna_Van_Toor_koli_ustu_x2.xlsm"
+    if not sample_file.exists():
+        raise HTTPException(status_code=404, detail="Örnek dosya scratch/Anna_Van_Toor_koli_ustu_x2.xlsm bulunamadı.")
+
+    try:
+        parsed_data = OrderParserEngine.parse_packing_list(str(sample_file))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Örnek dosya okunamadı: {str(e)}")
+
+    best_match, candidates = find_matching_styles_for_packing(
+        parsed_data.get("customer", ""),
+        parsed_data.get("style_no", ""),
+        parsed_data.get("color", "")
+    )
+
+    return {
+        "status": "success",
+        "file_name": "Anna_Van_Toor_koli_ustu_x2.xlsm (Örnek Şablon)",
+        "parsed_data": parsed_data,
+        "matched_style": best_match,
+        "candidate_styles": candidates
+    }
+
+@app.post("/api/packing-list/process")
+def api_process_packing_list(
+    req: PackingProcessRequest,
+    user: Dict[str, Any] = Depends(require_user)
+):
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT id, order_id, style_no, total_quantity, shipping_date FROM styles WHERE id = ?", (req.style_id,))
+    style_row = c.fetchone()
+    if not style_row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Eşleşen model bulunamadı.")
+
+    order_id = style_row["order_id"]
+    user_name = user.get("full_name") or user.get("username") or "Çeki Listesi Sorumlusu"
+    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    # Fetch existing size distributions for this style
+    c.execute("SELECT id, size_name, shipped_quantity, quantity FROM size_distributions WHERE style_id = ?", (req.style_id,))
+    existing_sizes = {r["size_name"]: dict(r) for r in c.fetchall()}
+
+    total_shipped_qty = 0
+    for sz_name, sz_qty in req.sizes.items():
+        qty_int = int(sz_qty or 0)
+        total_shipped_qty += qty_int
+        if sz_name in existing_sizes:
+            c.execute("""
+                UPDATE size_distributions
+                SET shipped_quantity = ?
+                WHERE style_id = ? AND size_name = ?
+            """, (qty_int, req.style_id, sz_name))
+        else:
+            c.execute("""
+                INSERT INTO size_distributions (style_id, size_name, quantity, shipped_quantity)
+                VALUES (?, ?, ?, ?)
+            """, (req.style_id, sz_name, qty_int, qty_int))
+
+    # Update style shipping_date and optional channel
+    if req.channel:
+        c.execute("""
+            UPDATE styles
+            SET shipping_date = ?, channel = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (now_str, req.channel, req.style_id))
+    else:
+        c.execute("""
+            UPDATE styles
+            SET shipping_date = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (now_str, req.style_id))
+
+    # Audit log
+    c.execute("""
+        INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+        VALUES (?, ?, ?, ?, 'packing_list_process', ?, ?, ?)
+    """, (req.style_id, order_id, user.get("user_id"), user_name,
+          f"Tarih:{style_row['shipping_date']}", f"Yüklenen Toplam:{total_shipped_qty}, Tarih:{now_str}",
+          req.notes or 'Çeki Listesinden Yükleme Adetleri Sisteme İşlendi'))
+
+    # Production status log (activity stream)
+    c.execute("""
+        INSERT INTO production_status_logs (style_id, user_id, user_name, category, title, message)
+        VALUES (?, ?, ?, 'Sevkiyat', 'Çeki Listesi İşlendi', ?)
+    """, (req.style_id, user.get("user_id"), user_name,
+          f"Çeki listesinden toplam {total_shipped_qty} adet sevkiyat işlendi. {req.notes or ''}"))
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "success",
+        "message": f"Çeki listesi başarıyla sisteme işlendi. Toplam {total_shipped_qty} adet kaydedildi.",
+        "style_id": req.style_id,
+        "total_shipped_quantity": total_shipped_qty,
+        "shipping_date": now_str
+    }
+
+
+# ----------------- CARTON LABEL TEMPLATES & DESIGNER -----------------
+
+class CartonTemplateSaveRequest(BaseModel):
+    id: Optional[int] = None
+    customer_name: str
+    template_name: str
+    paper_size: Optional[str] = "A4"
+    orientation: Optional[str] = "landscape"
+    width_mm: Optional[float] = 297.0
+    height_mm: Optional[float] = 210.0
+    items_per_page: Optional[int] = 2
+    border_style: Optional[str] = "solid"
+    border_width: Optional[int] = 1
+    show_grid_lines: Optional[bool] = True
+    margin_mm: Optional[int] = 6
+    font_scale: Optional[float] = 1.0
+    layout_json: Optional[Any] = {}
+    is_default: Optional[bool] = False
+
+@app.get("/api/carton-templates")
+def api_get_carton_templates(
+    customer: Optional[str] = None,
+    user: Dict[str, Any] = Depends(require_user)
+):
+    company_id = user.get("company_id") or 1
+    templates = get_carton_templates(company_id=company_id, customer_name=customer)
+    return {"status": "success", "templates": templates}
+
+@app.get("/api/carton-templates/{template_id}")
+def api_get_carton_template_by_id(
+    template_id: int,
+    user: Dict[str, Any] = Depends(require_user)
+):
+    tpl = get_carton_template_by_id(template_id)
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Şablon bulunamadı.")
+    return {"status": "success", "template": tpl}
+
+@app.post("/api/carton-templates/upload-excel")
+async def api_upload_carton_template_excel(
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(require_user)
+):
+    # Enforce Excel only (.xlsx, .xlsm, .xls)
+    valid_exts = {".xlsx", ".xlsm", ".xls"}
+    ext = Path(file.filename).suffix.lower()
+    if ext not in valid_exts:
+        raise HTTPException(
+            status_code=400,
+            detail="Sadece Excel formatları (.xlsx, .xlsm, .xls) kabul edilir. Koli üstü formülasyonu ve hücre yapısı analizi için lütfen Excel dosyası yükleyin."
+        )
+
+    temp_path = UPLOADS_DIR / f"template_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+    content = await file.read()
+    with open(temp_path, "wb") as f:
+        f.write(content)
+
+    try:
+        analyzed = OrderParserEngine.analyze_carton_label_excel(str(temp_path))
+        analyzed["file_name"] = file.filename
+        return {
+            "status": "success",
+            "message": "Excel koli üstü şablonu ve formülasyonları başarıyla analiz edildi.",
+            "data": analyzed
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Excel şablonu çözümlenemedi: {str(e)}")
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+
+@app.post("/api/carton-templates/save")
+def api_save_carton_template(
+    req: CartonTemplateSaveRequest,
+    user: Dict[str, Any] = Depends(require_user)
+):
+    data = req.dict()
+    data["company_id"] = user.get("company_id") or 1
+    t_id = save_or_update_carton_template(data)
+    return {
+        "status": "success",
+        "id": t_id,
+        "message": f"'{req.template_name}' şablonu ve sayfa yapısı başarıyla kaydedildi."
+    }
+
+@app.delete("/api/carton-templates/{template_id}")
+def api_delete_carton_template(
+    template_id: int,
+    user: Dict[str, Any] = Depends(require_user)
+):
+    success = delete_carton_template(template_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Silinecek şablon bulunamadı.")
+    return {"status": "success", "message": "Şablon başarıyla silindi."}
+
+
 # ----------------- FABRIC ASSIGNMENT -----------------
 
 class AssignFabricRequest(BaseModel):
@@ -4357,7 +4789,7 @@ def api_create_manual_style(req: CreateManualStyleRequest, user: Dict[str, Any] 
             order_id, company_id, style_no, req.description or "", req.fabric_composition or "",
             req.fabric_article or "", req.color_code or "", req.color_name or "", unit_price, curr,
             total_qty, total_amount, req.unit_meters or "", req.unit_grams or "",
-            req.fabric_wastage_percent or 5.0, req.fabric_ordered_meters or 0.0, req.fabric_order_unit or "M",
+            req.fabric_wastage_percent if req.fabric_wastage_percent is not None else 5.0, req.fabric_ordered_meters or 0.0, req.fabric_order_unit or "M",
             req.status or "Planlamada", user_name, channel
         ))
         style_id = c.lastrowid

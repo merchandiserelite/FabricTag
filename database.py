@@ -10,6 +10,7 @@ import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 import sys
+from typing import List, Dict, Any, Optional
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys.executable).resolve().parent
@@ -276,6 +277,111 @@ def init_db():
     )
     """)
 
+    # 11. Carton Label Templates (Müşteriye Özel Koli Üstü Şablonları & Sayfa Yapılandırmaları)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS carton_label_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_id INTEGER DEFAULT 1,
+        customer_name TEXT NOT NULL,
+        template_name TEXT NOT NULL,
+        paper_size TEXT DEFAULT 'A4',          -- 'A4', 'A5', 'Argox_100x150', 'Argox_100x100', 'Argox_80x50', 'custom'
+        orientation TEXT DEFAULT 'landscape',   -- 'landscape', 'portrait'
+        width_mm REAL DEFAULT 297,
+        height_mm REAL DEFAULT 210,
+        items_per_page INTEGER DEFAULT 2,      -- 1 or 2
+        border_style TEXT DEFAULT 'solid',      -- 'solid', 'dashed', 'double', 'none'
+        border_width INTEGER DEFAULT 1,         -- 1, 2, 3
+        show_grid_lines INTEGER DEFAULT 1,      -- 1 or 0
+        margin_mm INTEGER DEFAULT 6,
+        font_scale REAL DEFAULT 1.0,           -- 0.85, 1.0, 1.15
+        layout_json TEXT DEFAULT '{}',
+        is_default INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # Default Seed Data for Carton Templates if empty
+    cursor.execute("SELECT COUNT(*) FROM carton_label_templates")
+    if cursor.fetchone()[0] == 0:
+        default_anna_layout = json.dumps({
+            "header_title": "Anna Van Toor",
+            "address_line1": "Energieweg 35",
+            "address_line2": "4231 DJ Meerkerk",
+            "address_line3": "The Netherlands",
+            "brand": "BRAND: ANNA",
+            "measurements": "60X40X30",
+            "poka_badge_enabled": True,
+            "dual_variant_enabled": True,
+            "show_barcode": False,
+            "fields": [
+                {"id": "header", "label": "Müşteri & Adres Başlığı", "key": "header_block", "visible": True},
+                {"id": "brand", "label": "Marka Bilgisi", "key": "brand", "visible": True},
+                {"id": "channel", "label": "Kanal & Poka-Yoke Renk Rozeti", "key": "channel_badge", "visible": True},
+                {"id": "size_table", "label": "Beden & Adet Tablosu (x2)", "key": "size_table", "visible": True},
+                {"id": "carton_no", "label": "Koli Numarası (CARTON NO ... OF ...)", "key": "carton_no", "visible": True},
+                {"id": "gross_weight", "label": "Brüt Ağırlık (GROSS WEIGHT)", "key": "gross_weight", "visible": True},
+                {"id": "measurements", "label": "Koli Ebatları (MEASUREMENTS)", "key": "measurements", "visible": True}
+            ]
+        }, ensure_ascii=False)
+
+        default_argox_layout = json.dumps({
+            "header_title": "STANDART LOJİSTİK KOLİ ETİKETİ",
+            "address_line1": "",
+            "address_line2": "",
+            "address_line3": "",
+            "brand": "",
+            "measurements": "60X40X30",
+            "poka_badge_enabled": True,
+            "dual_variant_enabled": False,
+            "show_barcode": True,
+            "fields": [
+                {"id": "header", "label": "Müşteri & Başlık", "key": "header_block", "visible": True},
+                {"id": "channel", "label": "Kanal / Sevkiyat Hedefi", "key": "channel_badge", "visible": True},
+                {"id": "size_table", "label": "Beden & Adet Dağılımı", "key": "size_table", "visible": True},
+                {"id": "carton_no", "label": "Koli No", "key": "carton_no", "visible": True},
+                {"id": "gross_weight", "label": "Brüt Ağırlık", "key": "gross_weight", "visible": True},
+                {"id": "barcode", "label": "Koli Barkodu", "key": "barcode", "visible": True}
+            ]
+        }, ensure_ascii=False)
+
+        default_a5_layout = json.dumps({
+            "header_title": "A5 LOJİSTİK KOLİ ETİKETİ",
+            "address_line1": "",
+            "address_line2": "",
+            "address_line3": "",
+            "brand": "",
+            "measurements": "60X40X30",
+            "poka_badge_enabled": True,
+            "dual_variant_enabled": False,
+            "show_barcode": True,
+            "fields": [
+                {"id": "header", "label": "Müşteri & Başlık", "key": "header_block", "visible": True},
+                {"id": "channel", "label": "Sevkiyat Kanalı", "key": "channel_badge", "visible": True},
+                {"id": "size_table", "label": "Beden Tablosu", "key": "size_table", "visible": True},
+                {"id": "carton_no", "label": "Koli No", "key": "carton_no", "visible": True},
+                {"id": "gross_weight", "label": "Ağırlık", "key": "gross_weight", "visible": True}
+            ]
+        }, ensure_ascii=False)
+
+        cursor.execute("""
+        INSERT INTO carton_label_templates 
+        (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
+        VALUES (1, 'Anna van Toor B.V.', 'Anna Van Toor A4 Yatay (x2 Çiftli)', 'A4', 'landscape', 297, 210, 2, 'solid', 2, 1, 6, 1.0, ?, 1)
+        """, (default_anna_layout,))
+
+        cursor.execute("""
+        INSERT INTO carton_label_templates 
+        (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
+        VALUES (1, 'Standart / Genel', 'Argox / Termal Rulo 100x150 mm', 'Argox_100x150', 'portrait', 100, 150, 1, 'solid', 1, 1, 3, 0.95, ?, 1)
+        """, (default_argox_layout,))
+
+        cursor.execute("""
+        INSERT INTO carton_label_templates 
+        (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
+        VALUES (1, 'Standart / Genel', 'A5 Dikey Lojistik Koli Etiketi', 'A5', 'portrait', 148, 210, 1, 'solid', 1, 1, 5, 1.0, ?, 0)
+        """, (default_a5_layout,))
+
     # Safe migrations for cut and shipping tracking
     cursor.execute("PRAGMA table_info(styles)")
     style_cols = [r[1] for r in cursor.fetchall()]
@@ -361,6 +467,22 @@ def init_db():
         VALUES (?, 'serbest_fiyat', 'Serbest Fiyat Çalışması', 'Freeform Costing', 'calculator', '/serbest-fiyat', ?, 1, '["superadmin","admin","merchandiser"]')
         """, (company_id, target_order))
 
+    # Safe menu insertion for ceki_koli (Çeki listesi ve koli üstü)
+    cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = 'ceki_koli'")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("SELECT sort_order FROM dynamic_menus WHERE menu_key = 'serbest_fiyat'")
+        row = cursor.fetchone()
+        if not row:
+            cursor.execute("SELECT sort_order FROM dynamic_menus WHERE menu_key = 'yukleme_adetleri'")
+            row = cursor.fetchone()
+        ref_order = row[0] if row else 7
+        target_order = ref_order + 1
+        cursor.execute("UPDATE dynamic_menus SET sort_order = sort_order + 1 WHERE menu_key != 'ceki_koli' AND sort_order >= ?", (target_order,))
+        cursor.execute("""
+        INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
+        VALUES (?, 'ceki_koli', 'Çeki listesi ve koli üstü', 'Packing List & Carton Labels', 'package', '/ceki-koli', ?, 1, '["superadmin","admin","merchandiser","cutting","shipping","warehouse"]')
+        """, (company_id, target_order))
+
     # Default Menus if table was empty
     cursor.execute("SELECT COUNT(*) FROM dynamic_menus")
     if cursor.fetchone()[0] == 0:
@@ -385,6 +507,174 @@ def init_db():
     conn.commit()
     conn.close()
 
+
+def get_carton_templates(company_id: int = 1, customer_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieves all carton templates, optionally prioritizing or filtering by customer_name."""
+    conn = get_db()
+    cursor = conn.cursor()
+    if customer_name and customer_name.strip():
+        c_clean = customer_name.strip()
+        cursor.execute("""
+            SELECT id, company_id, customer_name, template_name, paper_size, orientation,
+                   width_mm, height_mm, items_per_page, border_style, border_width,
+                   show_grid_lines, margin_mm, font_scale, layout_json, is_default, created_at, updated_at
+            FROM carton_label_templates
+            WHERE company_id = ?
+            ORDER BY 
+                CASE 
+                    WHEN LOWER(customer_name) = LOWER(?) THEN 0
+                    WHEN LOWER(customer_name) LIKE LOWER(?) THEN 1
+                    WHEN customer_name = 'Standart / Genel' THEN 2
+                    ELSE 3
+                END,
+                is_default DESC, id ASC
+        """, (company_id, c_clean, f"%{c_clean}%"))
+    else:
+        cursor.execute("""
+            SELECT id, company_id, customer_name, template_name, paper_size, orientation,
+                   width_mm, height_mm, items_per_page, border_style, border_width,
+                   show_grid_lines, margin_mm, font_scale, layout_json, is_default, created_at, updated_at
+            FROM carton_label_templates
+            WHERE company_id = ?
+            ORDER BY customer_name ASC, is_default DESC, id ASC
+        """, (company_id,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    result = []
+    for r in rows:
+        result.append({
+            "id": r[0],
+            "company_id": r[1],
+            "customer_name": r[2],
+            "template_name": r[3],
+            "paper_size": r[4],
+            "orientation": r[5],
+            "width_mm": r[6],
+            "height_mm": r[7],
+            "items_per_page": r[8],
+            "border_style": r[9],
+            "border_width": r[10],
+            "show_grid_lines": bool(r[11]),
+            "margin_mm": r[12],
+            "font_scale": r[13],
+            "layout_json": json.loads(r[14]) if r[14] else {},
+            "is_default": bool(r[15]),
+            "created_at": r[16],
+            "updated_at": r[17]
+        })
+    return result
+
+
+def get_carton_template_by_id(template_id: int) -> Optional[Dict[str, Any]]:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, company_id, customer_name, template_name, paper_size, orientation,
+               width_mm, height_mm, items_per_page, border_style, border_width,
+               show_grid_lines, margin_mm, font_scale, layout_json, is_default, created_at, updated_at
+        FROM carton_label_templates
+        WHERE id = ?
+    """, (template_id,))
+    r = cursor.fetchone()
+    conn.close()
+    if not r:
+        return None
+    return {
+        "id": r[0],
+        "company_id": r[1],
+        "customer_name": r[2],
+        "template_name": r[3],
+        "paper_size": r[4],
+        "orientation": r[5],
+        "width_mm": r[6],
+        "height_mm": r[7],
+        "items_per_page": r[8],
+        "border_style": r[9],
+        "border_width": r[10],
+        "show_grid_lines": bool(r[11]),
+        "margin_mm": r[12],
+        "font_scale": r[13],
+        "layout_json": json.loads(r[14]) if r[14] else {},
+        "is_default": bool(r[15]),
+        "created_at": r[16],
+        "updated_at": r[17]
+    }
+
+
+def save_or_update_carton_template(data: Dict[str, Any]) -> int:
+    conn = get_db()
+    cursor = conn.cursor()
+    t_id = data.get("id")
+    layout_data = data.get("layout_json")
+    if isinstance(layout_data, dict):
+        layout_str = json.dumps(layout_data, ensure_ascii=False)
+    elif isinstance(layout_data, str) and layout_data.strip():
+        layout_str = layout_data.strip()
+    else:
+        layout_str = "{}"
+    
+    # Defaults
+    customer_name = str(data.get("customer_name") or "Genel Müşteri").strip()
+    template_name = str(data.get("template_name") or f"{customer_name} Şablonu").strip()
+    paper_size = str(data.get("paper_size") or "A4").strip()
+    orientation = str(data.get("orientation") or "landscape").strip()
+    width_mm = float(data.get("width_mm", 297))
+    height_mm = float(data.get("height_mm", 210))
+    items_per_page = int(data.get("items_per_page", 2))
+    border_style = str(data.get("border_style") or "solid").strip()
+    border_width = int(data.get("border_width", 1))
+    show_grid_lines = 1 if data.get("show_grid_lines", True) else 0
+    margin_mm = int(data.get("margin_mm", 6))
+    font_scale = float(data.get("font_scale", 1.0))
+    is_default = 1 if data.get("is_default", False) else 0
+    company_id = int(data.get("company_id", 1))
+
+    if t_id:
+        cursor.execute("""
+            UPDATE carton_label_templates
+            SET customer_name = ?, template_name = ?, paper_size = ?, orientation = ?,
+                width_mm = ?, height_mm = ?, items_per_page = ?, border_style = ?,
+                border_width = ?, show_grid_lines = ?, margin_mm = ?, font_scale = ?,
+                layout_json = ?, is_default = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (
+            customer_name, template_name, paper_size, orientation,
+            width_mm, height_mm, items_per_page, border_style,
+            border_width, show_grid_lines, margin_mm, font_scale,
+            layout_str, is_default, t_id
+        ))
+        row_id = t_id
+    else:
+        cursor.execute("""
+            INSERT INTO carton_label_templates
+            (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            company_id, customer_name, template_name, paper_size, orientation,
+            width_mm, height_mm, items_per_page, border_style,
+            border_width, show_grid_lines, margin_mm, font_scale,
+            layout_str, is_default
+        ))
+        row_id = cursor.lastrowid
+
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def delete_carton_template(template_id: int) -> bool:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM carton_label_templates WHERE id = ?", (template_id,))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+
 if __name__ == "__main__":
     init_db()
     print("Database updated successfully.")
+

@@ -747,16 +747,33 @@ window.__texflowApp = createApp({
             const endK = haftalikProgramEndKey.value;
             const onlyOrders = haftalikProgramOnlyWithOrders.value;
 
+            // Çarşaf listesindeki güncel model sıralaması ve süzgeçler
+            const carsafList = (filteredStyles.value && filteredStyles.value.length > 0)
+                ? filteredStyles.value
+                : (styles.value || []);
+
+            const isCarsafFiltered = filteredStyles.value && filteredStyles.value.length < (styles.value || []).length;
+            const carsafIdSet = isCarsafFiltered ? new Set(carsafList.map(s => s.id)) : null;
+
             const filtered = weeks.filter(w => {
                 if (startK && w.key < startK) return false;
                 if (endK && w.key > endK) return false;
-                if (onlyOrders && (!w.items || w.items.length === 0)) return false;
+                if (onlyOrders) {
+                    const validItems = carsafIdSet
+                        ? (w.items || []).filter(it => carsafIdSet.has(it.id))
+                        : (w.items || []);
+                    if (!validItems.length) return false;
+                }
                 return true;
             });
 
             return filtered.map(w => {
                 const modelMap = {};
-                (w.items || []).forEach(item => {
+                const weekItems = carsafIdSet
+                    ? (w.items || []).filter(it => carsafIdSet.has(it.id))
+                    : (w.items || []);
+
+                weekItems.forEach(item => {
                     const modelCode = (item.style_no || item.model_name || item.article || 'Bilinmeyen').trim();
                     const brand = (item.brand || item.order_brand || item.customer_name || '').trim();
                     const color = (item.color_name || item.color_code || 'Standart').trim();
@@ -781,6 +798,30 @@ window.__texflowApp = createApp({
                 });
 
                 const modelsList = Object.values(modelMap);
+
+                // Modelleri çarşaf listesindeki (filteredStyles) sıralamaya göre yerleştir
+                const getCarsafRank = (m) => {
+                    const mCode = (m.style_no || '').trim().toLowerCase();
+                    const mBrand = (m.brand || '').trim().toLowerCase();
+
+                    let idx = carsafList.findIndex(s => {
+                        const sCode = (s.style_no || s.model_no || s.model_name || s.article || '').trim().toLowerCase();
+                        const sBrand = (s.brand || s.order_brand || s.customer_name || '').trim().toLowerCase();
+                        return sCode === mCode && (!mBrand || !sBrand || sBrand === mBrand);
+                    });
+
+                    if (idx === -1) {
+                        idx = carsafList.findIndex(s => {
+                            const sCode = (s.style_no || s.model_no || s.model_name || s.article || '').trim().toLowerCase();
+                            return sCode === mCode;
+                        });
+                    }
+
+                    return idx === -1 ? 999999 : idx;
+                };
+
+                modelsList.sort((a, b) => getCarsafRank(a) - getCarsafRank(b));
+
                 const weekTotalQty = modelsList.reduce((acc, m) => acc + m.total_quantity, 0);
 
                 // Chunk models into rows of 7
@@ -1680,7 +1721,14 @@ window.__texflowApp = createApp({
         // KUMAŞ SİPARİŞ HESAPLAMA (SLOT 1 VEYA SLOT 2)
         const calculateFabricOrder = (item, slot = 1) => {
             const totalQty = parseInt(item.total_quantity || 0) || 0;
-            const wastage = parseFloat(slot === 2 ? (item.fabric_wastage_percent_2 || 5.0) : (item.fabric_wastage_percent || 5.0)) || 0.0;
+            const rawWastage = slot === 2 ? item.fabric_wastage_percent_2 : item.fabric_wastage_percent;
+            let wastage = 5.0;
+            if (rawWastage !== undefined && rawWastage !== null && String(rawWastage).trim() !== '') {
+                const parsedW = parseFloat(String(rawWastage).replace(',', '.'));
+                if (!isNaN(parsedW)) {
+                    wastage = parsedW;
+                }
+            }
             const wasteMultiplier = 1 + (wastage / 100.0);
 
             const rawUnitMeters = slot === 2 ? item.unit_meters_2 : (item.unit_meters || item.pps_unit_meters);
@@ -1982,7 +2030,8 @@ window.__texflowApp = createApp({
         const isItemCancelled = (item) => {
             if (!item) return false;
             const st = String(item.status || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
-            return st.includes('iptal') || st.includes('cancel');
+            const ost = String(item.order_status || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+            return st.includes('iptal') || st.includes('cancel') || ost.includes('iptal') || ost.includes('cancel');
         };
 
         // ============================================================
@@ -5334,9 +5383,12 @@ window.__texflowApp = createApp({
                         }
                     }
 
-                    const waste = whichFabric === 1
-                        ? (parseFloat(s.fabric_wastage_percent) || 5)
-                        : (parseFloat(s.fabric_wastage_percent_2) || 5);
+                    const rawWaste = whichFabric === 1 ? s.fabric_wastage_percent : s.fabric_wastage_percent_2;
+                    let waste = 5;
+                    if (rawWaste !== undefined && rawWaste !== null && String(rawWaste).trim() !== '') {
+                        const pw = parseFloat(String(rawWaste).replace(',', '.'));
+                        if (!isNaN(pw)) waste = pw;
+                    }
                     const rec = whichFabric === 1
                         ? (parseFloat(s.fabric_received_meters) || 0)
                         : (parseFloat(s.fabric_received_meters_2) || 0);
@@ -5504,8 +5556,14 @@ window.__texflowApp = createApp({
         const carsafPrintModalOpen = ref(false);
         const carsafPrintTitle = ref('ROBERTO SARTO FALL 26 İMALAT');
         const carsafPrintRows = ref([]);
+        const carsafPrintRawList = ref([]);
+        const carsafPrintConsolidateChannels = ref(localStorage.getItem('carsaf_print_consolidate_channels') === 'true');
         const carsafPrintOrientation = ref(localStorage.getItem('carsaf_print_orientation') || 'portrait');
         const carsafPrintRowHeight = ref(parseInt(localStorage.getItem('carsaf_print_row_height')) || 90);
+
+        const carsafPrintTotalQty = computed(() => {
+            return (carsafPrintRows.value || []).reduce((acc, r) => acc + (parseFloat(r.total_quantity) || 0), 0);
+        });
 
         const defaultPrintColWidths = {
             image: 20,
@@ -5601,7 +5659,17 @@ window.__texflowApp = createApp({
         };
 
 
+        watch(carsafPrintModalOpen, (isOpen) => {
+            if (!isOpen) {
+                const el = document.getElementById('dynamic-print-page-style');
+                if (el) el.remove();
+            }
+        });
+
         const updatePrintPageStyle = () => {
+            const slipStyle = document.getElementById('cutting-slip-dynamic-print-style');
+            if (slipStyle) slipStyle.remove();
+
             let el = document.getElementById('dynamic-print-page-style');
             if (!el) {
                 el = document.createElement('style');
@@ -5626,6 +5694,125 @@ window.__texflowApp = createApp({
             }
         };
 
+
+        const buildCarsafPrintRows = () => {
+            const list = carsafPrintRawList.value || [];
+            if (!list.length) {
+                carsafPrintRows.value = [];
+                return;
+            }
+
+            if (carsafPrintConsolidateChannels.value) {
+                // Kanalları topla: Aynı müşteri, aynı style_no ve aynı varyant/renk tek satırda birleştirilir
+                const groups = {};
+                const orderedGroups = [];
+
+                list.forEach(s => {
+                    const cust = (s.customer_name || s.brand || '').trim().toLowerCase();
+                    const styleNo = (s.style_no || '').trim().toLowerCase();
+                    const colorDisp = (getDisplayColor(s) || s.color_name || s.color_code || '').trim().toLowerCase();
+                    const groupKey = `${cust}___${styleNo}___${colorDisp}`;
+
+                    const qty = parseFloat(s.total_quantity) || 0;
+
+                    let cur = '€';
+                    if (s.currency === 'USD' || s.currency === '$') cur = '$';
+                    else if (s.currency === 'TL' || s.currency === 'TRY' || s.currency === '₺') cur = '₺';
+                    else if (s.currency === 'GBP' || s.currency === '£') cur = '£';
+
+                    let priceStr = '';
+                    if (s.unit_price !== undefined && s.unit_price !== null && s.unit_price !== '') {
+                        const p = parseFloat(s.unit_price);
+                        if (!isNaN(p)) {
+                            priceStr = cur + ' ' + p.toFixed(2).replace('.', ',');
+                        }
+                    }
+
+                    let notesVal = s.notes || '';
+                    if (!notesVal && s.custom_fields_json) {
+                        try {
+                            const parsed = JSON.parse(s.custom_fields_json);
+                            notesVal = parsed.notes || parsed.notlar || '';
+                        } catch (e) {}
+                    }
+
+                    if (!groups[groupKey]) {
+                        const rowObj = {
+                            id: s.id,
+                            ids: [s.id],
+                            image_url: s.image_url || '',
+                            image_url_2: s.image_url_2 || '',
+                            style_no: s.style_no || '',
+                            color_name: getDisplayColor(s),
+                            fabric_article: s.fabric_article || '',
+                            total_quantity: qty,
+                            price_formatted: priceStr,
+                            notes: notesVal
+                        };
+                        groups[groupKey] = rowObj;
+                        orderedGroups.push(rowObj);
+                    } else {
+                        const existing = groups[groupKey];
+                        existing.ids.push(s.id);
+                        existing.total_quantity += qty;
+                        if (!existing.image_url && (s.image_url || s.image_url_2)) {
+                            existing.image_url = s.image_url || '';
+                            existing.image_url_2 = s.image_url_2 || '';
+                        }
+                        if (!existing.price_formatted && priceStr) {
+                            existing.price_formatted = priceStr;
+                        }
+                        if (!existing.notes && notesVal) {
+                            existing.notes = notesVal;
+                        }
+                    }
+                });
+
+                carsafPrintRows.value = orderedGroups;
+            } else {
+                // Kanalları ayrık göster
+                carsafPrintRows.value = list.map(s => {
+                    let cur = '€';
+                    if (s.currency === 'USD' || s.currency === '$') cur = '$';
+                    else if (s.currency === 'TL' || s.currency === 'TRY' || s.currency === '₺') cur = '₺';
+                    else if (s.currency === 'GBP' || s.currency === '£') cur = '£';
+
+                    let priceStr = '';
+                    if (s.unit_price !== undefined && s.unit_price !== null && s.unit_price !== '') {
+                        const p = parseFloat(s.unit_price);
+                        if (!isNaN(p)) {
+                            priceStr = cur + ' ' + p.toFixed(2).replace('.', ',');
+                        }
+                    }
+
+                    let notesVal = s.notes || '';
+                    if (!notesVal && s.custom_fields_json) {
+                        try {
+                            const parsed = JSON.parse(s.custom_fields_json);
+                            notesVal = parsed.notes || parsed.notlar || '';
+                        } catch (e) {}
+                    }
+
+                    return {
+                        id: s.id,
+                        ids: [s.id],
+                        image_url: s.image_url || '',
+                        image_url_2: s.image_url_2 || '',
+                        style_no: s.style_no || '',
+                        color_name: getDisplayColor(s),
+                        fabric_article: s.fabric_article || '',
+                        total_quantity: s.total_quantity || 0,
+                        price_formatted: priceStr,
+                        notes: notesVal
+                    };
+                });
+            }
+        };
+
+        const toggleConsolidateChannels = () => {
+            localStorage.setItem('carsaf_print_consolidate_channels', carsafPrintConsolidateChannels.value ? 'true' : 'false');
+            buildCarsafPrintRows();
+        };
 
         const openCarsafPrintModal = () => {
             // SADECE ÇARŞAF LİSTESİNDE SÜZÜLMÜŞ (FİLTRELENMİŞ) MODELLERİ AL
@@ -5660,40 +5847,8 @@ window.__texflowApp = createApp({
             const seasonText = topSeason || 'FALL 26';
             carsafPrintTitle.value = `${custText} ${seasonText} İMALAT`.toUpperCase();
 
-            carsafPrintRows.value = list.map(s => {
-                let cur = '€';
-                if (s.currency === 'USD' || s.currency === '$') cur = '$';
-                else if (s.currency === 'TL' || s.currency === 'TRY' || s.currency === '₺') cur = '₺';
-                else if (s.currency === 'GBP' || s.currency === '£') cur = '£';
-
-                let priceStr = '';
-                if (s.unit_price !== undefined && s.unit_price !== null && s.unit_price !== '') {
-                    const p = parseFloat(s.unit_price);
-                    if (!isNaN(p)) {
-                        priceStr = cur + ' ' + p.toFixed(2).replace('.', ',');
-                    }
-                }
-
-                let notesVal = s.notes || '';
-                if (!notesVal && s.custom_fields_json) {
-                    try {
-                        const parsed = JSON.parse(s.custom_fields_json);
-                        notesVal = parsed.notes || parsed.notlar || '';
-                    } catch (e) {}
-                }
-
-                return {
-                    id: s.id,
-                    image_url: s.image_url || '',
-                    image_url_2: s.image_url_2 || '',
-                    style_no: s.style_no || '',
-                    color_name: getDisplayColor(s),
-                    fabric_article: s.fabric_article || '',
-                    total_quantity: s.total_quantity || 0,
-                    price_formatted: priceStr,
-                    notes: notesVal
-                };
-            });
+            carsafPrintRawList.value = [...list];
+            buildCarsafPrintRows();
 
             updatePrintPageStyle();
             carsafPrintModalOpen.value = true;
@@ -5723,9 +5878,11 @@ window.__texflowApp = createApp({
                     return;
                 }
 
-                const ids = rows.map(r => r.id).filter(Boolean).join(',');
+                const allIds = rows.flatMap(r => (r.ids && r.ids.length > 0) ? r.ids : [r.id]).filter(Boolean);
+                const ids = allIds.join(',');
                 const title = encodeURIComponent(carsafPrintTitle.value || 'İMALAT ÖZET LİSTESİ');
-                const url = `/api/styles/export-carsaf-excel?ids=${ids}&title=${title}`;
+                const consolidateParam = carsafPrintConsolidateChannels.value ? '&consolidate=1' : '';
+                const url = `/api/styles/export-carsaf-excel?ids=${ids}&title=${title}${consolidateParam}`;
 
                 const a = document.createElement('a');
                 a.href = url;
@@ -6353,8 +6510,10 @@ window.__texflowApp = createApp({
         // Navigation
         const setActiveMenu = (menuKey) => {
             activeMenu.value = menuKey;
-            sidebarOpen.value = false;
-            if (menuKey === 'carsaf_liste' || menuKey === 'kesimhane' || menuKey === 'yukleme_adetleri') loadStyles();
+            if (menuKey === 'carsaf_liste' || menuKey === 'kesimhane' || menuKey === 'yukleme_adetleri' || menuKey === 'ceki_koli') {
+                loadStyles();
+                if (menuKey === 'ceki_koli') loadCartonTemplates();
+            }
             if (menuKey === 'serbest_fiyat') loadFreeCostStudies();
             if (menuKey === 'fabrictag_entegrasyon') {
                 loadFabrics();
@@ -6807,7 +6966,7 @@ window.__texflowApp = createApp({
         };
 
         const filteredCuttingStyles = computed(() => {
-            const list = styles.value || [];
+            const list = (styles.value || []).filter(s => !isItemCancelled(s));
             const q = (cuttingSearch.value || '').trim().toLowerCase();
             if (!q) return list;
 
@@ -6968,10 +7127,11 @@ window.__texflowApp = createApp({
         });
 
         const cuttingSlipModels = computed(() => {
-            const list = styles.value || [];
+            const list = (styles.value || []).filter(s => !isItemCancelled(s));
             const groups = {};
 
             for (const s of list) {
+                if (isItemCancelled(s)) continue;
                 const cust = (s.customer_name || 'Bilinmeyen Müşteri').trim();
                 const brand = (s.brand || 'Bilinmeyen Marka').trim();
                 const styleNo = (s.style_no || 'Model Yok').trim();
@@ -7055,7 +7215,7 @@ window.__texflowApp = createApp({
             const chFilter = (selectedCuttingSlipChannel.value || '').trim();
             const ignoreChannel = (chFilter === '__NONE__' || chFilter.toLowerCase() === 'yok');
 
-            let filteredStyles = modelGroup.raw_styles || [];
+            let filteredStyles = (modelGroup.raw_styles || []).filter(s => !isItemCancelled(s));
             if (chFilter && !ignoreChannel) {
                 filteredStyles = filteredStyles.filter(s => {
                     const ch = (s.channel || '').toString().trim();
@@ -7204,17 +7364,61 @@ window.__texflowApp = createApp({
                 }
             }
             cuttingSlipModalOpen.value = true;
+            ensureCuttingSlipPrintStyle();
             nextTick(() => {
                 if (window.lucide) lucide.createIcons();
             });
         };
 
+        const ensureCuttingSlipPrintStyle = () => {
+            // Çakışan veya dikey baskı kalıntısı bırakabilecek tüm dinamik stilleri temizle
+            const conflictingStyleIds = [
+                'dynamic-print-page-style',
+                'kumas-siparis-dynamic-print-style',
+                'kumas-bilgi-dynamic-print-style',
+                'haftalik-program-dynamic-print-style',
+                'fabric-ledger-dynamic-print-style',
+                'cutting-slip-dynamic-print-style'
+            ];
+            conflictingStyleIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.remove();
+            });
+
+            // Kesim fişi için net A4 Landscape (Yatay) kuralı enjekte et
+            const printStyle = document.createElement('style');
+            printStyle.id = 'cutting-slip-dynamic-print-style';
+            printStyle.innerHTML = `
+                @media print {
+                    @page {
+                        size: A4 landscape !important;
+                        margin: 5mm 6mm !important;
+                    }
+                }
+            `;
+            document.head.appendChild(printStyle);
+        };
+
+        watch(cuttingSlipModalOpen, (isOpen) => {
+            if (isOpen) {
+                ensureCuttingSlipPrintStyle();
+            } else {
+                const el = document.getElementById('cutting-slip-dynamic-print-style');
+                if (el) el.remove();
+            }
+        });
+
         const closeCuttingSlipModal = () => {
             cuttingSlipModalOpen.value = false;
+            const el = document.getElementById('cutting-slip-dynamic-print-style');
+            if (el) el.remove();
         };
 
         const printCuttingSlip = () => {
-            window.print();
+            ensureCuttingSlipPrintStyle();
+            setTimeout(() => {
+                window.print();
+            }, 80);
         };
 
         const exportCuttingSlipExcel = async () => {
@@ -8098,12 +8302,10 @@ window.__texflowApp = createApp({
                     const unitRate = toNum(rawRate, currKey === 'TL' ? 1.0 : 56.0);
                     
                     let calculatedVal = 0;
-                    if (it.formula !== undefined && it.formula !== '' && isNaN(Number(it.formula))) {
+                    if (it.formula !== undefined && it.formula !== null && String(it.formula).trim() !== '') {
                         calculatedVal = evalCostFormula(it.formula);
-                    } else if (it.price !== undefined && it.price !== null && it.price !== '') {
+                    } else if (it.price !== undefined && it.price !== null && String(it.price).trim() !== '') {
                         calculatedVal = toNum(it.price);
-                    } else if (it.formula !== undefined && it.formula !== '') {
-                        calculatedVal = evalCostFormula(it.formula);
                     }
                     it.evaluated_price = calculatedVal;
                     it.price = calculatedVal;
@@ -9927,6 +10129,601 @@ window.__texflowApp = createApp({
             }
         });
 
+        // =========================================================================
+        // ÇEKİ LİSTESİ VE KOLİ ÜSTÜ ETİKET MODÜLÜ (PACKING LIST & CARTON LABELS)
+        // =========================================================================
+        const packingFile = ref(null);
+        const packingDragOver = ref(false);
+        const packingLoading = ref(false);
+        const packingData = ref(null);
+        const matchedPackingStyle = ref(null);
+        const candidatePackingStyles = ref([]);
+        const packingStyleSearch = ref('');
+        const selectedCartonTemplate = ref('anna_van_toor');
+        const availableCartonTemplates = ref([
+            { id: 'anna_van_toor', name: 'Anna Van Toor (A4 Yatay - x2 Çift Ürün Destekli)', desc: 'Hollanda teslimat standardı, Poka-Yoke renk rozeti, x2 varyant desteği' },
+            { id: 'standard_horizontal', name: 'Standart Tekstil Koli Üstü (A4 Yatay)', desc: 'Genel ihracat koli etiket formatı' },
+            { id: 'compact_4up', name: 'Kompakt Koli Üstü (A4 4\'lü)', desc: 'Küçük ve orta boy koli formatı' }
+        ]);
+
+        // Dynamic Carton Templates & Designer State
+        const cartonTemplatesList = ref([]);
+        const activeCartonTemplate = ref(null);
+        const templateDesignerModalOpen = ref(false);
+        const isAnalyzingTemplate = ref(false);
+
+        // Active Designer State
+        const designerTemplate = ref({
+            id: null,
+            customer_name: '',
+            template_name: '',
+            paper_size: 'A4',
+            orientation: 'landscape',
+            width_mm: 297,
+            height_mm: 210,
+            items_per_page: 2,
+            border_style: 'solid',
+            border_width: 2,
+            show_grid_lines: true,
+            margin_mm: 6,
+            font_scale: 1.0,
+            is_default: 1,
+            layout_json: {
+                header_title: '',
+                address_line1: '',
+                address_line2: '',
+                address_line3: '',
+                brand: '',
+                measurements: '60X40X30',
+                poka_badge_enabled: true,
+                dual_variant_enabled: true,
+                show_barcode: false,
+                fields: []
+            }
+        });
+
+        // Print Preview Configuration (Can be changed live & saved for customer)
+        const printPaperSize = ref('A4');
+        const printOrientation = ref('landscape');
+        const printItemsPerPage = ref(2);
+        const printShowGridLines = ref(true);
+        const printBorderStyle = ref('solid');
+        const printBorderWidth = ref(2);
+        const printFontScale = ref(1.0);
+        const printMarginMm = ref(6);
+        const printCustomWidth = ref(297);
+        const printCustomHeight = ref(210);
+
+        const isProcessingPacking = ref(false);
+        const packingProcessSuccess = ref(false);
+        const packingProcessSuccessMsg = ref('');
+        const cartonLabelPrintModalOpen = ref(false);
+        const cartonPrintMode = ref('all'); // 'all' or 'single'
+        const selectedSingleCarton = ref(null);
+        const cartonPrintLayout = ref('2up'); // '2up' (x2 A4 landscape) or '1up'
+
+        const filteredCandidateStyles = computed(() => {
+            if (!packingStyleSearch.value) return candidatePackingStyles.value;
+            const q = packingStyleSearch.value.toLowerCase();
+            return (styles.value || []).filter(s => {
+                return (s.style_no && s.style_no.toLowerCase().includes(q)) ||
+                       (s.color_name && s.color_name.toLowerCase().includes(q)) ||
+                       (s.customer_name && s.customer_name.toLowerCase().includes(q)) ||
+                       (s.po_number && s.po_number.toLowerCase().includes(q));
+            }).slice(0, 20);
+        });
+
+        const loadCartonTemplates = async (preferCustomer = null) => {
+            try {
+                let url = '/api/carton-templates';
+                if (preferCustomer) {
+                    url += `?customer=${encodeURIComponent(preferCustomer)}`;
+                }
+                const res = await apiFetch(url);
+                if (res && res.templates) {
+                    cartonTemplatesList.value = res.templates;
+                    if (cartonTemplatesList.value.length > 0) {
+                        let matched = null;
+                        if (preferCustomer) {
+                            const cLower = preferCustomer.toLowerCase();
+                            matched = cartonTemplatesList.value.find(t => 
+                                t.customer_name && t.customer_name.toLowerCase().includes(cLower)
+                            );
+                        }
+                        activeCartonTemplate.value = matched || cartonTemplatesList.value[0];
+                        applyTemplateToPrintConfig(activeCartonTemplate.value);
+                    }
+                }
+            } catch (err) {
+                console.error("Carton templates load error:", err);
+            }
+        };
+
+        const selectCartonTemplate = (tpl) => {
+            activeCartonTemplate.value = tpl;
+            applyTemplateToPrintConfig(tpl);
+            showToast('info', `Koli üstü formatı seçildi: ${tpl.template_name}`);
+        };
+
+        const applyTemplateToPrintConfig = (tpl) => {
+            if (!tpl) return;
+            printPaperSize.value = tpl.paper_size || 'A4';
+            printOrientation.value = tpl.orientation || 'landscape';
+            printItemsPerPage.value = tpl.items_per_page || (printPaperSize.value === 'A4' ? 2 : 1);
+            printShowGridLines.value = tpl.show_grid_lines !== false;
+            printBorderStyle.value = tpl.border_style || 'solid';
+            printBorderWidth.value = tpl.border_width || 2;
+            printFontScale.value = tpl.font_scale || 1.0;
+            printMarginMm.value = tpl.margin_mm || 6;
+            printCustomWidth.value = tpl.width_mm || 297;
+            printCustomHeight.value = tpl.height_mm || 210;
+            cartonPrintLayout.value = printItemsPerPage.value === 2 ? '2up' : '1up';
+        };
+
+        const onPrintPaperSizeChange = (newSize) => {
+            printPaperSize.value = newSize;
+            if (newSize === 'A4' || newSize === 'A4_landscape') {
+                printOrientation.value = 'landscape';
+                printCustomWidth.value = 297;
+                printCustomHeight.value = 210;
+                printItemsPerPage.value = 2;
+                cartonPrintLayout.value = '2up';
+                printMarginMm.value = 6;
+                printFontScale.value = 1.0;
+            } else if (newSize === 'A4_portrait') {
+                printOrientation.value = 'portrait';
+                printCustomWidth.value = 210;
+                printCustomHeight.value = 297;
+                printItemsPerPage.value = 1;
+                cartonPrintLayout.value = '1up';
+                printMarginMm.value = 6;
+                printFontScale.value = 1.0;
+            } else if (newSize === 'A5' || newSize === 'A5_portrait') {
+                printOrientation.value = 'portrait';
+                printCustomWidth.value = 148;
+                printCustomHeight.value = 210;
+                printItemsPerPage.value = 1;
+                cartonPrintLayout.value = '1up';
+                printMarginMm.value = 5;
+                printFontScale.value = 0.95;
+            } else if (newSize === 'A5_landscape') {
+                printOrientation.value = 'landscape';
+                printCustomWidth.value = 210;
+                printCustomHeight.value = 148;
+                printItemsPerPage.value = 1;
+                cartonPrintLayout.value = '1up';
+                printMarginMm.value = 5;
+                printFontScale.value = 0.95;
+            } else if (newSize === 'Argox_100x150') {
+                printOrientation.value = 'portrait';
+                printCustomWidth.value = 100;
+                printCustomHeight.value = 150;
+                printItemsPerPage.value = 1;
+                cartonPrintLayout.value = '1up';
+                printMarginMm.value = 3;
+                printFontScale.value = 0.85;
+            } else if (newSize === 'Argox_100x100') {
+                printOrientation.value = 'portrait';
+                printCustomWidth.value = 100;
+                printCustomHeight.value = 100;
+                printItemsPerPage.value = 1;
+                cartonPrintLayout.value = '1up';
+                printMarginMm.value = 3;
+                printFontScale.value = 0.80;
+            } else if (newSize === 'Argox_80x50') {
+                printOrientation.value = 'landscape';
+                printCustomWidth.value = 80;
+                printCustomHeight.value = 50;
+                printItemsPerPage.value = 1;
+                cartonPrintLayout.value = '1up';
+                printMarginMm.value = 2;
+                printFontScale.value = 0.70;
+            }
+        };
+
+        const getPrintPageCssSize = () => {
+            if (printPaperSize.value === 'A4' || printPaperSize.value === 'A4_landscape') return 'A4 landscape';
+            if (printPaperSize.value === 'A4_portrait') return 'A4 portrait';
+            if (printPaperSize.value === 'A5' || printPaperSize.value === 'A5_portrait') return 'A5 portrait';
+            if (printPaperSize.value === 'A5_landscape') return 'A5 landscape';
+            if (printPaperSize.value === 'Argox_100x150') return '100mm 150mm';
+            if (printPaperSize.value === 'Argox_100x100') return '100mm 100mm';
+            if (printPaperSize.value === 'Argox_80x50') return '80mm 50mm';
+            if (printPaperSize.value === 'custom') return `${printCustomWidth.value}mm ${printCustomHeight.value}mm`;
+            return 'A4 landscape';
+        };
+
+        const saveCurrentPrintPageLayout = async () => {
+            const customer = (packingData.value && packingData.value.customer) || (activeCartonTemplate.value && activeCartonTemplate.value.customer_name) || 'Genel Müşteri';
+            const tplId = activeCartonTemplate.value ? activeCartonTemplate.value.id : null;
+            const tplName = (activeCartonTemplate.value && activeCartonTemplate.value.template_name) || `${customer} Koli Üstü Şablonu`;
+            
+            const payload = {
+                id: tplId,
+                customer_name: customer,
+                template_name: tplName,
+                paper_size: printPaperSize.value,
+                orientation: printOrientation.value,
+                width_mm: printCustomWidth.value,
+                height_mm: printCustomHeight.value,
+                items_per_page: printItemsPerPage.value,
+                border_style: printBorderStyle.value,
+                border_width: printBorderWidth.value,
+                show_grid_lines: printShowGridLines.value,
+                margin_mm: printMarginMm.value,
+                font_scale: printFontScale.value,
+                layout_json: activeCartonTemplate.value ? activeCartonTemplate.value.layout_json : {},
+                is_default: true
+            };
+
+            try {
+                const res = await apiFetch('/api/carton-templates/save', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                showToast('success', `"${customer}" için sayfa yapısı (${printPaperSize.value}) başarıyla kaydedildi!`);
+                await loadCartonTemplates(customer);
+            } catch (err) {
+                showToast('error', err.message || 'Sayfa yapısı kaydedilemedi.');
+            }
+        };
+
+        const handleTemplateExcelUpload = async (e) => {
+            const files = e.target ? e.target.files : (e.dataTransfer ? e.dataTransfer.files : []);
+            if (!files || files.length === 0) return;
+            const file = files[0];
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!['xlsx', 'xlsm', 'xls'].includes(ext)) {
+                showToast('error', 'Lütfen sadece Excel (.xlsx, .xlsm, .xls) koli üstü şablon dosyası seçin.');
+                return;
+            }
+
+            isAnalyzingTemplate.value = true;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const tokenVal = token.value || localStorage.getItem('texflow_token') || '';
+                const res = await fetch('/api/carton-templates/upload-excel', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${tokenVal}` },
+                    body: formData
+                });
+                const json = await res.json();
+                if (!res.ok) throw new Error(json.detail || 'Şablon analiz edilemedi.');
+
+                const data = json.data;
+                designerTemplate.value = {
+                    id: null,
+                    customer_name: data.customer_name || 'Yeni Müşteri',
+                    template_name: data.template_name || `${data.customer_name} Şablonu`,
+                    paper_size: data.paper_size || 'A4',
+                    orientation: data.orientation || 'landscape',
+                    width_mm: data.width_mm || 297,
+                    height_mm: data.height_mm || 210,
+                    items_per_page: data.items_per_page || 2,
+                    border_style: data.border_style || 'solid',
+                    border_width: data.border_width || 2,
+                    show_grid_lines: data.show_grid_lines !== false,
+                    margin_mm: data.margin_mm || 6,
+                    font_scale: data.font_scale || 1.0,
+                    is_default: 1,
+                    layout_json: data.layout_json || {
+                        header_title: data.header_title || data.customer_name,
+                        address_line1: data.address_line1 || '',
+                        address_line2: data.address_line2 || '',
+                        address_line3: data.address_line3 || '',
+                        brand: data.brand || 'BRAND:',
+                        measurements: data.measurements || '60X40X30',
+                        poka_badge_enabled: true,
+                        dual_variant_enabled: data.items_per_page === 2,
+                        show_barcode: data.paper_size.includes('Argox'),
+                        fields: data.layout_json ? data.layout_json.fields : []
+                    }
+                };
+
+                templateDesignerModalOpen.value = true;
+                showToast('success', `Excel formülasyonu ve hücre yapısı çözümlendi (${data.formulas_count} formül tespit edildi).`);
+                refreshIcons();
+            } catch (err) {
+                showToast('error', err.message || 'Excel şablonu çözümlenirken hata oluştu.');
+            } finally {
+                isAnalyzingTemplate.value = false;
+                if (e.target) e.target.value = '';
+            }
+        };
+
+        const openTemplateDesigner = (tpl = null) => {
+            if (tpl) {
+                designerTemplate.value = JSON.parse(JSON.stringify(tpl));
+                if (!designerTemplate.value.layout_json) {
+                    designerTemplate.value.layout_json = {};
+                }
+            } else {
+                designerTemplate.value = {
+                    id: null,
+                    customer_name: (packingData.value && packingData.value.customer) || 'Yeni Müşteri',
+                    template_name: 'Yeni Koli Üstü Şablonu',
+                    paper_size: 'A4',
+                    orientation: 'landscape',
+                    width_mm: 297,
+                    height_mm: 210,
+                    items_per_page: 2,
+                    border_style: 'solid',
+                    border_width: 2,
+                    show_grid_lines: true,
+                    margin_mm: 6,
+                    font_scale: 1.0,
+                    is_default: 1,
+                    layout_json: {
+                        header_title: (packingData.value && packingData.value.customer) || 'MÜŞTERİ ADI',
+                        address_line1: 'Adres Satırı 1',
+                        address_line2: 'Şehir / Ülke',
+                        address_line3: '',
+                        brand: 'BRAND: MARKA',
+                        measurements: '60X40X30',
+                        poka_badge_enabled: true,
+                        dual_variant_enabled: true,
+                        show_barcode: false,
+                        fields: []
+                    }
+                };
+            }
+            templateDesignerModalOpen.value = true;
+            refreshIcons();
+        };
+
+        const closeTemplateDesigner = () => {
+            templateDesignerModalOpen.value = false;
+        };
+
+        const saveDesignerTemplate = async () => {
+            if (!designerTemplate.value.customer_name || !designerTemplate.value.customer_name.trim()) {
+                showToast('error', 'Lütfen müşteri adını girin.');
+                return;
+            }
+            if (!designerTemplate.value.template_name || !designerTemplate.value.template_name.trim()) {
+                showToast('error', 'Lütfen şablon adını girin.');
+                return;
+            }
+
+            try {
+                const res = await apiFetch('/api/carton-templates/save', {
+                    method: 'POST',
+                    body: JSON.stringify(designerTemplate.value)
+                });
+                showToast('success', res.message || 'Şablon başarıyla kaydedildi.');
+                templateDesignerModalOpen.value = false;
+                await loadCartonTemplates(designerTemplate.value.customer_name);
+            } catch (err) {
+                showToast('error', err.message || 'Şablon kaydedilirken hata oluştu.');
+            }
+        };
+
+        const onDesignerPaperSizeChange = (newSize) => {
+            designerTemplate.value.paper_size = newSize;
+            if (newSize === 'A4' || newSize === 'A4_landscape') {
+                designerTemplate.value.orientation = 'landscape';
+                designerTemplate.value.width_mm = 297;
+                designerTemplate.value.height_mm = 210;
+                designerTemplate.value.items_per_page = 2;
+                designerTemplate.value.margin_mm = 6;
+                designerTemplate.value.font_scale = 1.0;
+            } else if (newSize === 'A4_portrait') {
+                designerTemplate.value.orientation = 'portrait';
+                designerTemplate.value.width_mm = 210;
+                designerTemplate.value.height_mm = 297;
+                designerTemplate.value.items_per_page = 1;
+                designerTemplate.value.margin_mm = 6;
+                designerTemplate.value.font_scale = 1.0;
+            } else if (newSize === 'A5' || newSize === 'A5_portrait') {
+                designerTemplate.value.orientation = 'portrait';
+                designerTemplate.value.width_mm = 148;
+                designerTemplate.value.height_mm = 210;
+                designerTemplate.value.items_per_page = 1;
+                designerTemplate.value.margin_mm = 5;
+                designerTemplate.value.font_scale = 0.95;
+            } else if (newSize === 'A5_landscape') {
+                designerTemplate.value.orientation = 'landscape';
+                designerTemplate.value.width_mm = 210;
+                designerTemplate.value.height_mm = 148;
+                designerTemplate.value.items_per_page = 1;
+                designerTemplate.value.margin_mm = 5;
+                designerTemplate.value.font_scale = 0.95;
+            } else if (newSize === 'Argox_100x150') {
+                designerTemplate.value.orientation = 'portrait';
+                designerTemplate.value.width_mm = 100;
+                designerTemplate.value.height_mm = 150;
+                designerTemplate.value.items_per_page = 1;
+                designerTemplate.value.margin_mm = 3;
+                designerTemplate.value.font_scale = 0.85;
+                if (designerTemplate.value.layout_json) designerTemplate.value.layout_json.show_barcode = true;
+            } else if (newSize === 'Argox_100x100') {
+                designerTemplate.value.orientation = 'portrait';
+                designerTemplate.value.width_mm = 100;
+                designerTemplate.value.height_mm = 100;
+                designerTemplate.value.items_per_page = 1;
+                designerTemplate.value.margin_mm = 3;
+                designerTemplate.value.font_scale = 0.80;
+                if (designerTemplate.value.layout_json) designerTemplate.value.layout_json.show_barcode = true;
+            } else if (newSize === 'Argox_80x50') {
+                designerTemplate.value.orientation = 'landscape';
+                designerTemplate.value.width_mm = 80;
+                designerTemplate.value.height_mm = 50;
+                designerTemplate.value.items_per_page = 1;
+                designerTemplate.value.margin_mm = 2;
+                designerTemplate.value.font_scale = 0.70;
+                if (designerTemplate.value.layout_json) designerTemplate.value.layout_json.show_barcode = true;
+            }
+        };
+
+        const handlePackingFileDrop = async (e) => {
+            packingDragOver.value = false;
+            const files = e.dataTransfer ? e.dataTransfer.files : [];
+            if (files.length > 0) {
+                await uploadPackingFile(files[0]);
+            }
+        };
+
+        const handlePackingFileSelect = async (e) => {
+            const files = e.target ? e.target.files : [];
+            if (files.length > 0) {
+                await uploadPackingFile(files[0]);
+            }
+        };
+
+        const uploadPackingFile = async (file) => {
+            if (!file) return;
+            packingFile.value = file;
+            packingLoading.value = true;
+            packingProcessSuccess.value = false;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const tokenVal = token.value || localStorage.getItem('texflow_token') || '';
+                const res = await fetch('/api/packing-list/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${tokenVal}`
+                    },
+                    body: formData
+                });
+                const json = await res.json();
+                if (!res.ok) throw new Error(json.detail || 'Çeki listesi yüklenemedi.');
+                packingData.value = json.parsed_data;
+                matchedPackingStyle.value = json.matched_style;
+                candidatePackingStyles.value = json.candidate_styles || [];
+                
+                // Automatically match customer's carton template
+                if (json.parsed_data && json.parsed_data.customer) {
+                    await loadCartonTemplates(json.parsed_data.customer);
+                } else {
+                    await loadCartonTemplates();
+                }
+
+                showToast('success', `Çeki listesi başarıyla ayrıştırıldı (${json.parsed_data.total_cartons} koli, ${json.parsed_data.total_quantity} adet).`);
+                refreshIcons();
+            } catch (err) {
+                showToast('error', err.message || 'Çeki listesi çözümlenirken hata oluştu.');
+            } finally {
+                packingLoading.value = false;
+            }
+        };
+
+        const loadSamplePackingFile = async () => {
+            packingLoading.value = true;
+            packingProcessSuccess.value = false;
+            try {
+                const json = await apiFetch('/api/packing-list/sample');
+                packingData.value = json.parsed_data;
+                matchedPackingStyle.value = json.matched_style;
+                candidatePackingStyles.value = json.candidate_styles || [];
+                await loadCartonTemplates('Anna van Toor B.V.');
+                showToast('success', `Örnek Anna Van Toor çeki listesi yüklendi (${json.parsed_data.total_cartons} koli, ${json.parsed_data.total_quantity} adet).`);
+                refreshIcons();
+            } catch (err) {
+                showToast('error', err.message || 'Örnek dosya yüklenemedi.');
+            } finally {
+                packingLoading.value = false;
+            }
+        };
+
+        const clearPackingData = () => {
+            packingData.value = null;
+            packingFile.value = null;
+            matchedPackingStyle.value = null;
+            candidatePackingStyles.value = [];
+            packingProcessSuccess.value = false;
+            refreshIcons();
+        };
+
+        const selectCandidateStyle = (style) => {
+            matchedPackingStyle.value = style;
+            showToast('info', `Eşleşen model güncellendi: ${style.style_no} (${style.color_name || ''})`);
+        };
+
+        const processPackingToSystem = async (andPrint = false) => {
+            if (!matchedPackingStyle.value || !matchedPackingStyle.value.id) {
+                showToast('error', 'Lütfen çeki listesinin işleneceği modeli seçin.');
+                return;
+            }
+            if (!packingData.value || !packingData.value.size_summary) {
+                showToast('error', 'İşlenecek beden adetleri bulunamadı.');
+                return;
+            }
+            isProcessingPacking.value = true;
+            try {
+                const payload = {
+                    style_id: matchedPackingStyle.value.id,
+                    sizes: packingData.value.size_summary,
+                    channel: (packingData.value.channels && packingData.value.channels.length === 1) ? packingData.value.channels[0] : '',
+                    notes: `Çeki listesinden ${packingData.value.total_cartons} koli, toplam ${packingData.value.total_quantity} adet aktarıldı.`
+                };
+                const res = await apiFetch('/api/packing-list/process', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                packingProcessSuccess.value = true;
+                packingProcessSuccessMsg.value = res.message || 'Yükleme adetleri siparişe işlendi.';
+                showToast('success', res.message || 'Siparişe başarıyla işlendi.');
+                await loadStyles().catch(() => {});
+                if (andPrint) {
+                    openCartonPrintModal();
+                }
+            } catch (err) {
+                showToast('error', err.message || 'Sisteme işlenirken hata oluştu.');
+            } finally {
+                isProcessingPacking.value = false;
+            }
+        };
+
+        const openCartonPrintModal = (singleCarton = null) => {
+            if (!packingData.value || !packingData.value.cartons || packingData.value.cartons.length === 0) {
+                showToast('error', 'Yazdırılacak koli verisi bulunamadı.');
+                return;
+            }
+            if (activeCartonTemplate.value) {
+                applyTemplateToPrintConfig(activeCartonTemplate.value);
+            }
+            if (singleCarton) {
+                cartonPrintMode.value = 'single';
+                selectedSingleCarton.value = singleCarton;
+            } else {
+                cartonPrintMode.value = 'all';
+                selectedSingleCarton.value = null;
+            }
+            cartonLabelPrintModalOpen.value = true;
+            refreshIcons();
+        };
+
+        const closeCartonPrintModal = () => {
+            cartonLabelPrintModalOpen.value = false;
+            selectedSingleCarton.value = null;
+        };
+
+        const printCartonLabels = () => {
+            window.print();
+        };
+
+        const getPrintCartonsList = () => {
+            if (!packingData.value || !packingData.value.cartons) return [];
+            if (cartonPrintMode.value === 'single' && selectedSingleCarton.value) {
+                return [selectedSingleCarton.value];
+            }
+            return packingData.value.cartons;
+        };
+
+        const getPrintCartonPairs = () => {
+            const list = getPrintCartonsList();
+            if (cartonPrintLayout.value === '1up' || printItemsPerPage.value === 1) {
+                return list.map(c => [c]);
+            }
+            const pairs = [];
+            for (let i = 0; i < list.length; i += 2) {
+                pairs.push([list[i], list[i + 1] || null]);
+            }
+            return pairs;
+        };
+
 
         return {
             currentUser,
@@ -10354,6 +11151,10 @@ window.__texflowApp = createApp({
             printCarsafList,
             isCarsafExportingExcel,
             exportCarsafPrintToExcel,
+            carsafPrintConsolidateChannels,
+            carsafPrintTotalQty,
+            toggleConsolidateChannels,
+            buildCarsafPrintRows,
             isExportingExcel,
             exportOrdersToExcel,
             authChecking,
@@ -10518,7 +11319,64 @@ window.__texflowApp = createApp({
             deleteBackupItem,
             openRestoreModal,
             confirmRestoreBackup,
-            handleBackupFileUpload
+            handleBackupFileUpload,
+
+            // Packing List & Carton Labels Exports
+            packingFile,
+            packingDragOver,
+            packingLoading,
+            packingData,
+            matchedPackingStyle,
+            candidatePackingStyles,
+            filteredCandidateStyles,
+            packingStyleSearch,
+            selectedCartonTemplate,
+            availableCartonTemplates,
+            cartonTemplatesList,
+            activeCartonTemplate,
+            templateDesignerModalOpen,
+            isAnalyzingTemplate,
+            designerTemplate,
+            printPaperSize,
+            printOrientation,
+            printItemsPerPage,
+            printShowGridLines,
+            printBorderStyle,
+            printBorderWidth,
+            printFontScale,
+            printMarginMm,
+            printCustomWidth,
+            printCustomHeight,
+            loadCartonTemplates,
+            selectCartonTemplate,
+            applyTemplateToPrintConfig,
+            onPrintPaperSizeChange,
+            getPrintPageCssSize,
+            saveCurrentPrintPageLayout,
+            handleTemplateExcelUpload,
+            openTemplateDesigner,
+            closeTemplateDesigner,
+            saveDesignerTemplate,
+            onDesignerPaperSizeChange,
+            isProcessingPacking,
+            packingProcessSuccess,
+            packingProcessSuccessMsg,
+            cartonLabelPrintModalOpen,
+            cartonPrintMode,
+            selectedSingleCarton,
+            cartonPrintLayout,
+            handlePackingFileDrop,
+            handlePackingFileSelect,
+            uploadPackingFile,
+            loadSamplePackingFile,
+            clearPackingData,
+            selectCandidateStyle,
+            processPackingToSystem,
+            openCartonPrintModal,
+            closeCartonPrintModal,
+            printCartonLabels,
+            getPrintCartonsList,
+            getPrintCartonPairs
         };
 
 

@@ -304,7 +304,8 @@
             #kumas-siparis-print-modal,
             #cutting-slip-modal,
             #fabric-ledger-modal,
-            #free-cost-modal {
+            #free-cost-modal,
+            #koli-etiket-print-modal {
                 position: absolute !important;
                 left: 0 !important;
                 top: 0 !important;
@@ -339,7 +340,9 @@
             #free-cost-print-area,
             #free-cost-print-area *,
             #free-cost-list-container,
-            #free-cost-list-container * {
+            #free-cost-list-container *,
+            #koli-etiket-print-modal,
+            #koli-etiket-print-modal * {
                 visibility: visible !important;
             }
             #kumas-bilgi-print-modal > div:not(.no-print),
@@ -4821,6 +4824,1321 @@
                             </table>
                         </div>
                     </div>
+                </section>
+
+                <!-- 8. ÇEKİ LİSTESİ VE KOLİ ÜSTÜ ETİKET MODÜLÜ -->
+                <section v-if="activeMenu === 'ceki_koli'" class="space-y-4 w-full">
+                    
+                    <!-- Üst Başlık & Eylemler -->
+                    <div class="p-4 sm:p-5 rounded-2xl border transition-all shadow-md backdrop-blur-md"
+                         :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2.5 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                                    <i data-lucide="package" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-bold flex items-center gap-2" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                        <span>Çeki Listesi & Koli Üstü Etiket Merkezi</span>
+                                    </h3>
+                                    <p class="text-xs text-slate-400 mt-0.5">
+                                        Müşteriye özel koli üstü etiket şablonları tasarlayın; Excel veya resim çeki listelerini yükleyip model, renk ve adetleri eşleştirerek A4, A5 veya Argox termal baskı alın.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-2 shrink-0">
+                                <!-- GİZLİ EXCEL ŞABLON DOSYA SEÇİCİ -->
+                                <input type="file" id="templateExcelInput" @change="handleTemplateExcelUpload" accept=".xlsx,.xls,.xlsm" class="hidden">
+
+                                <!-- 1. YENİ EXCEL ŞABLONU YÜKLE -->
+                                <button @click="document.getElementById('templateExcelInput').click()" :disabled="isAnalyzingTemplate"
+                                        class="px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                                        :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-sky-400 hover:bg-slate-700' : 'bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100'"
+                                        title="Müşteriye ait Excel koli üstü şablonunu formülleriyle birlikte AI ile okuyup analiz etmek için yükleyin">
+                                    <span v-if="isAnalyzingTemplate" class="animate-spin">⏳</span>
+                                    <i v-else data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-sky-500"></i>
+                                    <span>📐 Koli Üstü Formatı Yükle (Excel)</span>
+                                </button>
+
+                                <!-- 2. ŞABLON TASARLA / DÜZENLE -->
+                                <button @click="openTemplateDesigner(activeCartonTemplate)"
+                                        class="px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                                        :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'"
+                                        title="Görsel tasarım ekranını açarak boşluk, kenarlık, hücre çizgileri ve A4/A5/Argox sayfa boyutlarını yapılandırın">
+                                    <i data-lucide="palette" class="w-3.5 h-3.5 text-amber-500"></i>
+                                    <span>Şablon Tasarla</span>
+                                </button>
+
+                                <!-- 3. ÖRNEK TEST ÇEKİ LİSTESİ -->
+                                <button @click="loadSamplePackingFile" :disabled="packingLoading"
+                                        class="px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                                        :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-purple-400 hover:bg-slate-700' : 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100'"
+                                        title="Sistemdeki örnek çeki listesini tek tıkla test etmek için yükleyin">
+                                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-500"></i>
+                                    <span>Örnek Çeki Listesi (Test)</span>
+                                </button>
+
+                                <!-- 4. TEMİZLE -->
+                                <button v-if="packingData" @click="clearPackingData"
+                                        class="px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition text-rose-500 hover:text-rose-600 border-rose-500/30 hover:border-rose-500/50"
+                                        :class="isDarkMode ? 'bg-rose-500/10 hover:bg-rose-500/20' : 'bg-rose-50 hover:bg-rose-100'">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                    <span>Temizle</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SÜRÜKLE BIRAK YÜKLEME KUTUCUĞU (DROPZONE) -->
+                    <div @dragover.prevent="packingDragOver = true"
+                         @dragleave.prevent="packingDragOver = false"
+                         @drop.prevent="handlePackingFileDrop"
+                         :class="[packingDragOver ? 'border-purple-500 bg-purple-500/10 scale-[1.01]' : (isDarkMode ? 'border-slate-700 bg-slate-900/60 hover:border-slate-600' : 'border-slate-300 bg-slate-50/80 hover:border-slate-400'), packingData ? 'p-4' : 'p-8']"
+                         class="border-2 border-dashed rounded-2xl text-center transition-all cursor-pointer relative shadow-sm group">
+                        
+                        <input type="file" @change="handlePackingFileSelect" accept=".xlsx,.xls,.xlsm,.csv,.pdf,.png,.jpg,.jpeg,.webp" class="absolute inset-0 opacity-0 cursor-pointer z-10">
+                        
+                        <div v-if="packingData" class="flex flex-col sm:flex-row items-center justify-between gap-3 px-2">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                                    <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+                                </div>
+                                <div class="text-left">
+                                    <div class="text-xs font-bold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                        {{ packingFile ? packingFile.name : 'Anna_Van_Toor_koli_ustu_x2.xlsm' }}
+                                    </div>
+                                    <div class="text-[11px] text-slate-400">
+                                        Farklı bir çeki listesi yüklemek için buraya yeni bir dosya sürükleyip bırakabilir veya tıklayabilirsiniz
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-xs font-bold px-3 py-1.5 rounded-xl border shrink-0"
+                                  :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700'">
+                                Dosyayı Değiştir
+                            </span>
+                        </div>
+
+                        <div v-else class="space-y-3">
+                            <div class="w-14 h-14 mx-auto rounded-2xl bg-purple-500/10 text-purple-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
+                                <i data-lucide="upload-cloud" class="w-7 h-7"></i>
+                            </div>
+                            <div>
+                                <div class="text-sm font-bold" :class="isDarkMode ? 'text-white' : 'text-slate-800'">
+                                    Çeki Listesi Dosyasını Buraya Sürükleyin veya Seçmek İçin Tıklayın
+                                </div>
+                                <div class="text-xs text-slate-400 mt-1">
+                                    Desteklenen: Excel (.xlsx, .xlsm, .xls), PDF ve Resim (.png, .jpg) formatları
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- YÜKLEME VE ANALİZ YÜKLENİYOR İNDİKATÖRÜ -->
+                    <div v-if="packingLoading" class="p-4 rounded-2xl border text-center text-xs flex items-center justify-center gap-3 shadow-md animate-pulse"
+                         :class="isDarkMode ? 'bg-slate-900 border-slate-800 text-purple-400' : 'bg-purple-50 border-purple-200 text-purple-700'">
+                        <span class="text-base animate-spin">⏳</span>
+                        <span class="font-bold">Çeki listesi taranıyor; müşteri, model, kanal, koli ağırlıkları ve beden adetleri ayrıştırılıyor...</span>
+                    </div>
+
+                    <!-- AYRIŞTIRILAN VERİ VE SİPARİŞ EŞLEŞTİRME ONAY KARTI -->
+                    <div v-if="packingData" class="space-y-4">
+                        
+                        <!-- 1. ONAY VE EŞLEŞTİRME KARTI (3 SÜTUNLU KAPSAYICI) -->
+                        <div class="p-5 rounded-2xl border shadow-lg space-y-5"
+                             :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                            
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                                
+                                <!-- SOL: AYRIŞTIRILAN ÇEKİ LİSTESİ BİLGİLERİ -->
+                                <div class="p-4 rounded-xl border flex flex-col justify-between"
+                                     :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                    <div>
+                                        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+                                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-500"></i>
+                                            <span>Çeki Listesinden Okunan Veriler</span>
+                                        </div>
+
+                                        <div class="space-y-2 text-xs">
+                                            <div class="flex items-center justify-between py-1 border-b" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                                <span class="text-slate-400">Müşteri:</span>
+                                                <span class="font-extrabold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">{{ packingData.customer || 'ANNA' }}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between py-1 border-b" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                                <span class="text-slate-400">Model / Style:</span>
+                                                <span class="font-mono font-extrabold text-purple-400">{{ packingData.style_no || '-' }}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between py-1 border-b" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                                <span class="text-slate-400">Renk:</span>
+                                                <span class="font-semibold" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">{{ packingData.color || '-' }}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between py-1 border-b" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                                <span class="text-slate-400">Toplam Koli:</span>
+                                                <span class="font-extrabold text-emerald-400 font-mono">{{ packingData.total_cartons }} Koli</span>
+                                            </div>
+                                            <div class="flex items-center justify-between py-1">
+                                                <span class="text-slate-400">Toplam Adet:</span>
+                                                <span class="font-extrabold text-emerald-500 font-mono text-sm">{{ packingData.total_quantity }} Adet</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Beden Dağılımı Çipleri -->
+                                    <div class="mt-3 pt-3 border-t" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Beden Asorti Toplamı:</div>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <span v-for="(qty, sz) in packingData.size_summary" :key="'sum-'+sz"
+                                                  class="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold border"
+                                                  :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-200' : 'bg-white border-slate-300 text-slate-800'">
+                                                <span class="text-slate-400 mr-1">{{ sz }}:</span>{{ qty }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- ORTA: ÇARŞAF LİSTESİNDEN EŞLEŞEN SİPARİŞ & DEĞİŞTİRME SEÇİMİ -->
+                                <div class="p-4 rounded-xl border flex flex-col justify-between"
+                                     :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                    <div>
+                                        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                                            <div class="flex items-center gap-1.5">
+                                                <i data-lucide="link" class="w-3.5 h-3.5 text-theme"></i>
+                                                <span>Çarşaf Listesinden Eşleşen Sipariş</span>
+                                            </div>
+                                            <span v-if="matchedPackingStyle" class="text-[10px] px-2 py-0.2 rounded-full font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                                Otomatik Eşleşti
+                                            </span>
+                                        </div>
+
+                                        <div v-if="matchedPackingStyle" class="p-3 rounded-xl border bg-emerald-500/5 border-emerald-500/20 space-y-1.5 text-xs">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-slate-400 text-[11px]">Sipariş / PO:</span>
+                                                <span class="font-mono font-extrabold text-emerald-400">PO: {{ matchedPackingStyle.po_number || '-' }}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-slate-400 text-[11px]">Müşteri & Marka:</span>
+                                                <span class="font-bold truncate max-w-[170px]" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                                    {{ matchedPackingStyle.customer_name }}
+                                                </span>
+                                            </div>
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-slate-400 text-[11px]">Çarşaf Modeli:</span>
+                                                <span class="font-mono font-bold text-sky-400">{{ matchedPackingStyle.style_no }}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-slate-400 text-[11px]">Model Rengi:</span>
+                                                <span class="font-medium truncate max-w-[170px]" :class="isDarkMode ? 'text-slate-200' : 'text-slate-700'">
+                                                    {{ matchedPackingStyle.color_name }}
+                                                </span>
+                                            </div>
+                                            <div class="flex items-center justify-between pt-1 border-t" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                                <span class="text-slate-400 text-[11px]">Sipariş Adeti:</span>
+                                                <span class="font-mono font-black text-xs text-emerald-500">{{ matchedPackingStyle.total_quantity }} Adet</span>
+                                            </div>
+                                        </div>
+
+                                        <div v-else class="p-3 rounded-xl border border-dashed text-center text-xs text-amber-500">
+                                            Otomatik model eşleşmesi bulunamadı. Lütfen aşağıdaki listeden modeli seçin.
+                                        </div>
+
+                                        <!-- Model Seçici & Arama -->
+                                        <div class="mt-3">
+                                            <label class="block text-[11px] font-bold text-slate-400 mb-1">Farklı Bir Model / Sipariş ile Eşle:</label>
+                                            <div class="relative">
+                                                <input type="text"
+                                                       v-model="packingStyleSearch"
+                                                       placeholder="PO No, Model No veya Renk ara..."
+                                                       class="w-full px-3 py-1.5 rounded-lg text-xs border focus:ring-1 focus:ring-theme"
+                                                       :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'">
+                                            </div>
+
+                                            <div v-if="filteredCandidateStyles && filteredCandidateStyles.length > 0"
+                                                 class="mt-1.5 max-h-28 overflow-y-auto rounded-lg border divide-y custom-scrollbar text-xs"
+                                                 :class="isDarkMode ? 'bg-slate-900 border-slate-800 divide-slate-800' : 'bg-white border-slate-200 divide-slate-100'">
+                                                <button v-for="cand in filteredCandidateStyles.slice(0, 8)" :key="'cand-'+cand.id"
+                                                        @click="selectCandidateStyle(cand)"
+                                                        class="w-full text-left p-1.5 px-2 hover:bg-theme-light transition flex items-center justify-between cursor-pointer"
+                                                        :class="matchedPackingStyle && matchedPackingStyle.id === cand.id ? 'bg-theme-light text-theme font-bold' : (isDarkMode ? 'text-slate-300' : 'text-slate-700')">
+                                                    <span class="font-mono">{{ cand.style_no }} - {{ cand.color_name }}</span>
+                                                    <span class="text-[10px] text-slate-400 font-mono">PO:{{ cand.po_number }} ({{ cand.total_quantity }} ad)</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- SAĞ: KOLİ ÜSTÜ ETİKET ŞABLONU SEÇİMİ (MÜŞTERİ TEYİTİ) -->
+                                <div class="p-4 rounded-xl border flex flex-col justify-between"
+                                     :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                    <div>
+                                        <div class="flex items-center justify-between gap-2 mb-2">
+                                            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                                <i data-lucide="tag" class="w-3.5 h-3.5 text-amber-500"></i>
+                                                <span>Koli Üstü Etiket Formatı</span>
+                                            </div>
+                                            <span v-if="activeCartonTemplate && packingData && activeCartonTemplate.customer_name && activeCartonTemplate.customer_name.toLowerCase().includes(packingData.customer.toLowerCase().slice(0, 4))"
+                                                  class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                                Müşteriye Özel Eşleşti
+                                            </span>
+                                            <span v-else class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-sky-500/10 text-sky-400 border border-sky-500/30">
+                                                Standart Format
+                                            </span>
+                                        </div>
+
+                                        <p class="text-xs text-slate-400 mb-2.5">
+                                            Müşteriye göre tanımlı koli üstü formatı otomatik seçilir. Dilerseniz farklı şablon seçebilir veya tasarımı düzenleyebilirsiniz.
+                                        </p>
+
+                                        <!-- Şablon Seçici Dropdown -->
+                                        <div class="space-y-2">
+                                            <select :value="activeCartonTemplate ? activeCartonTemplate.id : ''"
+                                                    @change="selectCartonTemplate(cartonTemplatesList.find(t => t.id == $event.target.value))"
+                                                    class="w-full text-xs font-bold rounded-xl p-2.5 border focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                                                    :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'">
+                                                <option v-for="tpl in cartonTemplatesList" :key="tpl.id" :value="tpl.id">
+                                                    {{ tpl.customer_name }} - {{ tpl.template_name }} ({{ tpl.paper_size }} {{ tpl.orientation === 'landscape' ? 'Yatay' : 'Dikey' }})
+                                                </option>
+                                            </select>
+
+                                            <!-- Seçili Şablon Özellikleri ve Hızlı Düzenleme Butonları -->
+                                            <div v-if="activeCartonTemplate" class="p-2.5 rounded-lg border text-[11px] space-y-1"
+                                                 :class="isDarkMode ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-white border-slate-200 text-slate-700'">
+                                                <div class="flex items-center justify-between font-semibold">
+                                                    <span>Sayfa / Kağıt:</span>
+                                                    <span class="font-mono text-purple-400 font-bold">{{ printPaperSize }} {{ printOrientation === 'landscape' ? 'Yatay' : 'Dikey' }} ({{ printItemsPerPage }} Koli/Sayfa)</span>
+                                                </div>
+                                                <div class="flex items-center justify-between text-[10px] text-slate-400">
+                                                    <span>Kenarlık / Çizgiler:</span>
+                                                    <span>{{ printBorderStyle }} {{ printBorderWidth }}px | Hücre Çizgisi: {{ printShowGridLines ? 'Açık' : 'Kapalı' }}</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="flex items-center gap-2 pt-1">
+                                                <button @click="openTemplateDesigner(activeCartonTemplate)"
+                                                        class="flex-1 py-1.5 px-2 rounded-lg border text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                                                        :class="isDarkMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'">
+                                                    <i data-lucide="edit-3" class="w-3.5 h-3.5 text-amber-500"></i>
+                                                    <span>Bu Şablonu Düzenle</span>
+                                                </button>
+                                                <button @click="document.getElementById('templateExcelInput').click()"
+                                                        class="py-1.5 px-2.5 rounded-lg border text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                                                        :class="isDarkMode ? 'bg-sky-500/10 border-sky-500/30 text-sky-400 hover:bg-sky-500/20' : 'bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100'"
+                                                        title="Yeni bir Excel koli üstü şablonu yükleyin">
+                                                    <i data-lucide="file-up" class="w-3.5 h-3.5 text-sky-500"></i>
+                                                    <span>+ Excel Yükle</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Kanal Renk Poka-Yoke Özeti -->
+                                    <div class="mt-3 pt-3 border-t" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Algılanan Kanallar & Renk Rozetleri:</div>
+                                        <div class="flex flex-wrap gap-2">
+                                            <div v-for="(info, ch) in packingData.channel_summary" :key="'ch-badge-'+ch"
+                                                 class="flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-bold"
+                                                 :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-800'">
+                                                <span class="w-3 h-3 rounded-full shrink-0 shadow-sm" :style="{ backgroundColor: info.badge_color }"></span>
+                                                <span>{{ ch }}</span>
+                                                <span class="text-[10px] text-slate-400 font-mono">({{ info.cartons }} koli)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <!-- 2. ALT KISIM: 3 ADET İŞLEM DÜĞMESİ (KULLANICININ İSTEDİĞİ SEÇENEKLER) -->
+                            <div class="p-4 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-4"
+                                 :class="isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-100/80 border-slate-200'">
+                                
+                                <div class="text-xs text-slate-400 text-center sm:text-left">
+                                    <span class="font-bold text-slate-300">İşlem Seçimi:</span>
+                                    <span> Yüklenen çeki listesini siparişinize işleyebilir veya sadece koli üstü etiketlerini yazdırabilirsiniz.</span>
+                                </div>
+
+                                <div class="flex flex-wrap items-center justify-center gap-2.5 shrink-0">
+                                    
+                                    <!-- 1. DÜĞME: SİSTEME İŞLE -->
+                                    <button @click="processPackingToSystem(false)"
+                                            :disabled="isProcessingPacking || !matchedPackingStyle"
+                                            class="px-4 py-2.5 rounded-xl border text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+                                            :class="isDarkMode ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30' : 'bg-emerald-600 text-white hover:bg-emerald-700'">
+                                        <span v-if="isProcessingPacking" class="animate-spin">⏳</span>
+                                        <i v-else data-lucide="check" class="w-4 h-4"></i>
+                                        <span>Sisteme İşle</span>
+                                    </button>
+
+                                    <!-- 2. DÜĞME: SİSTEME İŞLE VE KOLİ ÜSTÜ YAZDIR -->
+                                    <button @click="processPackingToSystem(true)"
+                                            :disabled="isProcessingPacking || !matchedPackingStyle"
+                                            class="px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-lg hover:scale-105 active:scale-95 btn-theme disabled:opacity-50">
+                                        <span v-if="isProcessingPacking" class="animate-spin">⏳</span>
+                                        <i v-else data-lucide="printer" class="w-4 h-4"></i>
+                                        <span>Sisteme İşle ve Koli Üstü Yazdır</span>
+                                    </button>
+
+                                    <!-- 3. DÜĞME: İŞLEMEDEN KOLİ ÜSTÜ YAZDIR -->
+                                    <button @click="openCartonPrintModal(null)"
+                                            class="px-4 py-2.5 rounded-xl border text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm hover:scale-[1.02] active:scale-95"
+                                            :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-sky-400 hover:bg-slate-700' : 'bg-white border-slate-300 text-sky-700 hover:bg-sky-50'">
+                                        <i data-lucide="file-text" class="w-4 h-4 text-sky-500"></i>
+                                        <span>İşlemeden Koli Üstü Yazdır</span>
+                                    </button>
+
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- 3. KOLİ DETAYLARI TABLOSU -->
+                        <div class="rounded-2xl border shadow-md overflow-hidden"
+                             :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                            
+                            <div class="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                                 :class="isDarkMode ? 'border-slate-800 bg-slate-900/60' : 'border-slate-100 bg-slate-50/50'">
+                                <div>
+                                    <h4 class="text-xs font-extrabold uppercase tracking-wider flex items-center gap-2" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                        <i data-lucide="boxes" class="w-4 h-4 text-theme"></i>
+                                        <span>Ayrıştırılan Koliler Listesi ({{ packingData.cartons ? packingData.cartons.length : 0 }} Koli)</span>
+                                    </h4>
+                                    <p class="text-[11px] text-slate-400 mt-0.5">Her kolinin koli üstü etiketini tek tek veya topluca A4 yatay formatında yazdırabilirsiniz.</p>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <button @click="openCartonPrintModal(null)"
+                                            class="px-3.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                                            :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'">
+                                        <i data-lucide="printer" class="w-3.5 h-3.5 text-theme"></i>
+                                        <span>Tüm Kolileri Yazdır (A4 Yatay)</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="overflow-x-auto custom-scrollbar" style="max-height: 480px;">
+                                <table class="w-full text-left text-xs border-collapse">
+                                    <thead class="sticky top-0 z-10 text-[11px] uppercase tracking-wider border-b font-bold"
+                                           :class="isDarkMode ? 'bg-slate-900 text-slate-300 border-slate-800' : 'bg-slate-100 text-slate-700 border-slate-200'">
+                                        <tr>
+                                            <th class="p-3 text-center w-16">Koli No</th>
+                                            <th class="p-3">Kanal (Renk Rozeti)</th>
+                                            <th class="p-3">Model</th>
+                                            <th class="p-3">Renk</th>
+                                            <th class="p-3 text-center">Beden Dağılımı</th>
+                                            <th class="p-3 text-center">Koli Adeti</th>
+                                            <th class="p-3 text-center">Brüt Kg</th>
+                                            <th class="p-3 text-center">Ölçüler</th>
+                                            <th class="p-3 text-center w-28">İşlem</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y" :class="isDarkMode ? 'divide-slate-800/60' : 'divide-slate-100'">
+                                        <tr v-for="c in packingData.cartons" :key="'carton-row-'+c.carton_id"
+                                            class="hover:bg-slate-500/5 transition">
+                                            
+                                            <!-- Koli No -->
+                                            <td class="p-3 text-center font-mono font-bold">
+                                                <span class="px-2 py-1 rounded-lg border text-[11px]"
+                                                      :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'">
+                                                    {{ c.carton_label_text || ('Koli ' + c.carton_no) }}
+                                                </span>
+                                            </td>
+
+                                            <!-- Kanal -->
+                                            <td class="p-3">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm border border-black/20"
+                                                          :style="{ backgroundColor: c.channel_color }"></span>
+                                                    <span class="font-bold text-xs" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                                        {{ c.channel }}
+                                                    </span>
+                                                </div>
+                                            </td>
+
+                                            <!-- Model -->
+                                            <td class="p-3 font-mono font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">
+                                                {{ c.items && c.items[0] ? c.items[0].model : '-' }}
+                                                <span v-if="c.items && c.items.length > 1" class="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-400 font-sans ml-1">
+                                                    +{{ c.items.length - 1 }} Ürün
+                                                </span>
+                                            </td>
+
+                                            <!-- Renk -->
+                                            <td class="p-3" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">
+                                                {{ c.items && c.items[0] ? c.items[0].color : '-' }}
+                                            </td>
+
+                                            <!-- Bedenler -->
+                                            <td class="p-3 text-center">
+                                                <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                                                    <span v-for="(q, sz) in (c.items && c.items[0] ? c.items[0].sizes : {})" :key="'csz-'+sz"
+                                                          class="px-1.5 py-0.5 rounded text-[10px] font-mono border"
+                                                          :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'">
+                                                        {{ sz }}:<b>{{ q }}</b>
+                                                    </span>
+                                                </div>
+                                            </td>
+
+                                            <!-- Toplam Koli Adeti -->
+                                            <td class="p-3 text-center font-mono font-bold text-emerald-500">
+                                                {{ c.total_qty }} ad
+                                            </td>
+
+                                            <!-- Brüt Ağırlık -->
+                                            <td class="p-3 text-center font-mono" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">
+                                                {{ c.gross_weight ? c.gross_weight + ' kg' : '-' }}
+                                            </td>
+
+                                            <!-- Ölçüler -->
+                                            <td class="p-3 text-center font-mono text-slate-400 text-[11px]">
+                                                {{ c.measurements || '60X40X30' }}
+                                            </td>
+
+                                            <!-- Tekil Yazdır Düğmesi -->
+                                            <td class="p-3 text-center">
+                                                <button @click="openCartonPrintModal(c)"
+                                                        class="px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer hover:bg-theme-light hover:text-theme flex items-center justify-center gap-1 mx-auto"
+                                                        :class="isDarkMode ? 'border-slate-700 text-slate-300' : 'border-slate-300 text-slate-700'">
+                                                    <i data-lucide="printer" class="w-3 h-3"></i>
+                                                    <span>Yazdır</span>
+                                                </button>
+                                            </td>
+
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <!-- ========================================================================= -->
+                    <!-- KOLİ ÜSTÜ ŞABLON TASARIMCISI & YAPILANDIRMA MODALI                       -->
+                    <!-- ========================================================================= -->
+                    <div v-if="templateDesignerModalOpen" id="template-designer-modal"
+                         class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
+                        
+                        <div class="w-full max-w-6xl max-h-[92vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden"
+                             :class="isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'">
+                            
+                            <!-- MODAL BAŞLIK ÇUBUĞU -->
+                            <div class="p-4 border-b flex items-center justify-between gap-3 shrink-0"
+                                 :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                <div class="flex items-center gap-3">
+                                    <div class="p-2.5 rounded-xl bg-amber-500/20 text-amber-500">
+                                        <i data-lucide="palette" class="w-5 h-5"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="text-sm font-bold flex items-center gap-2" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                            <span>Koli Üstü Şablon Tasarımcısı & Sayfa Entegrasyonu</span>
+                                            <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                                {{ designerTemplate.customer_name || 'Özel Format' }}
+                                            </span>
+                                        </h3>
+                                        <p class="text-xs text-slate-400">
+                                            Kağıt ebatlarını (A4, A5, Argox Termal), kenarlıkları, hücre çizgilerini ve etiket alanlarını canlı olarak yapılandırın.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <button @click="saveDesignerTemplate"
+                                            class="px-4 py-2 rounded-xl text-xs font-bold btn-theme shadow-md flex items-center gap-1.5 transition cursor-pointer hover:scale-105 active:scale-95">
+                                        <i data-lucide="save" class="w-4 h-4"></i>
+                                        <span>💾 Sayfa Yapısını & Şablonu Kaydet</span>
+                                    </button>
+                                    <button @click="closeTemplateDesigner"
+                                            class="p-2 rounded-xl border transition cursor-pointer"
+                                            :class="isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white' : 'border-slate-200 bg-white text-slate-500 hover:text-slate-900'">
+                                        <i data-lucide="x" class="w-5 h-5"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- MODAL GÖVDE: 2 SÜTUN (SOL: KONTROLLER, SAĞ: CANLI ÖNİZLEME TUVALİ) -->
+                            <div class="flex-1 overflow-y-auto p-5 grid grid-cols-1 lg:grid-cols-12 gap-6"
+                                 :class="isDarkMode ? 'bg-slate-900' : 'bg-slate-100/50'">
+                                
+                                <!-- SOL PANEL: YAPILANDIRMA & PARAMETRELER (5 SÜTUN) -->
+                                <div class="lg:col-span-5 space-y-4">
+                                    
+                                    <!-- 1. Müşteri & Şablon Adı -->
+                                    <div class="p-4 rounded-xl border space-y-3"
+                                         :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-white border-slate-200 shadow-sm'">
+                                        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            <i data-lucide="user" class="w-3.5 h-3.5 text-amber-500"></i>
+                                            <span>Müşteri & Şablon Kimliği</span>
+                                        </div>
+                                        <div class="space-y-2">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">Müşteri Firma Adı:</label>
+                                                <input type="text" v-model="designerTemplate.customer_name"
+                                                       class="w-full px-3 py-1.5 text-xs rounded-lg border font-semibold"
+                                                       :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
+                                                       placeholder="Örn: Anna van Toor B.V., Sarto Fashion...">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">Şablon Başlığı:</label>
+                                                <input type="text" v-model="designerTemplate.template_name"
+                                                       class="w-full px-3 py-1.5 text-xs rounded-lg border"
+                                                       :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
+                                                       placeholder="Örn: Standart Koli Üstü Etiketi">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 2. Kağıt Boyutu, Cihaz & Sayfa Geometrisi -->
+                                    <div class="p-4 rounded-xl border space-y-3"
+                                         :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-white border-slate-200 shadow-sm'">
+                                        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            <i data-lucide="printer" class="w-3.5 h-3.5 text-purple-500"></i>
+                                            <span>Yazıcı Cihazı & Kağıt Boyutu (Argox / A4 / A5)</span>
+                                        </div>
+                                        
+                                        <div class="space-y-2.5">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">Hedef Kağıt / Cihaz Formatı:</label>
+                                                <select :value="designerTemplate.paper_size"
+                                                        @change="onDesignerPaperSizeChange($event.target.value)"
+                                                        class="w-full px-3 py-2 text-xs font-bold rounded-lg border focus:ring-1 focus:ring-purple-500 cursor-pointer"
+                                                        :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                    <option value="A4">A4 Yatay (297 x 210 mm) - 2'li Yan Yana (x2)</option>
+                                                    <option value="A4_portrait">A4 Dikey (210 x 297 mm) - Tek Koli</option>
+                                                    <option value="A5">A5 Dikey (148 x 210 mm) - Lojistik Koli</option>
+                                                    <option value="A5_landscape">A5 Yatay (210 x 148 mm)</option>
+                                                    <option value="Argox_100x150">Argox / Termal Rulo (100 x 150 mm Standart Koli)</option>
+                                                    <option value="Argox_100x100">Argox / Termal Rulo (100 x 100 mm Kare Koli)</option>
+                                                    <option value="Argox_80x50">Argox / Termal Rulo (80 x 50 mm Kompakt)</option>
+                                                    <option value="custom">Özel Boyut (Genişlik & Yükseklik mm)</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Özel Boyut mm Girişi -->
+                                            <div v-if="designerTemplate.paper_size === 'custom'" class="grid grid-cols-2 gap-2 pt-1">
+                                                <div>
+                                                    <label class="block text-[10px] text-slate-400 mb-0.5">Genişlik (mm):</label>
+                                                    <input type="number" v-model.number="designerTemplate.width_mm"
+                                                           class="w-full px-2.5 py-1 text-xs rounded border"
+                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[10px] text-slate-400 mb-0.5">Yükseklik (mm):</label>
+                                                    <input type="number" v-model.number="designerTemplate.height_mm"
+                                                           class="w-full px-2.5 py-1 text-xs rounded border"
+                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                </div>
+                                            </div>
+
+                                            <div class="grid grid-cols-2 gap-2 pt-1">
+                                                <div>
+                                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Sayfa Başına Koli:</label>
+                                                    <select v-model.number="designerTemplate.items_per_page"
+                                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
+                                                            :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                        <option :value="2">2 Koli (x2 Çiftli)</option>
+                                                        <option :value="1">1 Koli (Tekli)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Yön:</label>
+                                                    <select v-model="designerTemplate.orientation"
+                                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
+                                                            :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                        <option value="landscape">Yatay (Landscape)</option>
+                                                        <option value="portrait">Dikey (Portrait)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 3. Kenarlık, Hücre Çizgileri ve Boşluk Ayarları -->
+                                    <div class="p-4 rounded-xl border space-y-3"
+                                         :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-white border-slate-200 shadow-sm'">
+                                        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            <i data-lucide="grid" class="w-3.5 h-3.5 text-sky-500"></i>
+                                            <span>Kenarlık, Hücre Çizgileri & Boşluklar</span>
+                                        </div>
+
+                                        <div class="space-y-3">
+                                            <!-- Hücre Çizgileri Aç/Kapa Switch -->
+                                            <label class="flex items-center justify-between p-2 rounded-lg border cursor-pointer select-none"
+                                                   :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                                <div class="text-xs">
+                                                    <span class="font-bold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">Tablo Hücre Çizgileri (Grid)</span>
+                                                    <p class="text-[10px] text-slate-400">Beden tablosu ve kutu içi bölme çizgileri</p>
+                                                </div>
+                                                <input type="checkbox" v-model="designerTemplate.show_grid_lines" class="w-4 h-4 accent-purple-600 rounded">
+                                            </label>
+
+                                            <!-- Kenarlık Stili & Kalınlık -->
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Kenarlık Çizgi Stili:</label>
+                                                    <select v-model="designerTemplate.border_style"
+                                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
+                                                            :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                        <option value="solid">Düz Çizgi (Solid)</option>
+                                                        <option value="dashed">Kesikli (Dashed)</option>
+                                                        <option value="double">Çift Çizgi (Double)</option>
+                                                        <option value="none">Kenarlıksız (None)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Kenarlık Kalınlığı:</label>
+                                                    <select v-model.number="designerTemplate.border_width"
+                                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
+                                                            :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                        <option :value="1">1px (İnce)</option>
+                                                        <option :value="2">2px (Standart)</option>
+                                                        <option :value="3">3px (Kalın)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <!-- Boşluk & Kenar Payı (Margin / Padding) -->
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Kenar Payı (Margin):</label>
+                                                    <select v-model.number="designerTemplate.margin_mm"
+                                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
+                                                            :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                        <option :value="0">0 mm (Sıfır Pay)</option>
+                                                        <option :value="3">3 mm (Kompakt)</option>
+                                                        <option :value="6">6 mm (Standart)</option>
+                                                        <option :value="10">10 mm (Geniş Pay)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Yazı Tipi Ölçeği:</label>
+                                                    <select v-model.number="designerTemplate.font_scale"
+                                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
+                                                            :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                        <option :value="0.80">%80 (Çok Küçük)</option>
+                                                        <option :value="0.90">%90 (Kompakt)</option>
+                                                        <option :value="1.0">%100 (Standart)</option>
+                                                        <option :value="1.15">%115 (Büyük)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 4. İçerik ve Alan Detayları -->
+                                    <div class="p-4 rounded-xl border space-y-3"
+                                         :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-white border-slate-200 shadow-sm'">
+                                        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            <i data-lucide="file-text" class="w-3.5 h-3.5 text-emerald-500"></i>
+                                            <span>Müşteri Başlığı & Adres Bilgileri</span>
+                                        </div>
+
+                                        <div class="space-y-2">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">Başlık Metni:</label>
+                                                <input type="text" v-model="designerTemplate.layout_json.header_title"
+                                                       class="w-full px-3 py-1.5 text-xs rounded-lg border font-bold"
+                                                       :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
+                                                       placeholder="Örn: Anna Van Toor">
+                                            </div>
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label class="block text-[10px] text-slate-400 mb-0.5">Adres Satır 1:</label>
+                                                    <input type="text" v-model="designerTemplate.layout_json.address_line1"
+                                                           class="w-full px-2 py-1 text-xs rounded border"
+                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[10px] text-slate-400 mb-0.5">Adres Satır 2:</label>
+                                                    <input type="text" v-model="designerTemplate.layout_json.address_line2"
+                                                           class="w-full px-2 py-1 text-xs rounded border"
+                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                </div>
+                                            </div>
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label class="block text-[10px] text-slate-400 mb-0.5">Marka Metni:</label>
+                                                    <input type="text" v-model="designerTemplate.layout_json.brand"
+                                                           class="w-full px-2 py-1 text-xs rounded border"
+                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-[10px] text-slate-400 mb-0.5">Koli Ebatları:</label>
+                                                    <input type="text" v-model="designerTemplate.layout_json.measurements"
+                                                           class="w-full px-2 py-1 text-xs rounded border font-mono"
+                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
+                                                           placeholder="60X40X30">
+                                                </div>
+                                            </div>
+
+                                            <div class="flex flex-wrap items-center gap-4 pt-1">
+                                                <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                                                    <input type="checkbox" v-model="designerTemplate.layout_json.poka_badge_enabled" class="accent-purple-600 rounded">
+                                                    <span>Poka-Yoke Renk Rozeti</span>
+                                                </label>
+                                                <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                                                    <input type="checkbox" v-model="designerTemplate.layout_json.dual_variant_enabled" class="accent-purple-600 rounded">
+                                                    <span>x2 Çift Varyant Tablosu</span>
+                                                </label>
+                                                <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                                                    <input type="checkbox" v-model="designerTemplate.layout_json.show_barcode" class="accent-purple-600 rounded">
+                                                    <span>Barkod Alanı</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                <!-- SAĞ PANEL: CANLI GÖRSEL ÖNİZLEME TUVALİ (7 SÜTUN) -->
+                                <div class="lg:col-span-7 flex flex-col items-center">
+                                    <div class="w-full flex items-center justify-between mb-2">
+                                        <div class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                            <i data-lucide="eye" class="w-3.5 h-3.5 text-purple-400"></i>
+                                            <span>Canlı Tasarım Önizlemesi ({{ designerTemplate.paper_size }})</span>
+                                        </div>
+                                        <span class="text-[11px] font-mono font-bold text-slate-400">
+                                            {{ designerTemplate.width_mm }} x {{ designerTemplate.height_mm }} mm ({{ designerTemplate.orientation }})
+                                        </span>
+                                    </div>
+
+                                    <!-- CANLI ETİKET TUVALİ (REAL-TIME REACTIVE CANVAS) -->
+                                    <div class="w-full flex-1 p-4 md:p-6 rounded-2xl border flex items-center justify-center overflow-auto shadow-inner"
+                                         :class="isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-200/60 border-slate-300'">
+                                        
+                                        <!-- ÖRNEK BASKI ALANI KAPSAYICISI -->
+                                        <div class="bg-white text-black shadow-2xl p-4 rounded transition-all"
+                                             :style="{
+                                                 width: (designerTemplate.paper_size.includes('Argox') ? '92mm' : (designerTemplate.paper_size.includes('A5') ? '135mm' : '230mm')),
+                                                 minHeight: (designerTemplate.paper_size.includes('Argox') ? '135mm' : (designerTemplate.paper_size.includes('A5') ? '185mm' : '150mm')),
+                                                 maxWidth: '100%',
+                                                 padding: designerTemplate.margin_mm + 'mm',
+                                                 fontFamily: 'Arial, sans-serif',
+                                                 zoom: designerTemplate.font_scale
+                                             }">
+                                            
+                                            <div class="h-full flex flex-col justify-between p-3"
+                                                 :class="[
+                                                     designerTemplate.border_style === 'none' ? 'border-0' : (designerTemplate.border_style === 'dashed' ? 'border-dashed' : (designerTemplate.border_style === 'double' ? 'border-double' : 'border-solid')),
+                                                     designerTemplate.border_width === 1 ? 'border border-black' : (designerTemplate.border_width === 3 ? 'border-4 border-black' : 'border-2 border-black')
+                                                 ]">
+                                                
+                                                <!-- 1. ÜST: MÜŞTERİ, ADRES VE MARKA -->
+                                                <div class="flex items-start justify-between">
+                                                    <div>
+                                                        <div class="text-sm font-extrabold leading-tight">{{ designerTemplate.layout_json.header_title || designerTemplate.customer_name }}</div>
+                                                        <div v-if="designerTemplate.layout_json.address_line1" class="text-[11px] leading-tight text-gray-700">{{ designerTemplate.layout_json.address_line1 }}</div>
+                                                        <div v-if="designerTemplate.layout_json.address_line2" class="text-[11px] leading-tight text-gray-700">{{ designerTemplate.layout_json.address_line2 }}</div>
+                                                        <div v-if="designerTemplate.layout_json.brand" class="mt-1 text-xs font-black tracking-wide">{{ designerTemplate.layout_json.brand }}</div>
+                                                    </div>
+
+                                                    <!-- Poka-Yoke Renk Rozeti -->
+                                                    <div v-if="designerTemplate.layout_json.poka_badge_enabled" class="flex flex-col items-center">
+                                                        <div class="w-10 h-10 rounded-full border-2 border-black shadow" style="background-color: #6b248a;"></div>
+                                                        <span class="text-[9px] font-black uppercase mt-0.5">STOCK AVT</span>
+                                                    </div>
+                                                </div>
+
+                                                <!-- 2. ORTA: BEDEN VE ADET TABLOSU -->
+                                                <div class="my-2.5">
+                                                    <table class="w-full text-center border-collapse text-[11px]"
+                                                           :class="[designerTemplate.show_grid_lines ? 'border border-black' : 'border-0']">
+                                                        <thead>
+                                                            <tr class="font-bold bg-gray-100"
+                                                                :class="[designerTemplate.show_grid_lines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                                <th class="p-1 text-left" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Style</th>
+                                                                <th class="p-1 text-left" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Colour</th>
+                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">XS</th>
+                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">S</th>
+                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">M</th>
+                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">L</th>
+                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">XL</th>
+                                                                <th class="p-1 font-black">Total</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <!-- 1. Ürün -->
+                                                            <tr class="font-semibold"
+                                                                :class="[designerTemplate.show_grid_lines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                                <td class="p-1 text-left font-mono font-bold" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">43A05-03830D</td>
+                                                                <td class="p-1 text-left text-[10px]" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">444-2 Cinnamon</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">5</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">8</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">12</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">10</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">5</td>
+                                                                <td class="p-1 font-mono font-black text-xs">40</td>
+                                                            </tr>
+                                                            <!-- 2. Ürün Varyantı (x2) -->
+                                                            <tr v-if="designerTemplate.layout_json.dual_variant_enabled" class="font-semibold"
+                                                                :class="[designerTemplate.show_grid_lines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                                <td class="p-1 text-left font-mono font-bold" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">43A05-03830D</td>
+                                                                <td class="p-1 text-left text-[10px]" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">200-1 Dark Blue</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">2</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">4</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">6</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">4</td>
+                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">2</td>
+                                                                <td class="p-1 font-mono font-black text-xs">18</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                <!-- 3. ALT: KOLİ BİLGİLERİ, AĞIRLIK, EBATLAR, BARKOD -->
+                                                <div class="space-y-1 pt-2 border-t-2 border-black">
+                                                    <div class="text-sm font-black tracking-wide">CARTON NO: 1 OF 13</div>
+                                                    <div class="flex items-center justify-between text-xs font-bold">
+                                                        <span>GROSS WEIGHT: <strong class="font-black">12.5 kg</strong></span>
+                                                        <span class="text-[11px] text-gray-700">MEASUREMENTS: {{ designerTemplate.layout_json.measurements || '60X40X30' }}</span>
+                                                    </div>
+                                                    
+                                                    <!-- Barkod Simülasyonu -->
+                                                    <div v-if="designerTemplate.layout_json.show_barcode" class="pt-2 text-center">
+                                                        <div class="h-7 w-36 mx-auto bg-repeat-x flex items-center justify-center font-mono text-[9px] tracking-widest bg-gray-200 border border-gray-400">
+                                                            ||||| | |||| || |||||||
+                                                        </div>
+                                                        <div class="font-mono text-[9px] text-gray-600 mt-0.5">8690012345678</div>
+                                                    </div>
+                                                </div>
+
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                            <!-- MODAL ALT ÇUBUK -->
+                            <div class="p-3 px-5 border-t flex items-center justify-between gap-3 shrink-0"
+                                 :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'">
+                                <div class="text-xs text-slate-400">
+                                    💡 <strong>İpucu:</strong> Kaydettiğiniz sayfa ve kenarlık yapısı, çeki listesi yüklendiğinde ve yazdırıldığında bu müşteri için otomatik uygulanır.
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button @click="closeTemplateDesigner"
+                                            class="px-4 py-2 rounded-xl border text-xs font-semibold cursor-pointer"
+                                            :class="isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-300 hover:text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'">
+                                        İptal
+                                    </button>
+                                    <button @click="saveDesignerTemplate"
+                                            class="px-5 py-2 rounded-xl text-xs font-bold btn-theme shadow-md flex items-center gap-1.5 transition cursor-pointer hover:scale-105 active:scale-95">
+                                        <i data-lucide="check" class="w-4 h-4"></i>
+                                        <span>Sayfa Yapısını ve Şablonu Kaydet</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <!-- ========================================================================= -->
+                    <!-- KOLİ ÜSTÜ ETİKET BASKI MODALI (A4 / A5 / ARGOX TERMAL DİNAMİK FORMAT)      -->
+                    <!-- ========================================================================= -->
+                    <div v-if="cartonLabelPrintModalOpen" id="koli-etiket-print-modal"
+                         class="fixed inset-0 z-50 flex flex-col bg-slate-900/90 backdrop-blur-sm overflow-y-auto">
+                        
+                        <!-- YAZDIRMA ÇUBUĞU (EKRANDA GÖRÜNÜR, YAZICIDA GİZLİ) -->
+                        <div class="no-print sticky top-0 z-50 p-3 px-4 border-b flex flex-wrap items-center justify-between gap-3 bg-slate-900 border-slate-800 shadow-2xl text-white">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 rounded-xl bg-purple-500/20 text-purple-400">
+                                    <i data-lucide="printer" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-bold flex items-center gap-2">
+                                        <span>{{ (activeCartonTemplate && activeCartonTemplate.customer_name) || (packingData && packingData.customer) || 'Koli Üstü' }} - Etiket Baskı Merkezi</span>
+                                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                                            {{ cartonPrintMode === 'single' ? 'Tek Koli Baskısı' : ('Toplam ' + (packingData ? packingData.total_cartons : 0) + ' Koli') }}
+                                        </span>
+                                    </h3>
+                                    <p class="text-[11px] text-slate-400">
+                                        {{ printPaperSize }} {{ printOrientation === 'landscape' ? 'Yatay' : 'Dikey' }} ({{ printItemsPerPage === 2 ? '2\'li Yan Yana x2' : 'Tekli Etiket' }})
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-2">
+                                <!-- 1. KAĞIT / CİHAZ SEÇİCİ (A4, A5, ARGOX TERMAL) -->
+                                <select :value="printPaperSize" @change="onPrintPaperSizeChange($event.target.value)"
+                                        class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 border border-slate-700 text-white cursor-pointer focus:ring-1 focus:ring-purple-500"
+                                        title="Yazıcı veya kağıt boyutu formatı seçin">
+                                    <option value="A4">A4 Yatay (297x210 mm) - 2'li (x2)</option>
+                                    <option value="A4_portrait">A4 Dikey (210x297 mm)</option>
+                                    <option value="A5">A5 Dikey (148x210 mm)</option>
+                                    <option value="A5_landscape">A5 Yatay (210x148 mm)</option>
+                                    <option value="Argox_100x150">Argox / Termal (100x150 mm)</option>
+                                    <option value="Argox_100x100">Argox / Termal (100x100 mm)</option>
+                                    <option value="Argox_80x50">Argox / Termal (80x50 mm)</option>
+                                </select>
+
+                                <!-- 2. DÜZEN: 2'Lİ vs TEKLİ -->
+                                <div class="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs">
+                                    <button @click="cartonPrintLayout = '2up'; printItemsPerPage = 2"
+                                            class="px-2 py-1 rounded font-semibold transition cursor-pointer"
+                                            :class="cartonPrintLayout === '2up' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'">
+                                        2'li (x2)
+                                    </button>
+                                    <button @click="cartonPrintLayout = '1up'; printItemsPerPage = 1"
+                                            class="px-2 py-1 rounded font-semibold transition cursor-pointer"
+                                            :class="cartonPrintLayout === '1up' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'">
+                                        Tekli
+                                    </button>
+                                </div>
+
+                                <!-- 3. HÜCRE ÇİZGİLERİ (AÇIK / KAPALI) -->
+                                <button @click="printShowGridLines = !printShowGridLines"
+                                        class="px-2 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer"
+                                        :class="printShowGridLines ? 'bg-sky-500/20 border-sky-500/40 text-sky-300' : 'bg-slate-800 border-slate-700 text-slate-400'"
+                                        title="Beden tablosu ve kutu içi hücre çizgilerini açıp kapatın">
+                                    <span>🔲 Çizgiler: {{ printShowGridLines ? 'Açık' : 'Kapalı' }}</span>
+                                </button>
+
+                                <!-- 4. KENARLIK STİLİ -->
+                                <select v-model="printBorderStyle"
+                                        class="px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 text-white cursor-pointer"
+                                        title="Kenarlık stili">
+                                    <option value="solid">Düz Kenarlık</option>
+                                    <option value="dashed">Kesikli</option>
+                                    <option value="double">Çift Çizgi</option>
+                                    <option value="none">Kenarlıksız</option>
+                                </select>
+
+                                <!-- 5. SAYFA YAPISINI KAYDET DÜĞMESİ -->
+                                <button @click="saveCurrentPrintPageLayout"
+                                        class="px-3 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30"
+                                        title="Bu müşteri için seçtiğiniz sayfa ve kenarlık yapısını kalıcı olarak kaydedin">
+                                    <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                                    <span>Sayfa Yapısını Kaydet</span>
+                                </button>
+
+                                <!-- 6. YAZDIR BUTONU -->
+                                <button @click="printCartonLabels"
+                                        class="px-4 py-1.5 btn-theme text-xs font-bold rounded-lg shadow-lg flex items-center gap-1.5 hover:scale-105 active:scale-95 transition cursor-pointer">
+                                    <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                                    <span>Yazdır ({{ printPaperSize }})</span>
+                                </button>
+
+                                <!-- 7. KAPAT BUTONU -->
+                                <button @click="closeCartonPrintModal"
+                                        class="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition cursor-pointer"
+                                        title="Önizlemeyi Kapat (Esc)">
+                                    <i data-lucide="x" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- DİNAMİK YAZICI SAYFA BOYUTU CSS ENJEKSİYONU -->
+                        <component :is="'style'">
+                            @media print {
+                                @page {
+                                    size: {{ getPrintPageCssSize() }};
+                                    margin: {{ printMarginMm }}mm;
+                                }
+                            }
+                        </component>
+
+                        <!-- ETİKET BASKI ÖNİZLEME ALANI (A4 YATAY) -->
+                        <div class="flex-1 p-4 md:p-8 overflow-y-auto bg-slate-800/50 flex flex-col items-center">
+                            
+                            <!-- SAYFA BAŞINA 2'Lİ KOLİ ETİKETİ DÜZENİ (x2 YAN YANA) -->
+                            <template v-if="cartonPrintLayout === '2up'">
+                                <div v-for="(pair, pairIdx) in getPrintCartonPairs()" :key="'pair-'+pairIdx"
+                                     class="koli-a4-landscape-page bg-white text-black shadow-2xl p-6 mb-8 rounded-lg flex flex-col justify-between"
+                                     style="width: 280mm; min-height: 195mm; max-width: 100%; box-sizing: border-box; margin-left: auto; margin-right: auto; page-break-after: always; break-after: page;">
+                                    
+                                    <div class="grid grid-cols-2 gap-8 h-full flex-1">
+                                        
+                                        <!-- 1. ETİKET (SOL) -->
+                                        <div v-if="pair[0]" class="border-2 border-black p-5 flex flex-col justify-between relative bg-white"
+                                             style="min-height: 175mm; font-family: Arial, Helvetica, sans-serif;">
+                                            
+                                            <!-- ÜST ADRES VE MARKA -->
+                                            <div>
+                                                <div class="text-[15px] font-bold leading-tight">Anna Van Toor</div>
+                                                <div class="text-[13px] leading-tight text-gray-800">Energieweg 35</div>
+                                                <div class="text-[13px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
+                                                <div class="text-[13px] leading-tight text-gray-800">The Netherlands</div>
+                                                <div class="mt-2 text-[14px] font-black tracking-wide">BRAND: ANNA</div>
+                                            </div>
+
+                                            <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL -->
+                                            <div class="my-4">
+                                                <table class="w-full text-center border-collapse border border-black text-xs">
+                                                    <thead>
+                                                        <tr class="border-b border-black font-bold text-[11px] bg-gray-100">
+                                                            <th class="border-r border-black p-1 text-left w-24">Style</th>
+                                                            <th class="border-r border-black p-1 text-left w-28">Colour</th>
+                                                            <th class="border-r border-black p-1">XS</th>
+                                                            <th class="border-r border-black p-1">S</th>
+                                                            <th class="border-r border-black p-1">M</th>
+                                                            <th class="border-r border-black p-1">L</th>
+                                                            <th class="border-r border-black p-1">XL</th>
+                                                            <th class="border-r border-black p-1">XXL</th>
+                                                            <th class="p-1 font-black">Total</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <!-- 1. Ürün Satırı -->
+                                                        <tr class="border-b border-black text-[12px] font-semibold h-8">
+                                                            <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].model : '-' }}</td>
+                                                            <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].color : '-' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XS) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.S) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.M) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.L) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XL) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XXL) || 0 }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].total_qty : 0 }}</td>
+                                                        </tr>
+                                                        <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
+                                                        <tr class="border-b border-black text-[12px] font-semibold h-8"
+                                                            :class="{'opacity-20': !pair[0].items || pair[0].items.length < 2}">
+                                                            <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].model : '' }}</td>
+                                                            <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].color : '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XS) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.S) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.M) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.L) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XL) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XXL) || '' }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].total_qty : '' }}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <!-- ORTA / ALT: KANAL VE YUVARLAK RENKLİ ETİKET MASKESİ -->
+                                            <div class="flex items-center justify-between my-3 px-2">
+                                                <div>
+                                                    <div class="text-[18px] font-black uppercase tracking-wider text-black">
+                                                        {{ pair[0].channel }}
+                                                    </div>
+                                                    <div class="text-[10px] text-gray-500 font-bold uppercase mt-0.5">Teslimat Kanalı</div>
+                                                </div>
+                                                
+                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke) -->
+                                                <div class="flex flex-col items-center">
+                                                    <div class="w-12 h-12 rounded-full border-2 border-black shadow-md"
+                                                         :style="{ backgroundColor: pair[0].channel_color }"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- ALT BİLGİLER: CARTON NO, GROSS WEIGHT, MEASUREMENTS -->
+                                            <div class="space-y-1.5 pt-3 border-t-2 border-black">
+                                                <div class="text-[17px] font-black tracking-wide">
+                                                    {{ pair[0].carton_label_text || ('CARTON NO: ' + pair[0].carton_no + ' OF ' + pair[0].group_count) }}
+                                                </div>
+                                                <div class="text-[14px] font-bold">
+                                                    GROSS WEIGHT: <span class="font-black">{{ pair[0].gross_weight }} kg</span>
+                                                </div>
+                                                <div class="text-[12px] font-bold text-gray-700 tracking-wider">
+                                                    MEASUREMENTS: {{ pair[0].measurements || '60X40X30' }}
+                                                </div>
+                                            </div>
+
+                                        </div>
+
+                                        <!-- 2. ETİKET (SAĞ) -->
+                                        <div v-if="pair[1]" class="border-2 border-black p-5 flex flex-col justify-between relative bg-white"
+                                             style="min-height: 175mm; font-family: Arial, Helvetica, sans-serif;">
+                                            
+                                            <!-- ÜST ADRES VE MARKA -->
+                                            <div>
+                                                <div class="text-[15px] font-bold leading-tight">Anna Van Toor</div>
+                                                <div class="text-[13px] leading-tight text-gray-800">Energieweg 35</div>
+                                                <div class="text-[13px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
+                                                <div class="text-[13px] leading-tight text-gray-800">The Netherlands</div>
+                                                <div class="mt-2 text-[14px] font-black tracking-wide">BRAND: ANNA</div>
+                                            </div>
+
+                                            <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL -->
+                                            <div class="my-4">
+                                                <table class="w-full text-center border-collapse border border-black text-xs">
+                                                    <thead>
+                                                        <tr class="border-b border-black font-bold text-[11px] bg-gray-100">
+                                                            <th class="border-r border-black p-1 text-left w-24">Style</th>
+                                                            <th class="border-r border-black p-1 text-left w-28">Colour</th>
+                                                            <th class="border-r border-black p-1">XS</th>
+                                                            <th class="border-r border-black p-1">S</th>
+                                                            <th class="border-r border-black p-1">M</th>
+                                                            <th class="border-r border-black p-1">L</th>
+                                                            <th class="border-r border-black p-1">XL</th>
+                                                            <th class="border-r border-black p-1">XXL</th>
+                                                            <th class="p-1 font-black">Total</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <!-- 1. Ürün Satırı -->
+                                                        <tr class="border-b border-black text-[12px] font-semibold h-8">
+                                                            <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].model : '-' }}</td>
+                                                            <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].color : '-' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XS) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.S) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.M) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.L) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XL) || 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XXL) || 0 }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].total_qty : 0 }}</td>
+                                                        </tr>
+                                                        <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
+                                                        <tr class="border-b border-black text-[12px] font-semibold h-8"
+                                                            :class="{'opacity-20': !pair[1].items || pair[1].items.length < 2}">
+                                                            <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].model : '' }}</td>
+                                                            <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].color : '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XS) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.S) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.M) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.L) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XL) || '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XXL) || '' }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].total_qty : '' }}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <!-- ORTA / ALT: KANAL VE YUVARLAK RENKLİ ETİKET MASKESİ -->
+                                            <div class="flex items-center justify-between my-3 px-2">
+                                                <div>
+                                                    <div class="text-[18px] font-black uppercase tracking-wider text-black">
+                                                        {{ pair[1].channel }}
+                                                    </div>
+                                                    <div class="text-[10px] text-gray-500 font-bold uppercase mt-0.5">Teslimat Kanalı</div>
+                                                </div>
+                                                
+                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke) -->
+                                                <div class="flex flex-col items-center">
+                                                    <div class="w-12 h-12 rounded-full border-2 border-black shadow-md"
+                                                         :style="{ backgroundColor: pair[1].channel_color }"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- ALT BİLGİLER: CARTON NO, GROSS WEIGHT, MEASUREMENTS -->
+                                            <div class="space-y-1.5 pt-3 border-t-2 border-black">
+                                                <div class="text-[17px] font-black tracking-wide">
+                                                    {{ pair[1].carton_label_text || ('CARTON NO: ' + pair[1].carton_no + ' OF ' + pair[1].group_count) }}
+                                                </div>
+                                                <div class="text-[14px] font-bold">
+                                                    GROSS WEIGHT: <span class="font-black">{{ pair[1].gross_weight }} kg</span>
+                                                </div>
+                                                <div class="text-[12px] font-bold text-gray-700 tracking-wider">
+                                                    MEASUREMENTS: {{ pair[1].measurements || '60X40X30' }}
+                                                </div>
+                                            </div>
+
+                                        </div>
+
+                                        <!-- Boş Eşlikçi (Tek Sayıda Koli Varsa) -->
+                                        <div v-else class="border-2 border-dashed border-gray-200 p-5 flex items-center justify-center text-gray-300 text-xs font-semibold">
+                                            (Bu sayfada 2. etiket boş)
+                                        </div>
+
+                                    </div>
+
+                                </div>
+                            </template>
+
+                            <!-- SAYFA BAŞINA TEKLİ ORTA HİZALI KOLİ ETİKETİ DÜZENİ -->
+                            <template v-else>
+                                <div v-for="c in getPrintCartonsList()" :key="'single-prn-'+c.carton_id"
+                                     class="koli-a4-landscape-page bg-white text-black shadow-2xl p-8 mb-8 rounded-lg flex flex-col justify-between"
+                                     style="width: 250mm; min-height: 180mm; max-width: 100%; box-sizing: border-box; margin-left: auto; margin-right: auto; page-break-after: always; break-after: page;">
+                                    
+                                    <div class="border-2 border-black p-8 flex flex-col justify-between relative bg-white h-full"
+                                         style="font-family: Arial, Helvetica, sans-serif;">
+                                        
+                                        <!-- ÜST ADRES VE MARKA -->
+                                        <div class="flex items-start justify-between">
+                                            <div>
+                                                <div class="text-[18px] font-bold leading-tight">Anna Van Toor</div>
+                                                <div class="text-[14px] leading-tight text-gray-800">Energieweg 35</div>
+                                                <div class="text-[14px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
+                                                <div class="text-[14px] leading-tight text-gray-800">The Netherlands</div>
+                                                <div class="mt-3 text-[16px] font-black tracking-wide">BRAND: ANNA</div>
+                                            </div>
+
+                                            <!-- Poka-Yoke Renk Rozeti -->
+                                            <div class="flex flex-col items-center">
+                                                <div class="w-16 h-16 rounded-full border-3 border-black shadow-lg"
+                                                     :style="{ backgroundColor: c.channel_color }"></div>
+                                                <span class="text-xs font-black uppercase mt-1 tracking-wider">{{ c.channel }}</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL -->
+                                        <div class="my-6">
+                                            <table class="w-full text-center border-collapse border border-black text-sm">
+                                                <thead>
+                                                    <tr class="border-b border-black font-bold text-xs bg-gray-100">
+                                                        <th class="border-r border-black p-2 text-left w-36">Style</th>
+                                                        <th class="border-r border-black p-2 text-left w-44">Colour</th>
+                                                        <th class="border-r border-black p-2">XS</th>
+                                                        <th class="border-r border-black p-2">S</th>
+                                                        <th class="border-r border-black p-2">M</th>
+                                                        <th class="border-r border-black p-2">L</th>
+                                                        <th class="border-r border-black p-2">XL</th>
+                                                        <th class="border-r border-black p-2">XXL</th>
+                                                        <th class="p-2 font-black">Total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr class="border-b border-black text-sm font-semibold h-10">
+                                                        <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[0] ? c.items[0].model : '-' }}</td>
+                                                        <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XS) || 0 }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.S) || 0 }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.M) || 0 }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.L) || 0 }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XL) || 0 }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XXL) || 0 }}</td>
+                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[0] ? c.items[0].total_qty : 0 }}</td>
+                                                    </tr>
+                                                    <!-- 2. Ürün Satırı -->
+                                                    <tr class="border-b border-black text-sm font-semibold h-10"
+                                                        :class="{'opacity-20': !c.items || c.items.length < 2}">
+                                                        <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[1] ? c.items[1].model : '' }}</td>
+                                                        <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[1] ? c.items[1].color : '' }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XS) || '' }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.S) || '' }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.M) || '' }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.L) || '' }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XL) || '' }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XXL) || '' }}</td>
+                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[1] ? c.items[1].total_qty : '' }}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        <!-- ALT BİLGİLER -->
+                                        <div class="space-y-2 pt-4 border-t-2 border-black flex items-end justify-between">
+                                            <div>
+                                                <div class="text-[22px] font-black tracking-wide">
+                                                    {{ c.carton_label_text || ('CARTON NO: ' + c.carton_no + ' OF ' + c.group_count) }}
+                                                </div>
+                                                <div class="text-[16px] font-bold mt-1">
+                                                    GROSS WEIGHT: <span class="font-black">{{ c.gross_weight }} kg</span>
+                                                </div>
+                                            </div>
+                                            <div class="text-right">
+                                                <div class="text-[14px] font-bold text-gray-700 tracking-wider">
+                                                    MEASUREMENTS: {{ c.measurements || '60X40X30' }}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                </div>
+                            </template>
+
+                        </div>
+
+                    </div>
+
                 </section>
 
                 <!-- 7. SUPER ADMIN PANEL -->
@@ -10838,7 +12156,7 @@
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20260911_1235"></script>
+<script src="/static/js/app.js?v=20261007_0105"></script>
 
 </body>
 </html>
