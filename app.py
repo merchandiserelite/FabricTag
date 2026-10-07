@@ -3416,9 +3416,13 @@ async def api_upload_packing_list(
     import shutil
     from pathlib import Path
 
-    file_name = file.filename or "packing_list.xlsx"
-    clean_name = f"packing_{int(datetime.now().timestamp())}_{file_name}"
+    import unicodedata, re
+    orig_name = unicodedata.normalize('NFC', file.filename or "packing_list.xlsx")
+    ext = Path(orig_name).suffix.lower()
+    safe_stem = re.sub(r'[^\w\s\.-]', '_', Path(orig_name).stem).strip()
+    clean_name = f"packing_{int(datetime.now().timestamp())}_{safe_stem}{ext}"
     save_path = UPLOADS_DIR / clean_name
+    file_name = orig_name
 
     with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)

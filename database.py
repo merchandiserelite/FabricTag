@@ -449,6 +449,14 @@ def init_db():
     crow = cursor.fetchone()
     company_id = crow[0] if crow else 1
 
+    # Ensure yonetici user exists
+    cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'yonetici'")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("""
+        INSERT INTO users (company_id, username, email, password_hash, full_name, role)
+        VALUES (?, 'yonetici', 'yonetici@elitetekstil.com', ?, 'Yıldıray (Firma Yöneticisi)', 'admin')
+        """, (company_id, hash_password('123456'),))
+
     # Ensure ALL standard dynamic menus exist
     default_menus = [
         ("dashboard", "Genel Bakış / Dashboard", "Dashboard", "layout-dashboard", "/", 1, '["superadmin","admin","merchandiser","cutting","fabric_warehouse","sewing"]'),

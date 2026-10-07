@@ -1909,7 +1909,15 @@ Critical Rules:
         rows = []
         sheet_name = None
         if ext == ".xls":
-            import xlrd
+            try:
+                import xlrd
+            except ImportError:
+                import subprocess, sys
+                try:
+                    subprocess.check_call([sys.executable, "-m", "pip", "install", "xlrd>=2.0.1"])
+                    import xlrd
+                except Exception:
+                    raise ImportError("Eski .xls formatındaki çeki listesini okumak için 'xlrd' kütüphanesi gereklidir. Lütfen 'pip install xlrd' çalıştırınız.")
             wb_xls = xlrd.open_workbook(file_path)
             for name in wb_xls.sheet_names():
                 norm = name.lower()
