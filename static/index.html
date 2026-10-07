@@ -1059,8 +1059,8 @@
                         <i :data-lucide="sidebarCollapsed ? 'panel-left-open' : 'panel-left-close'" class="w-4 h-4 text-theme"></i>
                         <span>{{ sidebarCollapsed ? 'Menüyü Göster' : 'Menüyü Gizle' }}</span>
                     </button>
-                    <div>
-                        <h2 class="text-base font-bold tracking-tight flex items-center gap-2" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                    <div class="shrink-0">
+                        <h2 class="text-base font-bold tracking-tight whitespace-nowrap flex items-center gap-2" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
                             {{ getActiveMenuTitle() }}
                         </h2>
                     </div>

@@ -444,65 +444,31 @@ def init_db():
     crow = cursor.fetchone()
     company_id = crow[0] if crow else 1
 
-    # Safe menu insertion for yukleme_adetleri
-    cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = 'yukleme_adetleri'")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
-        VALUES (?, 'yukleme_adetleri', 'Yükleme Adetleri', 'Shipment Quantities', 'truck', '/yukleme-adetleri', 6, 1, '["superadmin","admin","merchandiser","cutting","shipping"]')
-        """, (company_id,))
-        # Push subsequent menus down
-        cursor.execute("UPDATE dynamic_menus SET sort_order = sort_order + 1 WHERE menu_key != 'yukleme_adetleri' AND sort_order >= 6")
-
-    # Safe menu insertion for serbest_fiyat (always positioned right below yukleme_adetleri)
-    cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = 'serbest_fiyat'")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("SELECT sort_order FROM dynamic_menus WHERE menu_key = 'yukleme_adetleri'")
-        row = cursor.fetchone()
-        y_order = row[0] if row else 6
-        target_order = y_order + 1
-        cursor.execute("UPDATE dynamic_menus SET sort_order = sort_order + 1 WHERE menu_key != 'serbest_fiyat' AND sort_order >= ?", (target_order,))
-        cursor.execute("""
-        INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
-        VALUES (?, 'serbest_fiyat', 'Serbest Fiyat Çalışması', 'Freeform Costing', 'calculator', '/serbest-fiyat', ?, 1, '["superadmin","admin","merchandiser"]')
-        """, (company_id, target_order))
-
-    # Safe menu insertion for ceki_koli (Çeki listesi ve koli üstü)
-    cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = 'ceki_koli'")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("SELECT sort_order FROM dynamic_menus WHERE menu_key = 'serbest_fiyat'")
-        row = cursor.fetchone()
-        if not row:
-            cursor.execute("SELECT sort_order FROM dynamic_menus WHERE menu_key = 'yukleme_adetleri'")
-            row = cursor.fetchone()
-        ref_order = row[0] if row else 7
-        target_order = ref_order + 1
-        cursor.execute("UPDATE dynamic_menus SET sort_order = sort_order + 1 WHERE menu_key != 'ceki_koli' AND sort_order >= ?", (target_order,))
-        cursor.execute("""
-        INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
-        VALUES (?, 'ceki_koli', 'Çeki listesi ve koli üstü', 'Packing List & Carton Labels', 'package', '/ceki-koli', ?, 1, '["superadmin","admin","merchandiser","cutting","shipping","warehouse"]')
-        """, (company_id, target_order))
-
-    # Default Menus if table was empty
-    cursor.execute("SELECT COUNT(*) FROM dynamic_menus")
-    if cursor.fetchone()[0] == 0:
-        default_menus = [
-            ("dashboard", "Genel Bakış / Dashboard", "Dashboard", "layout-dashboard", "/", 1, '["superadmin","admin","merchandiser","cutting","fabric_warehouse","sewing"]'),
-            ("carsaf_liste", "Üretim Çarşaf Listesi", "Master Production Sheet", "table-properties", "/carsaf", 2, '["superadmin","admin","merchandiser","cutting","fabric_warehouse"]'),
-            ("siparis_yukle", "Sipariş Yükle (PDF/Excel)", "Import Order (PDF/Excel)", "file-up", "/siparis-yukle", 3, '["superadmin","admin","merchandiser"]'),
-            ("fabrictag_entegrasyon", "FabricTag Kumaş Deposu", "FabricTag Swatches", "layers", "/fabrictag", 4, '["superadmin","admin","merchandiser","fabric_warehouse"]'),
-            ("kesimhane", "Kesimhane & Pastal Föyü", "Cutting Floor", "scissors", "/kesimhane", 5, '["superadmin","admin","cutting"]'),
-            ("yukleme_adetleri", "Yükleme Adetleri", "Shipment Quantities", "truck", "/yukleme-adetleri", 6, '["superadmin","admin","merchandiser","cutting","shipping"]'),
-            ("serbest_fiyat", "Serbest Fiyat Çalışması", "Freeform Costing", "calculator", "/serbest-fiyat", 7, '["superadmin","admin","merchandiser"]'),
-            ("audit_logs", "Değişiklik Tarihçesi (Audit Log)", "Audit Logs", "history", "/audit-logs", 8, '["superadmin","admin","merchandiser"]'),
-            ("menu_yonetimi", "Menü & Alan Özelleştirme", "Custom Fields & Menu Config", "sliders-horizontal", "/ayarlar/menuler", 9, '["superadmin","admin"]'),
-            ("superadmin_panel", "Süper Admin & Lisanslama", "Super Admin & Licensing", "shield-alert", "/superadmin", 99, '["superadmin"]')
-        ]
-        for key, tr, en, icon, path, order, roles in default_menus:
+    # Ensure ALL standard dynamic menus exist
+    default_menus = [
+        ("dashboard", "Genel Bakış / Dashboard", "Dashboard", "layout-dashboard", "/", 1, '["superadmin","admin","merchandiser","cutting","fabric_warehouse","sewing"]'),
+        ("carsaf_liste", "Üretim Çarşaf Listesi", "Master Production Sheet", "table-properties", "/carsaf", 2, '["superadmin","admin","merchandiser","cutting","fabric_warehouse"]'),
+        ("siparis_yukle", "Sipariş Yükle (PDF/Excel)", "Import Order (PDF/Excel)", "file-up", "/siparis-yukle", 3, '["superadmin","admin","merchandiser"]'),
+        ("fabrictag_entegrasyon", "FabricTag Kumaş Deposu", "FabricTag Swatches", "layers", "/fabrictag", 4, '["superadmin","admin","merchandiser","fabric_warehouse"]'),
+        ("kesimhane", "Kesimhane & Pastal Föyü", "Cutting Floor", "scissors", "/kesimhane", 5, '["superadmin","admin","cutting"]'),
+        ("yukleme_adetleri", "Yükleme Adetleri", "Shipment Quantities", "truck", "/yukleme-adetleri", 6, '["superadmin","admin","merchandiser","cutting","shipping"]'),
+        ("serbest_fiyat", "Serbest Fiyat Çalışması", "Freeform Costing", "calculator", "/serbest-fiyat", 7, '["superadmin","admin","merchandiser"]'),
+        ("ceki_koli", "Çeki listesi ve koli üstü", "Packing List & Carton Labels", "package", "/ceki-koli", 8, '["superadmin","admin","merchandiser","cutting","shipping","warehouse"]'),
+        ("numune_takip", "Numune & PPS Takibi", "Sample / PPS Tracking", "check-check", "/numuneler", 9, '["superadmin","admin","merchandiser"]'),
+        ("audit_logs", "Değişiklik Tarihçesi (Audit Log)", "Audit Logs", "history", "/audit-logs", 10, '["superadmin","admin","merchandiser"]'),
+        ("menu_yonetimi", "Menü & Alan Özelleştirme", "Custom Fields & Menu Config", "sliders-horizontal", "/ayarlar/menuler", 11, '["superadmin","admin"]'),
+        ("kullanici_yonetimi", "Kullanıcı & Yetki Yönetimi", "User & Role Management", "users", "/ayarlar/kullanicilar", 12, '["superadmin","admin"]'),
+        ("superadmin_panel", "Süper Admin & Lisanslama", "Super Admin & Licensing", "shield-alert", "/superadmin", 102, '["superadmin"]')
+    ]
+    for key, tr, en, icon, path, order, roles in default_menus:
+        cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = ?", (key,))
+        if cursor.fetchone()[0] == 0:
             cursor.execute("""
             INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
             """, (company_id, key, tr, en, icon, path, order, roles))
+        else:
+            cursor.execute("UPDATE dynamic_menus SET is_visible = 1 WHERE menu_key = ? AND is_visible = 0", (key,))
 
     conn.commit()
     conn.close()

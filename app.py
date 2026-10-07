@@ -461,7 +461,7 @@ def api_get_menus(user: Dict[str, Any] = Depends(require_user)):
         m_key = m.get("menu_key")
         
         # 1. Herkese açık operasyonel menüler
-        if m_key in ["carsaf_liste", "fabrictag_entegrasyon", "menu_yonetimi", "kesimhane", "yukleme_adetleri", "serbest_fiyat", "ceki_koli"]:
+        if m_key in ["carsaf_liste", "siparis_yukle", "fabrictag_entegrasyon", "menu_yonetimi", "kesimhane", "yukleme_adetleri", "serbest_fiyat", "ceki_koli", "numune_takip"]:
             allowed_menus.append(m)
             continue
             
