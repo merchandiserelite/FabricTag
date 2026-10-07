@@ -560,6 +560,78 @@
                 break-inside: avoid !important;
             }
 
+            /* KOLİ ÜSTÜ ETİKET BASKI DÜZENİ (RENKLİ POKA-YOKE ROZETİ, SAF BEYAZ ZEMİN, SIFIR GÖLGE) */
+            #koli-etiket-print-modal {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 100% !important;
+                background: #ffffff !important;
+                background-color: #ffffff !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+                -webkit-box-shadow: none !important;
+                overflow: visible !important;
+                display: block !important;
+                visibility: visible !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            #koli-etiket-print-modal > div.flex-1 {
+                position: static !important;
+                display: block !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 auto !important;
+                padding: 0 !important;
+                background: transparent !important;
+                background-color: transparent !important;
+                box-shadow: none !important;
+                -webkit-box-shadow: none !important;
+                overflow: visible !important;
+            }
+            .koli-a4-landscape-page {
+                box-shadow: none !important;
+                -webkit-box-shadow: none !important;
+                border-radius: 0 !important;
+                border: none !important;
+                margin: 0 auto !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                background-color: #ffffff !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            .koli-etiket-card-box {
+                background: #ffffff !important;
+                background-color: #ffffff !important;
+                box-shadow: none !important;
+                -webkit-box-shadow: none !important;
+            }
+            .koli-a4-landscape-page table thead tr,
+            .koli-a4-landscape-page table thead th {
+                background: #ffffff !important;
+                background-color: #ffffff !important;
+                box-shadow: none !important;
+                -webkit-box-shadow: none !important;
+            }
+            .poka-yoke-badge,
+            .poka-yoke-badge svg,
+            .poka-yoke-badge circle,
+            .poka-yoke-badge * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+
             .no-print,
             .no-print *,
             #kumas-bilgi-print-modal .no-print,
@@ -575,7 +647,9 @@
             #free-cost-modal .no-print,
             #free-cost-modal .no-print *,
             #free-cost-list-container .no-print,
-            #free-cost-list-container .no-print * {
+            #free-cost-list-container .no-print *,
+            #koli-etiket-print-modal .no-print,
+            #koli-etiket-print-modal .no-print * {
                 display: none !important;
                 visibility: hidden !important;
                 height: 0 !important;
@@ -5706,9 +5780,14 @@
                                                         </div>
                                                     </div>
 
-                                                    <!-- Poka-Yoke Renk Rozeti -->
-                                                    <div v-if="designerTemplate.layout_json.poka_badge_enabled" class="shrink-0 flex items-center justify-center">
-                                                        <div class="w-16 h-16 rounded-full border-3 border-black shadow" style="background-color: #6b248a;"></div>
+                                                    <!-- Poka-Yoke Renk Rozeti (3.5 cm / 35 mm Çap) -->
+                                                    <div v-if="designerTemplate.layout_json.poka_badge_enabled" class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                         style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
+                                                        <svg viewBox="0 0 100 100" class="w-full h-full block"
+                                                             style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
+                                                            <circle cx="50" cy="50" r="46" fill="#6b248a" stroke="#000000" stroke-width="5"
+                                                                    style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
+                                                        </svg>
                                                     </div>
                                                 </div>
 
@@ -5841,12 +5920,51 @@
                             </div>
                         </div>
 
-                        <!-- DİNAMİK YAZICI SAYFA BOYUTU CSS ENJEKSİYONU -->
+                        <!-- DİNAMİK YAZICI SAYFA BOYUTU VE SAF BEYAZ BASKI CSS ENJEKSİYONU -->
                         <component :is="'style'">
                             @media print {
                                 @page {
                                     size: {{ getPrintPageCssSize() }};
                                     margin: {{ printMarginMm }}mm;
+                                }
+                                #koli-etiket-print-modal {
+                                    background: #ffffff !important;
+                                    background-color: #ffffff !important;
+                                    box-shadow: none !important;
+                                }
+                                #koli-etiket-print-modal > div.flex-1 {
+                                    background: transparent !important;
+                                    background-color: transparent !important;
+                                    padding: 0 !important;
+                                    margin: 0 !important;
+                                    box-shadow: none !important;
+                                }
+                                .koli-a4-landscape-page {
+                                    background: #ffffff !important;
+                                    background-color: #ffffff !important;
+                                    box-shadow: none !important;
+                                    -webkit-box-shadow: none !important;
+                                    border-radius: 0 !important;
+                                    padding: 0 !important;
+                                    margin: 0 auto !important;
+                                }
+                                .koli-etiket-card-box {
+                                    background: #ffffff !important;
+                                    background-color: #ffffff !important;
+                                    box-shadow: none !important;
+                                    -webkit-box-shadow: none !important;
+                                }
+                                .koli-a4-landscape-page table thead tr,
+                                .koli-a4-landscape-page table thead th {
+                                    background: #ffffff !important;
+                                    background-color: #ffffff !important;
+                                }
+                                .poka-yoke-badge,
+                                .poka-yoke-badge svg,
+                                .poka-yoke-badge circle {
+                                    -webkit-print-color-adjust: exact !important;
+                                    print-color-adjust: exact !important;
+                                    color-adjust: exact !important;
                                 }
                             }
                         </component>
@@ -5857,13 +5975,13 @@
                             <!-- SAYFA BAŞINA 2'Lİ KOLİ ETİKETİ DÜZENİ (x2 YAN YANA) -->
                             <template v-if="cartonPrintLayout === '2up'">
                                 <div v-for="(pair, pairIdx) in getPrintCartonPairs()" :key="'pair-'+pairIdx"
-                                     class="koli-a4-landscape-page bg-white text-black shadow-2xl p-6 mb-8 rounded-lg flex flex-col justify-between"
+                                     class="koli-a4-landscape-page bg-white text-black shadow-2xl p-6 mb-8 rounded-lg flex flex-col justify-between print:shadow-none print:p-0 print:m-0 print:rounded-none"
                                      style="width: 280mm; min-height: 195mm; max-width: 100%; box-sizing: border-box; margin-left: auto; margin-right: auto; page-break-after: always; break-after: page;">
                                     
                                     <div class="grid grid-cols-2 gap-8 h-full flex-1">
                                         
                                         <!-- 1. ETİKET (SOL) -->
-                                        <div v-if="pair[0]" class="border-2 border-black p-5 flex flex-col justify-between relative bg-white"
+                                        <div v-if="pair[0]" class="border-2 border-black p-5 flex flex-col justify-between relative bg-white koli-etiket-card-box"
                                              style="min-height: 175mm; font-family: Arial, Helvetica, sans-serif;">
                                             
                                             <!-- ÜST ADRES VE MARKA -->
@@ -5879,7 +5997,7 @@
                                             <div class="my-4">
                                                 <table class="w-full text-center border-collapse border border-black text-xs">
                                                     <thead>
-                                                        <tr class="border-b border-black font-bold text-[11px] bg-gray-100">
+                                                        <tr class="border-b border-black font-bold text-[11px] bg-white">
                                                             <th class="border-r border-black p-1 text-left w-24">Style</th>
                                                             <th class="border-r border-black p-1 text-left w-28">Colour</th>
                                                             <th class="border-r border-black p-1">XS</th>
@@ -5945,18 +6063,24 @@
                                                     </div>
                                                 </div>
 
-                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 52 mm Orantılı Çap) -->
-                                                <div class="shrink-0 flex items-center justify-center">
-                                                    <div class="rounded-full border-3 border-black shadow-md"
-                                                         style="width: 52mm; height: 52mm; min-width: 52mm; min-height: 52mm;"
-                                                         :style="{ backgroundColor: pair[0].channel_color }"></div>
+                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 3.5 cm / 35 mm Çap) -->
+                                                <div class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                     style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
+                                                    <svg viewBox="0 0 100 100" class="w-full h-full block"
+                                                         style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
+                                                        <circle cx="50" cy="50" r="46"
+                                                                :fill="pair[0].channel_color || '#000000'"
+                                                                stroke="#000000"
+                                                                stroke-width="5"
+                                                                style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
+                                                    </svg>
                                                 </div>
                                             </div>
 
                                         </div>
 
                                         <!-- 2. ETİKET (SAĞ) -->
-                                        <div v-if="pair[1]" class="border-2 border-black p-5 flex flex-col justify-between relative bg-white"
+                                        <div v-if="pair[1]" class="border-2 border-black p-5 flex flex-col justify-between relative bg-white koli-etiket-card-box"
                                              style="min-height: 175mm; font-family: Arial, Helvetica, sans-serif;">
                                             
                                             <!-- ÜST ADRES VE MARKA -->
@@ -5972,7 +6096,7 @@
                                             <div class="my-4">
                                                 <table class="w-full text-center border-collapse border border-black text-xs">
                                                     <thead>
-                                                        <tr class="border-b border-black font-bold text-[11px] bg-gray-100">
+                                                        <tr class="border-b border-black font-bold text-[11px] bg-white">
                                                             <th class="border-r border-black p-1 text-left w-24">Style</th>
                                                             <th class="border-r border-black p-1 text-left w-28">Colour</th>
                                                             <th class="border-r border-black p-1">XS</th>
@@ -6038,11 +6162,17 @@
                                                     </div>
                                                 </div>
 
-                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 52 mm Orantılı Çap) -->
-                                                <div class="shrink-0 flex items-center justify-center">
-                                                    <div class="rounded-full border-3 border-black shadow-md"
-                                                         style="width: 52mm; height: 52mm; min-width: 52mm; min-height: 52mm;"
-                                                         :style="{ backgroundColor: pair[1].channel_color }"></div>
+                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 3.5 cm / 35 mm Çap) -->
+                                                <div class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                     style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
+                                                    <svg viewBox="0 0 100 100" class="w-full h-full block"
+                                                         style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
+                                                        <circle cx="50" cy="50" r="46"
+                                                                :fill="pair[1].channel_color || '#000000'"
+                                                                stroke="#000000"
+                                                                stroke-width="5"
+                                                                style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
+                                                    </svg>
                                                 </div>
                                             </div>
 
@@ -6061,10 +6191,10 @@
                             <!-- SAYFA BAŞINA TEKLİ ORTA HİZALI KOLİ ETİKETİ DÜZENİ -->
                             <template v-else>
                                 <div v-for="c in getPrintCartonsList()" :key="'single-prn-'+c.carton_id"
-                                     class="koli-a4-landscape-page bg-white text-black shadow-2xl p-8 mb-8 rounded-lg flex flex-col justify-between"
+                                     class="koli-a4-landscape-page bg-white text-black shadow-2xl p-8 mb-8 rounded-lg flex flex-col justify-between print:shadow-none print:p-0 print:m-0 print:rounded-none"
                                      style="width: 250mm; min-height: 180mm; max-width: 100%; box-sizing: border-box; margin-left: auto; margin-right: auto; page-break-after: always; break-after: page;">
                                     
-                                    <div class="border-2 border-black p-8 flex flex-col justify-between relative bg-white h-full"
+                                    <div class="border-2 border-black p-8 flex flex-col justify-between relative bg-white h-full koli-etiket-card-box"
                                          style="font-family: Arial, Helvetica, sans-serif;">
                                         
                                         <!-- ÜST ADRES VE MARKA -->
@@ -6082,7 +6212,7 @@
                                         <div class="my-6">
                                             <table class="w-full text-center border-collapse border border-black text-sm">
                                                 <thead>
-                                                    <tr class="border-b border-black font-bold text-xs bg-gray-100">
+                                                    <tr class="border-b border-black font-bold text-xs bg-white">
                                                         <th class="border-r border-black p-2 text-left w-36">Style</th>
                                                         <th class="border-r border-black p-2 text-left w-44">Colour</th>
                                                         <th class="border-r border-black p-2">XS</th>
@@ -6147,11 +6277,17 @@
                                                 </div>
                                             </div>
 
-                                            <!-- POKA-YOKE RENK ROZETİ (EXCEL İLE BİREBİR AYNI ÇAPTA: 102 MM) -->
-                                            <div class="shrink-0 flex items-center justify-center">
-                                                <div class="rounded-full border-4 border-black shadow-lg"
-                                                     style="width: 102mm; height: 102mm; min-width: 102mm; min-height: 102mm;"
-                                                     :style="{ backgroundColor: c.channel_color }"></div>
+                                            <!-- POKA-YOKE RENK ROZETİ (3.5 CM / 35 MM ÇAP - KESİN RENKLİ VE VEKTÖREL BASKI) -->
+                                            <div class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                 style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
+                                                <svg viewBox="0 0 100 100" class="w-full h-full block"
+                                                     style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
+                                                    <circle cx="50" cy="50" r="46"
+                                                            :fill="c.channel_color || '#000000'"
+                                                            stroke="#000000"
+                                                            stroke-width="5"
+                                                            style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
+                                                </svg>
                                             </div>
                                         </div>
 
