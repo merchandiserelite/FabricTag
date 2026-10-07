@@ -1899,36 +1899,61 @@ Critical Rules:
     def _parse_packing_list_excel(cls, file_path: str) -> Dict[str, Any]:
         """
         Extracts structured packing list data from Excel files (.xlsx, .xlsm, .xls)
-        supporting Anna Van Toor and universal packing list formats.
+        supporting Anna Van Toor (both table & vertical block formats) and universal formats.
         """
-        import openpyxl
         from collections import Counter
+        from pathlib import Path
+        ext = Path(file_path).suffix.lower()
 
-        wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
-        
-        # 1. Sheet selection
+        # 1. Load rows using xlrd for .xls, openpyxl for .xlsx/.xlsm
+        rows = []
         sheet_name = None
-        for name in wb.sheetnames:
-            norm = name.lower()
-            if any(k in norm for k in ['çeki', 'ceki', 'packing', 'koli']):
-                sheet_name = name
-                break
-        if not sheet_name:
-            sheet_name = wb.sheetnames[0]
-            
-        ws = wb[sheet_name]
-        rows = list(ws.iter_rows(values_only=True))
-        wb.close()
+        if ext == ".xls":
+            import xlrd
+            wb_xls = xlrd.open_workbook(file_path)
+            for name in wb_xls.sheet_names():
+                norm = name.lower()
+                if any(k in norm for k in ['çeki', 'ceki', 'packing', 'koli', 'anna', 'list']):
+                    sheet_name = name
+                    break
+            if not sheet_name:
+                sheet_name = wb_xls.sheet_names()[0]
+            ws = wb_xls.sheet_by_name(sheet_name)
+            rows = [[ws.cell_value(r, c) for c in range(ws.ncols)] for r in range(ws.nrows)]
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            for name in wb.sheetnames:
+                norm = name.lower()
+                if any(k in norm for k in ['çeki', 'ceki', 'packing', 'koli', 'anna', 'list']):
+                    sheet_name = name
+                    break
+            if not sheet_name:
+                sheet_name = wb.sheetnames[0]
+            ws = wb[sheet_name]
+            rows = [list(r) for r in ws.iter_rows(values_only=True)]
+            wb.close()
 
         if not rows:
             raise ValueError("Çeki listesi sayfası boş veya okunamadı.")
 
-        # 2. Header detection
+        # 2. Check for Style No & Customer in header area (top 15 rows)
+        detected_customer = "Anna van Toor B.V."
+        detected_style = ""
+        for r in rows[:15]:
+            for val in r:
+                s_val = str(val or '').strip()
+                if not detected_style and re.match(r'^\d{2}[A-Za-z]\d{2}-[\w\d]+$', s_val):
+                    detected_style = s_val
+                if 'anna' in s_val.lower() and 'van' in s_val.lower():
+                    detected_customer = "Anna van Toor B.V."
+
+        # 3. Header row detection
         header_idx = -1
         for i, r in enumerate(rows[:20]):
             if not any(r): continue
-            r_str = [str(c or '').lower() for c in r]
-            if any('koli' in s or 'carton' in s or 'renk' in s or 'model' in s or 'color' in s for s in r_str):
+            r_str = [str(c or '').strip().upper() for c in r]
+            if any('KOLİ' in s or 'KOLI' in s or 'CARTON' in s for s in r_str) and any('STYLE' in s or 'RENK' in s or 'COLOR' in s for s in r_str):
                 header_idx = i
                 break
 
@@ -1936,130 +1961,179 @@ Critical Rules:
             header_idx = 0
 
         headers = [str(c or '').strip() for c in rows[header_idx]]
+        headers_upper = [h.upper() for h in headers]
 
-        # 3. Column mapping
-        col_map = {}
-        size_cols = {}
+        # 4. Check if Format B (Vertical block with Koli in col 0, Color in col 1, Channel in col 2)
+        is_vertical_block = False
+        if len(headers) >= 3 and any('KOL' in headers_upper[0] for _ in [1]) and ('STYLE' in headers_upper[1] or 'RENK' in headers_upper[2]):
+            for test_r in rows[header_idx+1:min(len(rows), header_idx+15)]:
+                if len(test_r) > 2 and any(k in str(test_r[2] or '').upper() for k in ['WEBSHOP', 'SHOPS', 'WHOLESALE', 'STOCK', 'MOSCOW']):
+                    is_vertical_block = True
+                    break
+
         known_sizes = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '34', '36', '38', '40', '42', '44', '46', '48']
-
+        size_cols = {}
         for c_idx, h in enumerate(headers):
-            h_norm = h.lower()
-            h_upper = h.upper()
-            if h_upper in known_sizes:
-                size_cols[h_upper] = c_idx
-            elif 'koli' in h_norm or 'carton' in h_norm or 'box' in h_norm:
-                if 'carton' not in col_map: col_map['carton'] = c_idx
-            elif h_norm == 'no' or h_norm == 'sıra':
-                col_map['row_no'] = c_idx
-            elif 'model' in h_norm or 'style' in h_norm or 'artikel' in h_norm:
-                col_map['model'] = c_idx
-            elif 'müşteri' in h_norm or 'musteri' in h_norm or 'customer' in h_norm:
-                col_map['customer'] = c_idx
-            elif 'grup say' in h_norm or 'group count' in h_norm:
-                col_map['group_count'] = c_idx
-            elif 'grup' in h_norm or 'group' in h_norm:
-                col_map['group'] = c_idx
-            elif 'toplam' in h_norm or 'total' in h_norm:
-                col_map['total_qty'] = c_idx
-            elif 'gr' in h_norm or 'gram' in h_norm:
-                col_map['unit_weight'] = c_idx
-            elif 'net' in h_norm:
-                col_map['net_weight'] = c_idx
-            elif 'brut' in h_norm or 'brüt' in h_norm or 'gross' in h_norm:
-                col_map['gross_weight'] = c_idx
+            h_u = h.upper()
+            if h_u in known_sizes:
+                size_cols[h_u] = c_idx
 
-        # Color & Channel detection
-        color_candidates = [idx for idx, h in enumerate(headers) if 'color' in h.lower() or 'renk' in h.lower()]
-        if len(color_candidates) >= 2:
-            col_map['color'] = color_candidates[0]
-            col_map['channel'] = color_candidates[1]
-        elif len(color_candidates) == 1:
-            col_map['color'] = color_candidates[0]
-
-        # 4. Extract data rows
-        raw_rows = []
-        customer_set = set()
+        raw_items = []
         model_set = set()
         color_set = set()
         channels_set = set()
 
-        for r_idx in range(header_idx + 1, len(rows)):
-            r = rows[r_idx]
-            if not any(r): continue
+        if is_vertical_block:
+            cur_color = ""
+            cur_channel = "GENEL"
+            
+            for r_idx in range(header_idx + 1, len(rows)):
+                r = rows[r_idx]
+                if not any(r): continue
+                
+                val0 = r[0]
+                val1 = str(r[1] or '').strip()
+                val2 = str(r[2] or '').strip() if len(r) > 2 else ''
+                
+                if 'TOPLAM' in val1.upper():
+                    continue
+                    
+                if not detected_style and re.match(r'^\d{2}[A-Za-z]\d{2}-[\w\d]+$', val1):
+                    detected_style = val1
+                    continue
+                    
+                is_koli = False
+                try:
+                    koli_num = int(float(val0))
+                    is_koli = True
+                except:
+                    koli_num = None
+                    
+                if is_koli:
+                    if val1 and not any(k in val1.upper() for k in ['KOLİ', 'STYLE', 'TOPLAM']):
+                        cur_color = val1
+                    if val2 and any(k in val2.upper() for k in ['WEBSHOP', 'SHOPS', 'WHOLESALE', 'STOCK', 'MOSCOW']):
+                        cur_channel = val2
+                        
+                    row_sizes = {}
+                    for sz, cidx in size_cols.items():
+                        if len(r) > cidx and r[cidx] is not None:
+                            try:
+                                v = int(float(r[cidx]))
+                                if v > 0: row_sizes[sz] = v
+                            except: pass
+                                
+                    tot_qty = sum(row_sizes.values())
+                    if tot_qty == 0 and len(r) > 11 and r[11] is not None:
+                        try: tot_qty = int(float(r[11]))
+                        except: pass
+                        
+                    if tot_qty == 0:
+                        continue
+                        
+                    model_name = detected_style or "MODEL"
+                    model_set.add(model_name)
+                    if cur_color: color_set.add(cur_color)
+                    if cur_channel: channels_set.add(cur_channel)
+                    
+                    raw_items.append({
+                        'carton_no': koli_num,
+                        'model': model_name,
+                        'color': cur_color,
+                        'channel': cur_channel,
+                        'customer': detected_customer,
+                        'sizes': row_sizes,
+                        'total_qty': tot_qty,
+                        'gross_weight': 0.0,
+                        'net_weight': 0.0,
+                        'measurements': '60X40X30'
+                    })
+        else:
+            col_map = {}
+            for c_idx, h in enumerate(headers):
+                h_norm = h.lower()
+                if 'koli' in h_norm or 'carton' in h_norm or 'box' in h_norm:
+                    if 'carton' not in col_map: col_map['carton'] = c_idx
+                elif h_norm in ['no', 'sıra', 'sira']:
+                    col_map['row_no'] = c_idx
+                elif 'model' in h_norm or 'style' in h_norm or 'artikel' in h_norm:
+                    col_map['model'] = c_idx
+                elif 'müşteri' in h_norm or 'musteri' in h_norm or 'customer' in h_norm:
+                    col_map['customer'] = c_idx
+                elif 'grup say' in h_norm or 'group count' in h_norm:
+                    col_map['group_count'] = c_idx
+                elif 'grup' in h_norm or 'group' in h_norm:
+                    col_map['group'] = c_idx
+                elif 'toplam' in h_norm or 'total' in h_norm:
+                    col_map['total_qty'] = c_idx
+                elif 'net' in h_norm:
+                    col_map['net_weight'] = c_idx
+                elif 'brut' in h_norm or 'brüt' in h_norm or 'gross' in h_norm:
+                    col_map['gross_weight'] = c_idx
 
-            m_val = str(r[col_map['model']]).strip() if 'model' in col_map and len(r) > col_map['model'] and r[col_map['model']] else ''
-            tot_val = r[col_map['total_qty']] if 'total_qty' in col_map and len(r) > col_map['total_qty'] else 0
-            try: tot_num = int(tot_val or 0)
-            except: tot_num = 0
+            color_candidates = [idx for idx, h in enumerate(headers) if 'color' in h.lower() or 'renk' in h.lower()]
+            if len(color_candidates) >= 2:
+                col_map['color'] = color_candidates[0]
+                col_map['channel'] = color_candidates[1]
+            elif len(color_candidates) == 1:
+                col_map['color'] = color_candidates[0]
 
-            # Extract size quantities
-            row_sizes = {}
-            for sz_name, sz_cidx in size_cols.items():
-                if len(r) > sz_cidx and r[sz_cidx] is not None:
-                    try:
-                        s_qty = int(r[sz_cidx])
-                        if s_qty > 0:
-                            row_sizes[sz_name] = s_qty
-                    except:
-                        pass
+            for r_idx in range(header_idx + 1, len(rows)):
+                r = rows[r_idx]
+                if not any(r): continue
+                
+                m_val = str(r[col_map['model']]).strip() if 'model' in col_map and len(r) > col_map['model'] and r[col_map['model']] else (detected_style or '')
+                tot_val = r[col_map['total_qty']] if 'total_qty' in col_map and len(r) > col_map['total_qty'] else 0
+                try: tot_num = int(tot_val or 0)
+                except: tot_num = 0
 
-            calc_tot = sum(row_sizes.values())
-            if tot_num == 0 and calc_tot > 0:
-                tot_num = calc_tot
+                row_sizes = {}
+                for sz_name, sz_cidx in size_cols.items():
+                    if len(r) > sz_cidx and r[sz_cidx] is not None:
+                        try:
+                            s_qty = int(r[sz_cidx])
+                            if s_qty > 0: row_sizes[sz_name] = s_qty
+                        except: pass
 
-            # Skip empty or formula-zero placeholder rows
-            if not m_val and tot_num == 0:
-                continue
+                calc_tot = sum(row_sizes.values())
+                if tot_num == 0 and calc_tot > 0: tot_num = calc_tot
+                if tot_num == 0: continue
 
-            color_val = str(r[col_map['color']]).strip() if 'color' in col_map and len(r) > col_map['color'] and r[col_map['color']] else ''
-            channel_val = str(r[col_map['channel']]).strip() if 'channel' in col_map and len(r) > col_map['channel'] and r[col_map['channel']] else ''
-            cust_val = str(r[col_map['customer']]).strip() if 'customer' in col_map and len(r) > col_map['customer'] and r[col_map['customer']] else ''
+                color_val = str(r[col_map['color']]).strip() if 'color' in col_map and len(r) > col_map['color'] and r[col_map['color']] else ''
+                channel_val = str(r[col_map['channel']]).strip() if 'channel' in col_map and len(r) > col_map['channel'] and r[col_map['channel']] else 'GENEL'
+                cust_val = str(r[col_map['customer']]).strip() if 'customer' in col_map and len(r) > col_map['customer'] and r[col_map['customer']] else detected_customer
+                carton_no = r[col_map['carton']] if 'carton' in col_map and len(r) > col_map['carton'] else None
+                try: carton_no = int(carton_no)
+                except: pass
 
-            carton_no = r[col_map['carton']] if 'carton' in col_map and len(r) > col_map['carton'] else None
-            try: carton_no = int(carton_no)
-            except: pass
+                if m_val: model_set.add(m_val)
+                if color_val: color_set.add(color_val)
+                if channel_val: channels_set.add(channel_val)
 
-            group_no = r[col_map['group']] if 'group' in col_map and len(r) > col_map['group'] else 1
-            group_count = r[col_map['group_count']] if 'group_count' in col_map and len(r) > col_map['group_count'] else 1
-            try: group_count = int(group_count)
-            except: group_count = 1
+                raw_items.append({
+                    'carton_no': carton_no,
+                    'model': m_val,
+                    'color': color_val,
+                    'channel': channel_val or 'GENEL',
+                    'customer': cust_val,
+                    'sizes': row_sizes,
+                    'total_qty': tot_num,
+                    'gross_weight': 0.0,
+                    'net_weight': 0.0,
+                    'measurements': '60X40X30'
+                })
 
-            gross_w = r[col_map['gross_weight']] if 'gross_weight' in col_map and len(r) > col_map['gross_weight'] else None
-            net_w = r[col_map['net_weight']] if 'net_weight' in col_map and len(r) > col_map['net_weight'] else None
+        # Calculate group counts and format cartons
+        channel_counts = Counter()
+        for item in raw_items:
+            key = (item['color'], item['channel']) if is_vertical_block else item['channel']
+            channel_counts[key] = max(channel_counts[key], item['carton_no'] or 1)
 
-            try: gross_w = round(float(gross_w), 2) if gross_w is not None else 0.0
-            except: gross_w = 0.0
-            try: net_w = round(float(net_w), 2) if net_w is not None else 0.0
-            except: net_w = 0.0
-
-            if m_val: model_set.add(m_val)
-            if color_val: color_set.add(color_val)
-            if channel_val: channels_set.add(channel_val)
-            if cust_val: customer_set.add(cust_val)
-
-            raw_rows.append({
-                'row_no': r[col_map.get('row_no', 0)] if 'row_no' in col_map else len(raw_rows) + 1,
-                'carton_no': carton_no,
-                'model': m_val,
-                'color': color_val,
-                'channel': channel_val or 'GENEL',
-                'customer': cust_val,
-                'sizes': row_sizes,
-                'total_qty': tot_num,
-                'group_no': group_no,
-                'group_count': group_count,
-                'gross_weight': gross_w,
-                'net_weight': net_w,
-                'measurements': '60X40X30'
-            })
-
-        # 5. Group into cartons (supporting multi-item "x2" cartons)
         cartons = []
-        channel_carton_counts = Counter()
         size_summary = Counter()
         channel_summary = {}
 
-        for item in raw_rows:
+        for item in raw_items:
             chan = item['channel'] or 'GENEL'
             if chan not in channel_summary:
                 badge = cls.get_channel_badge(chan)
@@ -2070,57 +2144,39 @@ Critical Rules:
                     'badge_name': badge['name']
                 }
             channel_summary[chan]['total_qty'] += item['total_qty']
+            channel_summary[chan]['cartons'] += 1
             for sz, qty in item['sizes'].items():
                 size_summary[sz] += qty
 
-            # Check if merges with previous carton (same carton_no and channel) -> "x2" multi-item carton
-            if cartons and cartons[-1]['carton_no'] == item['carton_no'] and cartons[-1]['channel'] == item['channel']:
-                cartons[-1]['items'].append({
+            badge = cls.get_channel_badge(chan)
+            key = (item['color'], item['channel']) if is_vertical_block else chan
+            total_of = channel_counts[key]
+
+            cartons.append({
+                'carton_id': len(cartons) + 1,
+                'carton_no': item['carton_no'] or (len(cartons) + 1),
+                'channel': chan,
+                'channel_color': badge['hex'],
+                'group_count': total_of,
+                'carton_label_text': f"CARTON NO: {item['carton_no']} OF {total_of}",
+                'gross_weight': item['gross_weight'],
+                'net_weight': item['net_weight'],
+                'measurements': item['measurements'],
+                'total_qty': item['total_qty'],
+                'items': [{
                     'model': item['model'],
                     'color': item['color'],
                     'sizes': item['sizes'],
                     'total_qty': item['total_qty']
-                })
-                cartons[-1]['total_qty'] += item['total_qty']
-                cartons[-1]['gross_weight'] = round(cartons[-1]['gross_weight'] + item['gross_weight'], 2)
-                cartons[-1]['net_weight'] = round(cartons[-1]['net_weight'] + item['net_weight'], 2)
-            else:
-                channel_carton_counts[chan] += 1
-                badge = cls.get_channel_badge(chan)
-                cartons.append({
-                    'carton_id': len(cartons) + 1,
-                    'carton_no': item['carton_no'] or (len(cartons) + 1),
-                    'channel': chan,
-                    'channel_color': badge['hex'],
-                    'group_no': item['group_no'],
-                    'group_count': item['group_count'],
-                    'carton_label_text': f"CARTON NO: {item['carton_no']} OF {item['group_count']}",
-                    'gross_weight': item['gross_weight'],
-                    'net_weight': item['net_weight'],
-                    'measurements': item['measurements'],
-                    'total_qty': item['total_qty'],
-                    'items': [{
-                        'model': item['model'],
-                        'color': item['color'],
-                        'sizes': item['sizes'],
-                        'total_qty': item['total_qty']
-                    }]
-                })
-
-        for chan in channel_summary:
-            channel_summary[chan]['cartons'] = channel_carton_counts[chan]
-
-        # Determine primary customer and brand
-        detected_customer = list(customer_set)[0] if customer_set else "ANNA"
-        if detected_customer.upper() == "ANNA":
-            detected_customer = "Anna van Toor B.V."
+                }]
+            })
 
         return {
             "success": True,
             "source_type": "EXCEL",
             "customer": detected_customer,
-            "style_no": list(model_set)[0] if model_set else "",
-            "models": list(model_set),
+            "style_no": detected_style or (list(model_set)[0] if model_set else ""),
+            "models": list(model_set) or ([detected_style] if detected_style else []),
             "color": list(color_set)[0] if color_set else "",
             "colors": list(color_set),
             "channels": list(channels_set),
