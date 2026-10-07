@@ -10193,6 +10193,17 @@ window.__texflowApp = createApp({
         const printMarginMm = ref(6);
         const printCustomWidth = ref(297);
         const printCustomHeight = ref(210);
+        const printShowPokaBadge = ref(false); // Default: false (koli ustunde rozet gizli / silinmis)
+
+        const formatCartonSizeQty = (val) => {
+            if (val === null || val === undefined || val === '' || val === false || val === 0 || val === '0' || val === 0.0 || val === '-' || (typeof val === 'string' && val.trim() === '0')) {
+                return '';
+            }
+            if (!isNaN(Number(val)) && Number(val) === 0) {
+                return '';
+            }
+            return val;
+        };
 
         const isProcessingPacking = ref(false);
         const packingProcessSuccess = ref(false);
@@ -10258,6 +10269,13 @@ window.__texflowApp = createApp({
             printCustomWidth.value = tpl.width_mm || 297;
             printCustomHeight.value = tpl.height_mm || 210;
             cartonPrintLayout.value = printItemsPerPage.value === 2 ? '2up' : '1up';
+            if (tpl.layout_json && tpl.layout_json.poka_badge_enabled !== undefined) {
+                printShowPokaBadge.value = !!tpl.layout_json.poka_badge_enabled;
+            } else if (tpl.poka_badge_enabled !== undefined) {
+                printShowPokaBadge.value = !!tpl.poka_badge_enabled;
+            } else {
+                printShowPokaBadge.value = false;
+            }
         };
 
         const onPrintPaperSizeChange = (newSize) => {
@@ -10352,7 +10370,9 @@ window.__texflowApp = createApp({
                 show_grid_lines: printShowGridLines.value,
                 margin_mm: printMarginMm.value,
                 font_scale: printFontScale.value,
-                layout_json: activeCartonTemplate.value ? activeCartonTemplate.value.layout_json : {},
+                layout_json: Object.assign({}, activeCartonTemplate.value ? activeCartonTemplate.value.layout_json : {}, {
+                    poka_badge_enabled: printShowPokaBadge.value
+                }),
                 is_default: true
             };
 
@@ -11376,7 +11396,9 @@ window.__texflowApp = createApp({
             closeCartonPrintModal,
             printCartonLabels,
             getPrintCartonsList,
-            getPrintCartonPairs
+            getPrintCartonPairs,
+            printShowPokaBadge,
+            formatCartonSizeQty
         };
 
 

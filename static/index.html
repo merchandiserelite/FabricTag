@@ -5886,6 +5886,14 @@
                                     <span>🔲 Çizgiler: {{ printShowGridLines ? 'Açık' : 'Kapalı' }}</span>
                                 </button>
 
+                                <!-- 4. RENK ROZETİ (AÇIK / KAPALI) -->
+                                <button @click="printShowPokaBadge = !printShowPokaBadge"
+                                        class="px-2 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer"
+                                        :class="printShowPokaBadge ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'bg-slate-800 border-slate-700 text-slate-400'"
+                                        title="Poka-Yoke Renk Rozetini açıp kapatın">
+                                    <span>🎨 Renk Rozeti: {{ printShowPokaBadge ? 'Açık' : 'Kapalı (Silindi)' }}</span>
+                                </button>
+
                                 <!-- 4. KENARLIK STİLİ -->
                                 <select v-model="printBorderStyle"
                                         class="px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 text-white cursor-pointer"
@@ -6014,26 +6022,26 @@
                                                         <tr class="border-b border-black text-[12px] font-semibold h-8">
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].model : '-' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].color : '-' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XS) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.S) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.M) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.L) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XL) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XXL) || 0 }}</td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].total_qty : 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XS) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.S) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.M) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.L) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XL) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XXL) }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[0] ? formatCartonSizeQty(pair[0].items[0].total_qty) : '' }}</td>
                                                         </tr>
                                                         <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
                                                         <tr class="border-b border-black text-[12px] font-semibold h-8"
                                                             :class="{'opacity-20': !pair[0].items || pair[0].items.length < 2}">
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].model : '' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].color : '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XS) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.S) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.M) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.L) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XL) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XXL) || '' }}</td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].total_qty : '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XS) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.S) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.M) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.L) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XL) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XXL) }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[1] ? formatCartonSizeQty(pair[0].items[1].total_qty) : '' }}</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -6064,14 +6072,14 @@
                                                 </div>
 
                                                 <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 3.5 cm / 35 mm Çap) -->
-                                                <div class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
                                                      style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
                                                     <svg viewBox="0 0 100 100" class="w-full h-full block"
                                                          style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
-                                                        <circle cx="50" cy="50" r="46"
+                                                        <circle cx="50" cy="50" r="48"
                                                                 :fill="pair[0].channel_color || '#000000'"
-                                                                stroke="#000000"
-                                                                stroke-width="5"
+                                                                stroke="none"
+                                                                stroke-width="0"
                                                                 style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
                                                     </svg>
                                                 </div>
@@ -6113,26 +6121,26 @@
                                                         <tr class="border-b border-black text-[12px] font-semibold h-8">
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].model : '-' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].color : '-' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XS) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.S) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.M) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.L) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XL) || 0 }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XXL) || 0 }}</td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].total_qty : 0 }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XS) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.S) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.M) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.L) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XL) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XXL) }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[0] ? formatCartonSizeQty(pair[1].items[0].total_qty) : '' }}</td>
                                                         </tr>
                                                         <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
                                                         <tr class="border-b border-black text-[12px] font-semibold h-8"
                                                             :class="{'opacity-20': !pair[1].items || pair[1].items.length < 2}">
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].model : '' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].color : '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XS) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.S) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.M) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.L) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XL) || '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ (pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XXL) || '' }}</td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].total_qty : '' }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XS) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.S) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.M) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.L) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XL) }}</td>
+                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XXL) }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[1] ? formatCartonSizeQty(pair[1].items[1].total_qty) : '' }}</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -6163,14 +6171,14 @@
                                                 </div>
 
                                                 <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 3.5 cm / 35 mm Çap) -->
-                                                <div class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
                                                      style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
                                                     <svg viewBox="0 0 100 100" class="w-full h-full block"
                                                          style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
-                                                        <circle cx="50" cy="50" r="46"
+                                                        <circle cx="50" cy="50" r="48"
                                                                 :fill="pair[1].channel_color || '#000000'"
-                                                                stroke="#000000"
-                                                                stroke-width="5"
+                                                                stroke="none"
+                                                                stroke-width="0"
                                                                 style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
                                                     </svg>
                                                 </div>
@@ -6228,26 +6236,26 @@
                                                     <tr class="border-b border-black text-sm font-semibold h-10">
                                                         <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[0] ? c.items[0].model : '-' }}</td>
                                                         <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XS) || 0 }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.S) || 0 }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.M) || 0 }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.L) || 0 }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XL) || 0 }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XXL) || 0 }}</td>
-                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[0] ? c.items[0].total_qty : 0 }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XS) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.S) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.M) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.L) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XL) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XXL) }}</td>
+                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[0] ? formatCartonSizeQty(c.items[0].total_qty) : '' }}</td>
                                                     </tr>
                                                     <!-- 2. Ürün Satırı -->
                                                     <tr class="border-b border-black text-sm font-semibold h-10"
                                                         :class="{'opacity-20': !c.items || c.items.length < 2}">
                                                         <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[1] ? c.items[1].model : '' }}</td>
                                                         <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[1] ? c.items[1].color : '' }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XS) || '' }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.S) || '' }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.M) || '' }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.L) || '' }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XL) || '' }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ (c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XXL) || '' }}</td>
-                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[1] ? c.items[1].total_qty : '' }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XS) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.S) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.M) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.L) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XL) }}</td>
+                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XXL) }}</td>
+                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[1] ? formatCartonSizeQty(c.items[1].total_qty) : '' }}</td>
                                                     </tr>
                                                 </tbody>
                                             </table>
@@ -6278,14 +6286,14 @@
                                             </div>
 
                                             <!-- POKA-YOKE RENK ROZETİ (3.5 CM / 35 MM ÇAP - KESİN RENKLİ VE VEKTÖREL BASKI) -->
-                                            <div class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                            <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
                                                  style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
                                                 <svg viewBox="0 0 100 100" class="w-full h-full block"
                                                      style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
-                                                    <circle cx="50" cy="50" r="46"
+                                                    <circle cx="50" cy="50" r="48"
                                                             :fill="c.channel_color || '#000000'"
-                                                            stroke="#000000"
-                                                            stroke-width="5"
+                                                            stroke="none"
+                                                            stroke-width="0"
                                                             style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
                                                 </svg>
                                             </div>
