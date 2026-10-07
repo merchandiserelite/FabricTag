@@ -171,7 +171,8 @@ def init_db():
         accessory_2 TEXT,
         accessory_3 TEXT,
         accessory_4 TEXT,
-        
+        image_url TEXT,
+        image_url_2 TEXT,
         channel TEXT DEFAULT '',
         status TEXT DEFAULT 'Hazırlık',
         custom_fields_json TEXT DEFAULT '{}',
@@ -395,6 +396,10 @@ def init_db():
         cursor.execute("ALTER TABLE styles ADD COLUMN shipping_date TEXT")
     if "channel" not in style_cols:
         cursor.execute("ALTER TABLE styles ADD COLUMN channel TEXT DEFAULT ''")
+    if "image_url" not in style_cols:
+        cursor.execute("ALTER TABLE styles ADD COLUMN image_url TEXT")
+    if "image_url_2" not in style_cols:
+        cursor.execute("ALTER TABLE styles ADD COLUMN image_url_2 TEXT")
 
     cursor.execute("PRAGMA table_info(size_distributions)")
     size_cols = [r[1] for r in cursor.fetchall()]
