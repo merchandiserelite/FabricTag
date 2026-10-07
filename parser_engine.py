@@ -2078,13 +2078,21 @@ Critical Rules:
                     col_map['net_weight'] = c_idx
                 elif 'brut' in h_norm or 'brüt' in h_norm or 'gross' in h_norm:
                     col_map['gross_weight'] = c_idx
+                elif 'kanal' in h_norm or 'channel' in h_norm or 'magaza' in h_norm or 'store' in h_norm or 'dukkan' in h_norm:
+                    col_map['channel'] = c_idx
+                elif h_norm in ['gr', 'gram', 'unit_gr', 'birim_gr', 'kg'] or 'birim' in h_norm:
+                    col_map['unit_weight'] = c_idx
 
-            color_candidates = [idx for idx, h in enumerate(headers) if 'color' in h.lower() or 'renk' in h.lower()]
-            if len(color_candidates) >= 2:
-                col_map['color'] = color_candidates[0]
-                col_map['channel'] = color_candidates[1]
-            elif len(color_candidates) == 1:
-                col_map['color'] = color_candidates[0]
+            if 'channel' not in col_map:
+                for c_idx, h in enumerate(headers):
+                    if any(k in h.lower() for k in ['kanal', 'channel', 'dükkan', 'dukkan', 'store']):
+                        col_map['channel'] = c_idx
+                        break
+            if 'color' not in col_map:
+                for c_idx, h in enumerate(headers):
+                    if any(k in h.lower() for k in ['color', 'renk', 'colour']):
+                        col_map['color'] = c_idx
+                        break
 
             for r_idx in range(header_idx + 1, len(rows)):
                 r = rows[r_idx]
@@ -2114,6 +2122,30 @@ Critical Rules:
                 try: carton_no = int(carton_no)
                 except: pass
 
+                group_cnt = None
+                if 'group_count' in col_map and len(r) > col_map['group_count']:
+                    try:
+                        gc_val = r[col_map['group_count']]
+                        if gc_val is not None and str(gc_val).strip():
+                            group_cnt = int(float(gc_val))
+                    except: pass
+
+                unit_gr = 0.14
+                if 'unit_weight' in col_map and len(r) > col_map['unit_weight']:
+                    try:
+                        ug_val = r[col_map['unit_weight']]
+                        if ug_val is not None:
+                            unit_gr = float(ug_val)
+                    except: pass
+
+                gw_val = 0.0
+                if 'gross_weight' in col_map and len(r) > col_map['gross_weight']:
+                    try:
+                        gw_raw = r[col_map['gross_weight']]
+                        if gw_raw is not None:
+                            gw_val = float(gw_raw)
+                    except: pass
+
                 if m_val: model_set.add(m_val)
                 if color_val: color_set.add(color_val)
                 if channel_val: channels_set.add(channel_val)
@@ -2126,23 +2158,88 @@ Critical Rules:
                     'customer': cust_val,
                     'sizes': row_sizes,
                     'total_qty': tot_num,
-                    'gross_weight': 0.0,
+                    'group_count': group_cnt,
+                    'unit_weight': unit_gr,
+                    'gross_weight': gw_val,
                     'net_weight': 0.0,
                     'measurements': '60X40X30'
                 })
 
-        # Calculate group counts and format cartons
-        channel_counts = Counter()
-        for item in raw_items:
-            key = (item['color'], item['channel']) if is_vertical_block else item['channel']
-            channel_counts[key] = max(channel_counts[key], item['carton_no'] or 1)
-
+        # 5. Group multi-row items into cartons based on Excel Row 10 formula rule
+        # (Same carton_no + same channel belong to the SAME carton)
         cartons = []
+        cur_carton = None
+
+        for item in raw_items:
+            c_no = item['carton_no']
+            chan = item['channel'] or 'GENEL'
+            mod = item['model']
+            col = item['color']
+            sizes = item['sizes']
+            qty = item['total_qty']
+            grp_cnt = item.get('group_count')
+            unit_w = item.get('unit_weight') or 0.14
+            gw = item.get('gross_weight') or 0.0
+
+            can_merge = False
+            if cur_carton and cur_carton['carton_no'] == c_no:
+                if is_vertical_block:
+                    can_merge = (cur_carton['channel'] == chan) and (cur_carton['color'] == col)
+                else:
+                    can_merge = (cur_carton['channel'] == chan)
+
+            if can_merge:
+                cur_carton['items'].append({
+                    'model': mod,
+                    'color': col,
+                    'sizes': sizes,
+                    'total_qty': qty
+                })
+                cur_carton['total_qty'] += qty
+                for sz, v in sizes.items():
+                    cur_carton['sizes'][sz] = cur_carton['sizes'].get(sz, 0) + v
+                if gw > 0:
+                    cur_carton['gross_weight'] = round(cur_carton['gross_weight'] + gw, 2)
+                else:
+                    cur_carton['gross_weight'] = round(cur_carton['total_qty'] * unit_w + 0.5, 2)
+                if grp_cnt and grp_cnt > 0:
+                    cur_carton['group_count'] = grp_cnt
+            else:
+                calc_gw = round(gw, 2) if gw > 0 else round(qty * unit_w + 0.5, 2)
+                cur_carton = {
+                    'carton_id': len(cartons) + 1,
+                    'carton_no': c_no or (len(cartons) + 1),
+                    'channel': chan,
+                    'color': col,
+                    'model': mod,
+                    'customer': item.get('customer') or detected_customer,
+                    'group_count': grp_cnt,
+                    'gross_weight': calc_gw,
+                    'net_weight': item.get('net_weight') or 0.0,
+                    'measurements': item.get('measurements') or '60X40X30',
+                    'total_qty': qty,
+                    'sizes': dict(sizes),
+                    'items': [{
+                        'model': mod,
+                        'color': col,
+                        'sizes': sizes,
+                        'total_qty': qty
+                    }]
+                }
+                cartons.append(cur_carton)
+
+        # 6. Calculate group counts (OF X) and summarize
+        channel_counts = Counter()
+        for c in cartons:
+            key = (c['color'], c['channel']) if is_vertical_block else c['channel']
+            channel_counts[key] = max(channel_counts[key], c['carton_no'] or 1)
+
         size_summary = Counter()
         channel_summary = {}
 
-        for item in raw_items:
-            chan = item['channel'] or 'GENEL'
+        for idx, c in enumerate(cartons, 1):
+            c['carton_id'] = idx
+            chan = c['channel'] or 'GENEL'
             if chan not in channel_summary:
                 badge = cls.get_channel_badge(chan)
                 channel_summary[chan] = {
@@ -2151,33 +2248,18 @@ Critical Rules:
                     'badge_color': badge['hex'],
                     'badge_name': badge['name']
                 }
-            channel_summary[chan]['total_qty'] += item['total_qty']
+            channel_summary[chan]['total_qty'] += c['total_qty']
             channel_summary[chan]['cartons'] += 1
-            for sz, qty in item['sizes'].items():
+
+            for sz, qty in c['sizes'].items():
                 size_summary[sz] += qty
 
             badge = cls.get_channel_badge(chan)
-            key = (item['color'], item['channel']) if is_vertical_block else chan
-            total_of = channel_counts[key]
-
-            cartons.append({
-                'carton_id': len(cartons) + 1,
-                'carton_no': item['carton_no'] or (len(cartons) + 1),
-                'channel': chan,
-                'channel_color': badge['hex'],
-                'group_count': total_of,
-                'carton_label_text': f"CARTON NO: {item['carton_no']} OF {total_of}",
-                'gross_weight': item['gross_weight'],
-                'net_weight': item['net_weight'],
-                'measurements': item['measurements'],
-                'total_qty': item['total_qty'],
-                'items': [{
-                    'model': item['model'],
-                    'color': item['color'],
-                    'sizes': item['sizes'],
-                    'total_qty': item['total_qty']
-                }]
-            })
+            key = (c['color'], c['channel']) if is_vertical_block else chan
+            total_of = c.get('group_count') if (c.get('group_count') and c.get('group_count') > 0) else channel_counts[key]
+            c['group_count'] = total_of
+            c['channel_color'] = badge['hex']
+            c['carton_label_text'] = f"CARTON NO: {c['carton_no']} OF {total_of}"
 
         return {
             "success": True,

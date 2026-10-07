@@ -318,11 +318,12 @@ def init_db():
             "fields": [
                 {"id": "header", "label": "Müşteri & Adres Başlığı", "key": "header_block", "visible": True},
                 {"id": "brand", "label": "Marka Bilgisi", "key": "brand", "visible": True},
-                {"id": "channel", "label": "Kanal & Poka-Yoke Renk Rozeti", "key": "channel_badge", "visible": True},
                 {"id": "size_table", "label": "Beden & Adet Tablosu (x2)", "key": "size_table", "visible": True},
+                {"id": "channel", "label": "Kanal Bilgisi (CARTON NO Üstü)", "key": "channel", "visible": True},
                 {"id": "carton_no", "label": "Koli Numarası (CARTON NO ... OF ...)", "key": "carton_no", "visible": True},
                 {"id": "gross_weight", "label": "Brüt Ağırlık (GROSS WEIGHT)", "key": "gross_weight", "visible": True},
-                {"id": "measurements", "label": "Koli Ebatları (MEASUREMENTS)", "key": "measurements", "visible": True}
+                {"id": "measurements", "label": "Koli Ebatları (MEASUREMENTS - GROSS WEIGHT Altı)", "key": "measurements", "visible": True},
+                {"id": "poka_badge", "label": "Poka-Yoke Renk Rozeti (102mm Çap)", "key": "poka_badge", "visible": True}
             ]
         }, ensure_ascii=False)
 

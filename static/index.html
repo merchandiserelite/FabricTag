@@ -5630,12 +5630,6 @@
                                                         <div v-if="designerTemplate.layout_json.address_line2" class="text-[11px] leading-tight text-gray-700">{{ designerTemplate.layout_json.address_line2 }}</div>
                                                         <div v-if="designerTemplate.layout_json.brand" class="mt-1 text-xs font-black tracking-wide">{{ designerTemplate.layout_json.brand }}</div>
                                                     </div>
-
-                                                    <!-- Poka-Yoke Renk Rozeti -->
-                                                    <div v-if="designerTemplate.layout_json.poka_badge_enabled" class="flex flex-col items-center">
-                                                        <div class="w-10 h-10 rounded-full border-2 border-black shadow" style="background-color: #6b248a;"></div>
-                                                        <span class="text-[9px] font-black uppercase mt-0.5">STOCK AVT</span>
-                                                    </div>
                                                 </div>
 
                                                 <!-- 2. ORTA: BEDEN VE ADET TABLOSU -->
@@ -5684,20 +5678,37 @@
                                                     </table>
                                                 </div>
 
-                                                <!-- 3. ALT: KOLİ BİLGİLERİ, AĞIRLIK, EBATLAR, BARKOD -->
-                                                <div class="space-y-1 pt-2 border-t-2 border-black">
-                                                    <div class="text-sm font-black tracking-wide">CARTON NO: 1 OF 13</div>
-                                                    <div class="flex items-center justify-between text-xs font-bold">
-                                                        <span>GROSS WEIGHT: <strong class="font-black">12.5 kg</strong></span>
-                                                        <span class="text-[11px] text-gray-700">MEASUREMENTS: {{ designerTemplate.layout_json.measurements || '60X40X30' }}</span>
-                                                    </div>
-                                                    
-                                                    <!-- Barkod Simülasyonu -->
-                                                    <div v-if="designerTemplate.layout_json.show_barcode" class="pt-2 text-center">
-                                                        <div class="h-7 w-36 mx-auto bg-repeat-x flex items-center justify-center font-mono text-[9px] tracking-widest bg-gray-200 border border-gray-400">
-                                                            ||||| | |||| || |||||||
+                                                <!-- 3. ALT: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
+                                                <div class="pt-2 border-t-2 border-black flex items-center justify-between gap-2">
+                                                    <div class="space-y-0.5">
+                                                        <!-- KANAL BİLGİSİ (CARTON NO ÜSTÜNDE VE AYNI FONT BÜYÜKLÜĞÜNDE) -->
+                                                        <div class="text-sm font-black uppercase tracking-wide text-black">STOCK AVT</div>
+                                                        
+                                                        <!-- CARTON NO -->
+                                                        <div class="text-sm font-black tracking-wide text-black">CARTON NO: 1 OF 13</div>
+
+                                                        <!-- GROSS WEIGHT -->
+                                                        <div class="text-xs font-bold text-black">
+                                                            GROSS WEIGHT: <strong class="font-black">12.5 kg</strong>
                                                         </div>
-                                                        <div class="font-mono text-[9px] text-gray-600 mt-0.5">8690012345678</div>
+
+                                                        <!-- MEASUREMENTS (GROSS WEIGHT ALTINDA VE AYNI FONT BÜYÜKLÜĞÜNDE) -->
+                                                        <div class="text-xs font-bold text-black tracking-wider">
+                                                            MEASUREMENTS: {{ designerTemplate.layout_json.measurements || '60X40X30' }}
+                                                        </div>
+                                                        
+                                                        <!-- Barkod Simülasyonu -->
+                                                        <div v-if="designerTemplate.layout_json.show_barcode" class="pt-1">
+                                                            <div class="h-6 w-32 bg-repeat-x flex items-center justify-center font-mono text-[8px] tracking-widest bg-gray-200 border border-gray-400">
+                                                                ||||| | |||| || |||||||
+                                                            </div>
+                                                            <div class="font-mono text-[8px] text-gray-600 mt-0.5">8690012345678</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Poka-Yoke Renk Rozeti -->
+                                                    <div v-if="designerTemplate.layout_json.poka_badge_enabled" class="shrink-0 flex items-center justify-center">
+                                                        <div class="w-16 h-16 rounded-full border-3 border-black shadow" style="background-color: #6b248a;"></div>
                                                     </div>
                                                 </div>
 
@@ -5910,32 +5921,35 @@
                                                 </table>
                                             </div>
 
-                                            <!-- ORTA / ALT: KANAL VE YUVARLAK RENKLİ ETİKET MASKESİ -->
-                                            <div class="flex items-center justify-between my-3 px-2">
-                                                <div>
-                                                    <div class="text-[18px] font-black uppercase tracking-wider text-black">
+                                            <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
+                                            <div class="pt-3 border-t-2 border-black flex items-center justify-between gap-2">
+                                                <div class="space-y-1">
+                                                    <!-- 1. KANAL BİLGİSİ (CARTON NO ÜSTÜNDE VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 12) -->
+                                                    <div class="text-[17px] font-black uppercase tracking-wider text-black">
                                                         {{ pair[0].channel }}
                                                     </div>
-                                                    <div class="text-[10px] text-gray-500 font-bold uppercase mt-0.5">Teslimat Kanalı</div>
-                                                </div>
-                                                
-                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke) -->
-                                                <div class="flex flex-col items-center">
-                                                    <div class="w-12 h-12 rounded-full border-2 border-black shadow-md"
-                                                         :style="{ backgroundColor: pair[0].channel_color }"></div>
-                                                </div>
-                                            </div>
 
-                                            <!-- ALT BİLGİLER: CARTON NO, GROSS WEIGHT, MEASUREMENTS -->
-                                            <div class="space-y-1.5 pt-3 border-t-2 border-black">
-                                                <div class="text-[17px] font-black tracking-wide">
-                                                    {{ pair[0].carton_label_text || ('CARTON NO: ' + pair[0].carton_no + ' OF ' + pair[0].group_count) }}
+                                                    <!-- 2. CARTON NO (EXCEL SATIR 13) -->
+                                                    <div class="text-[17px] font-black tracking-wide text-black">
+                                                        {{ pair[0].carton_label_text || ('CARTON NO: ' + pair[0].carton_no + ' OF ' + pair[0].group_count) }}
+                                                    </div>
+
+                                                    <!-- 3. GROSS WEIGHT (EXCEL SATIR 14) -->
+                                                    <div class="text-[14px] font-bold text-black">
+                                                        GROSS WEIGHT: <span class="font-black">{{ pair[0].gross_weight }} kg</span>
+                                                    </div>
+
+                                                    <!-- 4. MEASUREMENTS (GROSS WEIGHT ALTINDA VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 15) -->
+                                                    <div class="text-[14px] font-bold text-black tracking-wider">
+                                                        MEASUREMENTS: {{ pair[0].measurements || '60X40X30' }}
+                                                    </div>
                                                 </div>
-                                                <div class="text-[14px] font-bold">
-                                                    GROSS WEIGHT: <span class="font-black">{{ pair[0].gross_weight }} kg</span>
-                                                </div>
-                                                <div class="text-[12px] font-bold text-gray-700 tracking-wider">
-                                                    MEASUREMENTS: {{ pair[0].measurements || '60X40X30' }}
+
+                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 52 mm Orantılı Çap) -->
+                                                <div class="shrink-0 flex items-center justify-center">
+                                                    <div class="rounded-full border-3 border-black shadow-md"
+                                                         style="width: 52mm; height: 52mm; min-width: 52mm; min-height: 52mm;"
+                                                         :style="{ backgroundColor: pair[0].channel_color }"></div>
                                                 </div>
                                             </div>
 
@@ -6000,32 +6014,35 @@
                                                 </table>
                                             </div>
 
-                                            <!-- ORTA / ALT: KANAL VE YUVARLAK RENKLİ ETİKET MASKESİ -->
-                                            <div class="flex items-center justify-between my-3 px-2">
-                                                <div>
-                                                    <div class="text-[18px] font-black uppercase tracking-wider text-black">
+                                            <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
+                                            <div class="pt-3 border-t-2 border-black flex items-center justify-between gap-2">
+                                                <div class="space-y-1">
+                                                    <!-- 1. KANAL BİLGİSİ (CARTON NO ÜSTÜNDE VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 12) -->
+                                                    <div class="text-[17px] font-black uppercase tracking-wider text-black">
                                                         {{ pair[1].channel }}
                                                     </div>
-                                                    <div class="text-[10px] text-gray-500 font-bold uppercase mt-0.5">Teslimat Kanalı</div>
-                                                </div>
-                                                
-                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke) -->
-                                                <div class="flex flex-col items-center">
-                                                    <div class="w-12 h-12 rounded-full border-2 border-black shadow-md"
-                                                         :style="{ backgroundColor: pair[1].channel_color }"></div>
-                                                </div>
-                                            </div>
 
-                                            <!-- ALT BİLGİLER: CARTON NO, GROSS WEIGHT, MEASUREMENTS -->
-                                            <div class="space-y-1.5 pt-3 border-t-2 border-black">
-                                                <div class="text-[17px] font-black tracking-wide">
-                                                    {{ pair[1].carton_label_text || ('CARTON NO: ' + pair[1].carton_no + ' OF ' + pair[1].group_count) }}
+                                                    <!-- 2. CARTON NO (EXCEL SATIR 13) -->
+                                                    <div class="text-[17px] font-black tracking-wide text-black">
+                                                        {{ pair[1].carton_label_text || ('CARTON NO: ' + pair[1].carton_no + ' OF ' + pair[1].group_count) }}
+                                                    </div>
+
+                                                    <!-- 3. GROSS WEIGHT (EXCEL SATIR 14) -->
+                                                    <div class="text-[14px] font-bold text-black">
+                                                        GROSS WEIGHT: <span class="font-black">{{ pair[1].gross_weight }} kg</span>
+                                                    </div>
+
+                                                    <!-- 4. MEASUREMENTS (GROSS WEIGHT ALTINDA VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 15) -->
+                                                    <div class="text-[14px] font-bold text-black tracking-wider">
+                                                        MEASUREMENTS: {{ pair[1].measurements || '60X40X30' }}
+                                                    </div>
                                                 </div>
-                                                <div class="text-[14px] font-bold">
-                                                    GROSS WEIGHT: <span class="font-black">{{ pair[1].gross_weight }} kg</span>
-                                                </div>
-                                                <div class="text-[12px] font-bold text-gray-700 tracking-wider">
-                                                    MEASUREMENTS: {{ pair[1].measurements || '60X40X30' }}
+
+                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 52 mm Orantılı Çap) -->
+                                                <div class="shrink-0 flex items-center justify-center">
+                                                    <div class="rounded-full border-3 border-black shadow-md"
+                                                         style="width: 52mm; height: 52mm; min-width: 52mm; min-height: 52mm;"
+                                                         :style="{ backgroundColor: pair[1].channel_color }"></div>
                                                 </div>
                                             </div>
 
@@ -6058,13 +6075,6 @@
                                                 <div class="text-[14px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
                                                 <div class="text-[14px] leading-tight text-gray-800">The Netherlands</div>
                                                 <div class="mt-3 text-[16px] font-black tracking-wide">BRAND: ANNA</div>
-                                            </div>
-
-                                            <!-- Poka-Yoke Renk Rozeti -->
-                                            <div class="flex flex-col items-center">
-                                                <div class="w-16 h-16 rounded-full border-3 border-black shadow-lg"
-                                                     :style="{ backgroundColor: c.channel_color }"></div>
-                                                <span class="text-xs font-black uppercase mt-1 tracking-wider">{{ c.channel }}</span>
                                             </div>
                                         </div>
 
@@ -6113,20 +6123,35 @@
                                             </table>
                                         </div>
 
-                                        <!-- ALT BİLGİLER -->
-                                        <div class="space-y-2 pt-4 border-t-2 border-black flex items-end justify-between">
-                                            <div>
-                                                <div class="text-[22px] font-black tracking-wide">
+                                        <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE EXCEL ÇAPI İLE POKA-YOKE ROZETİ -->
+                                        <div class="pt-4 border-t-2 border-black flex items-center justify-between gap-4">
+                                            <div class="space-y-2">
+                                                <!-- 1. KANAL BİLGİSİ (CARTON NO'NUN ÜSTÜNDE VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 12) -->
+                                                <div class="text-[22px] font-black uppercase tracking-wider text-black">
+                                                    {{ c.channel }}
+                                                </div>
+
+                                                <!-- 2. CARTON NO (EXCEL SATIR 13) -->
+                                                <div class="text-[22px] font-black tracking-wide text-black">
                                                     {{ c.carton_label_text || ('CARTON NO: ' + c.carton_no + ' OF ' + c.group_count) }}
                                                 </div>
-                                                <div class="text-[16px] font-bold mt-1">
+
+                                                <!-- 3. GROSS WEIGHT (EXCEL SATIR 14) -->
+                                                <div class="text-[18px] font-bold text-black">
                                                     GROSS WEIGHT: <span class="font-black">{{ c.gross_weight }} kg</span>
                                                 </div>
-                                            </div>
-                                            <div class="text-right">
-                                                <div class="text-[14px] font-bold text-gray-700 tracking-wider">
+
+                                                <!-- 4. MEASUREMENTS (GROSS WEIGHT'İN ALTINDA VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 15) -->
+                                                <div class="text-[18px] font-bold text-black tracking-wider">
                                                     MEASUREMENTS: {{ c.measurements || '60X40X30' }}
                                                 </div>
+                                            </div>
+
+                                            <!-- POKA-YOKE RENK ROZETİ (EXCEL İLE BİREBİR AYNI ÇAPTA: 102 MM) -->
+                                            <div class="shrink-0 flex items-center justify-center">
+                                                <div class="rounded-full border-4 border-black shadow-lg"
+                                                     style="width: 102mm; height: 102mm; min-width: 102mm; min-height: 102mm;"
+                                                     :style="{ backgroundColor: c.channel_color }"></div>
                                             </div>
                                         </div>
 
