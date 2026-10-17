@@ -54,99 +54,39 @@ window.__texflowApp = createApp({
         };
 
         // =========================================================================
-        // AKILLI EKRAN ÇÖZÜNÜRLÜĞÜ & EN-BOY ÖLÇEKLEME MOTORU (RESPONSIVE AUTO-SCALE)
+        // YAZI BOYUTU (OKUNABİLİRLİK) ÖLÇEKLEME MOTORU
+        // (Yazıları okumakta zorlananlar için metin büyütme/küçültme - Sayfa zoomu yapmaz)
         // =========================================================================
-        const getAutoFitZoom = () => {
-            // Mevcut zoom faktörünü hesaba katarak gerçek ekran/pencere çözünürlüğünü bulur
-            const currentZoom = parseFloat(document.documentElement.style.zoom) || 1;
-            const w = Math.round(window.innerWidth ? window.innerWidth * currentZoom : (window.screen ? window.screen.width : 1920));
-            const h = Math.round(window.innerHeight ? window.innerHeight * currentZoom : (window.screen ? window.screen.height : 1080));
-            
-            // Küçük ekranlar ve düşük çözünürlükler için en-boy orantılı küçültme kademeleri:
-            if (w < 1100 || h < 640) {
-                return 70; // Çok küçük ekranlar / 1024x768 / netbook
-            } else if (w < 1280 || h < 720) {
-                return 75; // 1280x720 / 1080p %150 ölçekli laptop
-            } else if (w < 1440 || h < 820) {
-                return 80; // Standart 1366x768 laptop / 1080p %125 ölçekli laptop
-            } else if (w < 1680 || h < 900) {
-                return 85; // 1440x900 / 1600x900 ekranlar
-            } else if (w < 1920) {
-                return 92; // 1080p laptop ekranı
-            } else {
-                return 100; // Geniş 1080p ve 2K/4K monitörler
-            }
-        };
-
-        const zoomMode = ref(localStorage.getItem('texflow_zoom_mode') || 'auto'); // 'auto' | 'manual'
-        const savedZoom = localStorage.getItem('texflow_zoom_level');
-        const zoomLevel = ref(
-            zoomMode.value === 'manual' && savedZoom 
-                ? parseInt(savedZoom) 
-                : getAutoFitZoom()
-        );
-
-        const screenInfo = ref({
-            width: window.innerWidth || 1920,
-            height: window.innerHeight || 1080
-        });
-
-        const updateScreenInfo = () => {
-            const currentZoom = parseFloat(document.documentElement.style.zoom) || 1;
-            screenInfo.value = {
-                width: Math.round(window.innerWidth ? window.innerWidth * currentZoom : (window.screen ? window.screen.width : 1920)),
-                height: Math.round(window.innerHeight ? window.innerHeight * currentZoom : (window.screen ? window.screen.height : 1080))
-            };
-        };
+        const savedFontZoom = localStorage.getItem('texflow_font_zoom');
+        const zoomLevel = ref(savedFontZoom ? parseInt(savedFontZoom) : 100);
 
         const applyGlobalZoom = (level) => {
-            const scale = Math.min(150, Math.max(60, level)) / 100;
+            const scale = Math.min(150, Math.max(70, level)) / 100;
             const root = document.documentElement;
             if (root) {
-                // Chrome, Edge, Safari, IE ve modern tarayıcılarda tüm arayüzü en ve boy olarak orantılı ölçekler
-                root.style.zoom = scale.toString();
-                root.style.setProperty('--ui-scale', scale.toString());
-                root.style.setProperty('--table-font-scale', '1');
+                root.style.zoom = '';
+                root.style.removeProperty('--ui-scale');
+                root.style.setProperty('--table-font-scale', scale.toString());
             }
-            if (document.body && document.body.style.zoom) {
+            if (document.body) {
                 document.body.style.zoom = '';
             }
-            updateScreenInfo();
         };
 
-        const setZoom = (level, isManual = true) => {
-            const next = Math.min(150, Math.max(60, level));
+        const setZoom = (level) => {
+            const next = Math.min(150, Math.max(70, level));
             zoomLevel.value = next;
-            if (isManual) {
-                zoomMode.value = 'manual';
-                localStorage.setItem('texflow_zoom_mode', 'manual');
-                localStorage.setItem('texflow_zoom_level', next);
-            }
+            localStorage.setItem('texflow_font_zoom', next);
             applyGlobalZoom(next);
         };
 
         const changeZoom = (delta) => {
-            setZoom(zoomLevel.value + delta, true);
-        };
-
-        const toggleAutoZoom = () => {
-            if (zoomMode.value === 'auto') {
-                setZoom(100, true);
-                showToast('Sabit %100 tam boyut seçildi.', 'info');
-            } else {
-                zoomMode.value = 'auto';
-                localStorage.setItem('texflow_zoom_mode', 'auto');
-                localStorage.removeItem('texflow_zoom_level');
-                const autoVal = getAutoFitZoom();
-                zoomLevel.value = autoVal;
-                applyGlobalZoom(autoVal);
-                showToast(`Ekran çözünürlüğüne otomatik uyarlandı (%${autoVal})`, 'success');
-            }
-            refreshIcons();
+            setZoom(zoomLevel.value + delta);
         };
 
         const resetZoom = () => {
-            toggleAutoZoom();
+            setZoom(100);
+            showToast('info', 'Yazı boyutu %100 standarda ayarlandı.');
         };
 
 
@@ -1727,43 +1667,52 @@ window.__texflowApp = createApp({
             'fabric_article'
         ]);
 
-        const getStickyColumnStyle = (col, isHeader = false, item = null) => {
-            if (!isSmartScrollEnabled.value || !col) return {};
-
-            if (!frozenColumnKeys.has(col.key)) {
-                return {};
-            }
-
-            const colIdx = displayedColumns.value.findIndex(c => c.key === col.key);
-            if (colIdx === -1) {
-                return {};
-            }
-
-            // Sabit Görsel sütununun genişliğinden başla
+        const stickyColumnStylesMap = computed(() => {
+            if (!isSmartScrollEnabled.value) return { header: {}, body: {} };
+            const headerStyles = {};
+            const bodyStyles = {};
+            const cols = displayedColumns.value || [];
             let leftOffset = (imageColWidth.value || 68);
-            for (let i = 0; i < colIdx; i++) {
-                const prevCol = displayedColumns.value[i];
-                if (frozenColumnKeys.has(prevCol.key)) {
-                    leftOffset += (prevCol.width || 100);
-                }
-            }
 
-            // En son sabitlenen sütuna gölge ver
             let lastFrozenKey = null;
-            for (let i = displayedColumns.value.length - 1; i >= 0; i--) {
-                if (frozenColumnKeys.has(displayedColumns.value[i].key)) {
-                    lastFrozenKey = displayedColumns.value[i].key;
+            for (let i = cols.length - 1; i >= 0; i--) {
+                if (frozenColumnKeys.has(cols[i].key)) {
+                    lastFrozenKey = cols[i].key;
                     break;
                 }
             }
-            const isLastFrozen = (col.key === lastFrozenKey);
 
-            return {
-                position: 'sticky',
-                left: `${leftOffset}px`,
-                zIndex: isHeader ? 32 : 12,
-                boxShadow: isLastFrozen ? '4px 0 10px -2px rgba(0, 0, 0, 0.15)' : 'none'
-            };
+            for (let i = 0; i < cols.length; i++) {
+                const c = cols[i];
+                if (frozenColumnKeys.has(c.key)) {
+                    const isLast = (c.key === lastFrozenKey);
+                    const shadow = isLast ? '4px 0 10px -2px rgba(0, 0, 0, 0.15)' : 'none';
+                    headerStyles[c.key] = {
+                        position: 'sticky',
+                        left: `${leftOffset}px`,
+                        zIndex: 32,
+                        boxShadow: shadow
+                    };
+                    bodyStyles[c.key] = {
+                        position: 'sticky',
+                        left: `${leftOffset}px`,
+                        zIndex: 12,
+                        boxShadow: shadow
+                    };
+                    leftOffset += (c.width || 100);
+                } else {
+                    headerStyles[c.key] = {};
+                    bodyStyles[c.key] = {};
+                }
+            }
+            return { header: headerStyles, body: bodyStyles };
+        });
+
+        const getStickyColumnStyle = (col, isHeader = false, item = null) => {
+            if (!isSmartScrollEnabled.value || !col) return {};
+            const map = stickyColumnStylesMap.value;
+            const targetMap = isHeader ? map.header : map.body;
+            return targetMap[col.key] || {};
         };
 
         const getStickyImageStyle = (isHeader = false, item = null) => {
@@ -2237,10 +2186,16 @@ window.__texflowApp = createApp({
             raw = String(raw).trim();
             if (!raw) return '';
 
-            // Look for ELT internal code
+            // Look for ELT internal code (Memoized to avoid iterating thousands of fabrics in every cell)
+            if (!getFabricDisplayTitle._cache) getFabricDisplayTitle._cache = new Map();
             const match = raw.match(/ELT\d+/i);
             if (match && fabricsList.value && fabricsList.value.length > 0) {
-                const found = fabricsList.value.find(f => f.internal_code && f.internal_code.toUpperCase() === match[0].toUpperCase());
+                const codeKey = match[0].toUpperCase();
+                let found = getFabricDisplayTitle._cache.get(codeKey);
+                if (found === undefined) {
+                    found = fabricsList.value.find(f => f.internal_code && f.internal_code.toUpperCase() === codeKey) || null;
+                    getFabricDisplayTitle._cache.set(codeKey, found);
+                }
                 if (found) {
                     const qName = isInvalid(found.quality_name) ? '' : found.quality_name.trim();
                     const qCode = isInvalid(found.quality_code) ? '' : found.quality_code.trim();
@@ -3802,25 +3757,30 @@ window.__texflowApp = createApp({
             return String(v).trim();
         };
 
+        const trCollator = new Intl.Collator('tr', { numeric: true, sensitivity: 'base' });
+
         const getAllDistinctValuesForColumn = (colKey) => {
             const rawVals = new Set();
             if (colKey === 'status') {
-                allStatusStages.value.forEach(st => {
+                const stages = allStatusStages.value || [];
+                for (let i = 0; i < stages.length; i++) {
+                    const st = stages[i];
                     if (st && st.trim()) rawVals.add(st.trim());
-                });
+                }
             }
-            (styles.value || []).forEach(s => {
-                const v = getStyleColumnValue(s, colKey);
+            const sList = styles.value || [];
+            for (let i = 0; i < sList.length; i++) {
+                const v = getStyleColumnValue(sList[i], colKey);
                 rawVals.add(v);
-            });
+            }
             return Array.from(rawVals).sort((a, b) => {
                 if (a === '(Boş)') return 1;
                 if (b === '(Boş)') return -1;
-                return a.localeCompare(b, 'tr', { sensitivity: 'base', numeric: true });
+                return trCollator.compare(a, b);
             });
         };
 
-        // EXCEL TARZI AKTİF EKRANDAN KADEMELİ (CASCADING) SÜZGEÇ LİSTESİ
+        // EXCEL TARZI AKTİF EKRANDAN KADEMELİ (CASCADING) SÜZGEÇ LİSTESİ (YÜKSEK HIZLI O(1) MOTOR)
         const getCascadingDistinctValuesForColumn = (targetColKey) => {
             let list = styles.value || [];
 
@@ -3828,14 +3788,17 @@ window.__texflowApp = createApp({
             const otherActiveKeys = Object.keys(columnFilters.value).filter(k => k !== targetColKey && isColumnFiltered(k));
             
             if (otherActiveKeys.length > 0) {
+                const otherFilters = otherActiveKeys.map(k => ({
+                    key: k,
+                    set: new Set(columnFilters.value[k] || [])
+                }));
+
                 list = list.filter(s => {
-                    for (const k of otherActiveKeys) {
-                        const selectedVals = columnFilters.value[k];
-                        if (Array.isArray(selectedVals)) {
-                            const val = getStyleColumnValue(s, k);
-                            if (!selectedVals.includes(val)) {
-                                return false;
-                            }
+                    for (let i = 0; i < otherFilters.length; i++) {
+                        const entry = otherFilters[i];
+                        const val = getStyleColumnValue(s, entry.key);
+                        if (!entry.set.has(val)) {
+                            return false;
                         }
                     }
                     return true;
@@ -3846,34 +3809,38 @@ window.__texflowApp = createApp({
 
             // Eğer bu sütunun kendi süzgecinde önceden seçilmiş değerler varsa onları koru
             if (columnFilters.value[targetColKey] && Array.isArray(columnFilters.value[targetColKey])) {
-                columnFilters.value[targetColKey].forEach(v => {
+                const existing = columnFilters.value[targetColKey];
+                for (let i = 0; i < existing.length; i++) {
+                    const v = existing[i];
                     if (v !== undefined && v !== null && String(v).trim() !== '') {
                         rawVals.add(String(v).trim());
                     }
-                });
+                }
             }
 
             // Aktif ekranda kalan kayıtlardan bu sütunun değerlerini topla
-            list.forEach(s => {
-                const v = getStyleColumnValue(s, targetColKey);
+            for (let i = 0; i < list.length; i++) {
+                const v = getStyleColumnValue(list[i], targetColKey);
                 if (v !== undefined && v !== null && String(v).trim() !== '') {
                     rawVals.add(String(v).trim());
                 }
-            });
+            }
 
             // Özel eklenen kanalları da süzgeç listesine dahil et
             if (targetColKey === 'channel') {
-                customChannels.value.forEach(c => {
+                const cList = customChannels.value || [];
+                for (let i = 0; i < cList.length; i++) {
+                    const c = cList[i];
                     if (c && String(c).trim() !== '') {
                         rawVals.add(String(c).trim());
                     }
-                });
+                }
             }
 
             return Array.from(rawVals).sort((a, b) => {
                 if (a === '(Boş)') return 1;
                 if (b === '(Boş)') return -1;
-                return a.localeCompare(b, 'tr', { sensitivity: 'base', numeric: true });
+                return trCollator.compare(a, b);
             });
         };
 
@@ -3918,13 +3885,17 @@ window.__texflowApp = createApp({
             refreshIcons();
         };
 
+        let colSearchDebounce = null;
         const onColumnSearchInput = (colKey) => {
-            const q = (columnFilterSearch.value[colKey] || '').toLowerCase().trim();
-            if (!q) {
-                activeDropdownOptions.value = activeDropdownAllOptions;
-            } else {
-                activeDropdownOptions.value = activeDropdownAllOptions.filter(v => v.toLowerCase().includes(q));
-            }
+            if (colSearchDebounce) clearTimeout(colSearchDebounce);
+            colSearchDebounce = setTimeout(() => {
+                const q = (columnFilterSearch.value[colKey] || '').toLowerCase().trim();
+                if (!q) {
+                    activeDropdownOptions.value = activeDropdownAllOptions;
+                } else {
+                    activeDropdownOptions.value = activeDropdownAllOptions.filter(v => v.toLowerCase().includes(q));
+                }
+            }, 30);
         };
 
         const isValSelectedInColumn = (colKey, val) => {
@@ -3973,7 +3944,7 @@ window.__texflowApp = createApp({
                 columnFilters.value[colKey] = Array.from(selectedSet);
             }
             activeFilterDropdown.value = null;
-            carsafRenderLimit.value = 80;
+            carsafRenderLimit.value = 45;
             refreshIcons();
         };
 
@@ -3993,7 +3964,7 @@ window.__texflowApp = createApp({
             tempColumnFilters.value = {};
             activeFilterDropdown.value = null;
             carsafSearchQuery.value = '';
-            carsafRenderLimit.value = 80;
+            carsafRenderLimit.value = 45;
             refreshIcons();
         };
 
@@ -4114,7 +4085,7 @@ window.__texflowApp = createApp({
 
                     const strA = String(valA || '');
                     const strB = String(valB || '');
-                    return strA.localeCompare(strB, 'tr-TR', { numeric: true, sensitivity: 'base' }) * dir;
+                    return trCollator.compare(strA, strB) * dir;
                 });
             }
 
@@ -4122,7 +4093,7 @@ window.__texflowApp = createApp({
         });
 
         // PROGRESSIVE LAZY ROW RENDERING FOR 400+ ORDERS (Prevents DOM Freezing)
-        const carsafRenderLimit = ref(80);
+        const carsafRenderLimit = ref(45);
 
         const displayedFilteredStyles = computed(() => {
             const list = filteredStyles.value || [];
@@ -4141,13 +4112,13 @@ window.__texflowApp = createApp({
             if (!el) return;
             if (el.scrollTop + el.clientHeight >= el.scrollHeight - 350) {
                 if (carsafRenderLimit.value < (filteredStyles.value || []).length) {
-                    carsafRenderLimit.value += 60;
+                    carsafRenderLimit.value += 40;
                 }
             }
         };
 
         watch([carsafSearchQuery, columnFilters, sortColumn, sortDirection], () => {
-            carsafRenderLimit.value = 80;
+            carsafRenderLimit.value = 45;
         }, { deep: true });
 
         // SÜZÜLEN SİPARİŞLERİN BEDEN VE GENEL TOPLAMLARI
@@ -7346,6 +7317,7 @@ window.__texflowApp = createApp({
         const loadFabrics = async () => {
             const q = fabricSearch.value ? `?q=${encodeURIComponent(fabricSearch.value)}` : '';
             fabricsList.value = await apiFetch(`/api/fabrictag/fabrics${q}`);
+            if (getFabricDisplayTitle._cache) getFabricDisplayTitle._cache.clear();
         };
 
         // MESAJ KUTUSU
@@ -10594,20 +10566,8 @@ window.__texflowApp = createApp({
             loadCurrencyRates();
             setInterval(loadCurrencyRates, 15 * 60 * 1000);
             
-            let resizeTimer = null;
             window.addEventListener('resize', () => {
                 isMobile.value = window.innerWidth < 768;
-                updateScreenInfo();
-                if (zoomMode.value === 'auto') {
-                    clearTimeout(resizeTimer);
-                    resizeTimer = setTimeout(() => {
-                        const newAuto = getAutoFitZoom();
-                        if (newAuto !== zoomLevel.value) {
-                            zoomLevel.value = newAuto;
-                            applyGlobalZoom(newAuto);
-                        }
-                    }, 250);
-                }
             });
 
             window.addEventListener('paste', handleGlobalPaste);
@@ -11300,12 +11260,9 @@ window.__texflowApp = createApp({
             sidebarOpen,
             isMobile,
             zoomLevel,
-            zoomMode,
             setZoom,
-            screenInfo,
             changeZoom,
             resetZoom,
-            toggleAutoZoom,
             columnVisibilityModalOpen,
             tempVisibleColumns,
             tempHiddenColumns,

@@ -58,13 +58,27 @@ if __name__ == "__main__":
 
     threading.Thread(target=wait_for_server_and_open_browser, args=(port,), daemon=True).start()
 
-    uvicorn.run(
-        "app:app",
-        host="0.0.0.0",
-        port=port,
-        reload=True,
-        reload_dirs=["."],
-        reload_excludes=["dist/**", "build/**", "data/uploads/**", ".git/**", "scratch/**", "__pycache__/**"],
-        log_level="info"
-    )
+    dev_mode = "--dev" in sys.argv or "--reload" in sys.argv
+
+    if dev_mode:
+        uvicorn.run(
+            "app:app",
+            host="0.0.0.0",
+            port=port,
+            reload=True,
+            reload_dirs=["."],
+            reload_excludes=["dist/**", "build/**", "data/uploads/**", "data/**", ".git/**", "scratch/**", "__pycache__/**"],
+            log_level="info"
+        )
+    else:
+        print("⚡ Ağ ve Performans Optimizasyonu: Aktif (Maksimum Hız)")
+        uvicorn.run(
+            "app:app",
+            host="0.0.0.0",
+            port=port,
+            reload=False,
+            log_level="warning",
+            access_log=False,
+            timeout_keep_alive=65
+        )
 
