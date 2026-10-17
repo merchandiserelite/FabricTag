@@ -134,12 +134,70 @@ window.__texflowApp = createApp({
         const isDarkMode = ref(localStorage.getItem('texflow_dark_mode') !== 'false');
 
         const THEME_CONFIGS = {
-            'theme-emerald': { primary: '#10b981', hover: '#059669', light: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)' },
-            'theme-sapphire': { primary: '#0284c7', hover: '#0369a1', light: 'rgba(2, 132, 199, 0.15)', border: 'rgba(2, 132, 199, 0.3)' },
-            'theme-purple': { primary: '#9333ea', hover: '#7e22ce', light: 'rgba(147, 51, 234, 0.15)', border: 'rgba(147, 51, 234, 0.3)' },
-            'theme-amber': { primary: '#d97706', hover: '#b45309', light: 'rgba(217, 119, 6, 0.15)', border: 'rgba(217, 119, 6, 0.3)' },
-            'theme-rose': { primary: '#e11d48', hover: '#be123c', light: 'rgba(225, 29, 72, 0.15)', border: 'rgba(225, 29, 72, 0.3)' }
+            'theme-emerald': {
+                name: 'Zümrüt Yeşili',
+                primary: '#10b981',
+                hover: '#059669',
+                light: 'rgba(16, 185, 129, 0.15)',
+                border: 'rgba(16, 185, 129, 0.3)',
+                contrast: '#d97706',
+                contrastHover: '#b45309',
+                contrastName: 'Altın Sarısı',
+                desc: 'Tıklama ve aktif kontrast rengi Altın Sarısıdır.'
+            },
+            'theme-sapphire': {
+                name: 'Okyanus Mavisi',
+                primary: '#0284c7',
+                hover: '#0369a1',
+                light: 'rgba(2, 132, 199, 0.15)',
+                border: 'rgba(2, 132, 199, 0.3)',
+                contrast: '#d97706',
+                contrastHover: '#b45309',
+                contrastName: 'Altın Sarısı',
+                desc: 'Tıklama ve aktif kontrast rengi Altın Sarısıdır.'
+            },
+            'theme-purple': {
+                name: 'Asil Mor',
+                primary: '#9333ea',
+                hover: '#7e22ce',
+                light: 'rgba(147, 51, 234, 0.15)',
+                border: 'rgba(147, 51, 234, 0.3)',
+                contrast: '#d97706',
+                contrastHover: '#b45309',
+                contrastName: 'Altın Sarısı',
+                desc: 'Tıklama ve aktif kontrast rengi Altın Sarısıdır.'
+            },
+            'theme-amber': {
+                name: 'Altın Sarısı',
+                primary: '#d97706',
+                hover: '#b45309',
+                light: 'rgba(217, 119, 6, 0.15)',
+                border: 'rgba(217, 119, 6, 0.3)',
+                contrast: '#10b981',
+                contrastHover: '#059669',
+                contrastName: 'Zümrüt Yeşili',
+                desc: 'Tıklama ve aktif kontrast rengi Zümrüt Yeşilidir.'
+            },
+            'theme-rose': {
+                name: 'Gül Kurusu',
+                primary: '#e11d48',
+                hover: '#be123c',
+                light: 'rgba(225, 29, 72, 0.15)',
+                border: 'rgba(225, 29, 72, 0.3)',
+                contrast: '#d97706',
+                contrastHover: '#b45309',
+                contrastName: 'Altın Sarısı',
+                desc: 'Tıklama ve aktif kontrast rengi Altın Sarısıdır.'
+            }
         };
+
+        const themeOptionsList = [
+            { id: 'theme-emerald', ...THEME_CONFIGS['theme-emerald'] },
+            { id: 'theme-sapphire', ...THEME_CONFIGS['theme-sapphire'] },
+            { id: 'theme-purple', ...THEME_CONFIGS['theme-purple'] },
+            { id: 'theme-amber', ...THEME_CONFIGS['theme-amber'] },
+            { id: 'theme-rose', ...THEME_CONFIGS['theme-rose'] }
+        ];
 
         const applyThemeStyles = (name) => {
             const cfg = THEME_CONFIGS[name] || THEME_CONFIGS['theme-emerald'];
@@ -148,6 +206,8 @@ window.__texflowApp = createApp({
             root.style.setProperty('--theme-primary-hover', cfg.hover);
             root.style.setProperty('--theme-primary-light', cfg.light);
             root.style.setProperty('--theme-border', cfg.border);
+            root.style.setProperty('--theme-contrast', cfg.contrast || '#d97706');
+            root.style.setProperty('--theme-contrast-hover', cfg.contrastHover || '#b45309');
             root.className = name + (isDarkMode.value ? ' dark' : '');
             
             const appEl = document.getElementById('app');
@@ -156,6 +216,8 @@ window.__texflowApp = createApp({
                 appEl.style.setProperty('--theme-primary-hover', cfg.hover);
                 appEl.style.setProperty('--theme-primary-light', cfg.light);
                 appEl.style.setProperty('--theme-border', cfg.border);
+                appEl.style.setProperty('--theme-contrast', cfg.contrast || '#d97706');
+                appEl.style.setProperty('--theme-contrast-hover', cfg.contrastHover || '#b45309');
             }
         };
 
@@ -11210,6 +11272,8 @@ window.__texflowApp = createApp({
             deleteUser,
             themeName,
             setTheme,
+            THEME_CONFIGS,
+            themeOptionsList,
             isDarkMode,
             toggleDarkMode,
             loginForm,

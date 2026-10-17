@@ -69,30 +69,40 @@
             --theme-primary-hover: #059669;
             --theme-primary-light: rgba(16, 185, 129, 0.15);
             --theme-border: rgba(16, 185, 129, 0.3);
+            --theme-contrast: #d97706;
+            --theme-contrast-hover: #b45309;
         }
         .theme-sapphire, html.theme-sapphire, body.theme-sapphire, #app.theme-sapphire {
             --theme-primary: #0284c7 !important;
             --theme-primary-hover: #0369a1 !important;
             --theme-primary-light: rgba(2, 132, 199, 0.15) !important;
             --theme-border: rgba(2, 132, 199, 0.3) !important;
+            --theme-contrast: #d97706 !important;
+            --theme-contrast-hover: #b45309 !important;
         }
         .theme-purple, html.theme-purple, body.theme-purple, #app.theme-purple {
             --theme-primary: #9333ea !important;
             --theme-primary-hover: #7e22ce !important;
             --theme-primary-light: rgba(147, 51, 234, 0.15) !important;
             --theme-border: rgba(147, 51, 234, 0.3) !important;
+            --theme-contrast: #d97706 !important;
+            --theme-contrast-hover: #b45309 !important;
         }
         .theme-amber, html.theme-amber, body.theme-amber, #app.theme-amber {
             --theme-primary: #d97706 !important;
             --theme-primary-hover: #b45309 !important;
             --theme-primary-light: rgba(217, 119, 6, 0.15) !important;
             --theme-border: rgba(217, 119, 6, 0.3) !important;
+            --theme-contrast: #10b981 !important;
+            --theme-contrast-hover: #059669 !important;
         }
         .theme-rose, html.theme-rose, body.theme-rose, #app.theme-rose {
             --theme-primary: #e11d48 !important;
             --theme-primary-hover: #be123c !important;
             --theme-primary-light: rgba(225, 29, 72, 0.15) !important;
             --theme-border: rgba(225, 29, 72, 0.3) !important;
+            --theme-contrast: #d97706 !important;
+            --theme-contrast-hover: #b45309 !important;
         }
 
         .btn-theme {
@@ -103,8 +113,27 @@
         .btn-theme:hover {
             background-color: var(--theme-primary-hover, #059669) !important;
         }
+        .btn-theme:active {
+            background-color: var(--theme-contrast, #d97706) !important;
+            color: #ffffff !important;
+        }
+        .btn-theme-contrast {
+            background-color: var(--theme-contrast, #d97706) !important;
+            color: #ffffff !important;
+            transition: all 0.2s ease;
+        }
+        .btn-theme-contrast:hover {
+            background-color: var(--theme-contrast-hover, #b45309) !important;
+        }
+        .btn-theme-contrast:active {
+            background-color: var(--theme-primary, #10b981) !important;
+            color: #ffffff !important;
+        }
         .text-theme {
             color: var(--theme-primary, #10b981) !important;
+        }
+        .text-theme-contrast {
+            color: var(--theme-contrast, #d97706) !important;
         }
         .bg-theme-light {
             background-color: var(--theme-primary-light, rgba(16, 185, 129, 0.15)) !important;
@@ -133,6 +162,17 @@
         #app.theme-amber .hover\:bg-emerald-600:hover, #app.theme-amber .hover\:bg-emerald-500:hover,
         #app.theme-rose .hover\:bg-emerald-600:hover, #app.theme-rose .hover\:bg-emerald-500:hover {
             background-color: var(--theme-primary-hover) !important;
+        }
+        /* DÜĞMEYE TIKLANDIĞINDA (:active) TEMA KONTRAST RENGİNE DÖNÜŞÜM */
+        html:not(.theme-amber) .bg-emerald-500:active, html:not(.theme-amber) .bg-emerald-600:active,
+        #app:not(.theme-amber) .bg-emerald-500:active, #app:not(.theme-amber) .bg-emerald-600:active {
+            background-color: var(--theme-contrast, #d97706) !important;
+            color: #ffffff !important;
+        }
+        html.theme-amber .bg-emerald-500:active, html.theme-amber .bg-emerald-600:active,
+        #app.theme-amber .bg-emerald-500:active, #app.theme-amber .bg-emerald-600:active {
+            background-color: var(--theme-contrast, #10b981) !important;
+            color: #ffffff !important;
         }
         html.theme-sapphire .text-emerald-500, html.theme-sapphire .text-emerald-600, html.theme-sapphire .text-emerald-400,
         html.theme-purple .text-emerald-500, html.theme-purple .text-emerald-600, html.theme-purple .text-emerald-400,
@@ -1243,17 +1283,6 @@
                         <button @click="changeZoom(5)" class="h-full px-2.5 hover:bg-slate-700/40 text-slate-400 hover:text-white font-black text-sm flex items-center justify-center transition select-none cursor-pointer" title="Yazıları Büyüt (+5%)">+</button>
                     </div>
 
-                    <!-- TEMA RENK SEÇİCİ (GECE/GÜNDÜZ DÜĞMESİ GİBİ ÇERÇEVELİ) -->
-                    <div class="h-9 flex items-center gap-2 px-3 rounded-xl border transition shadow-sm"
-                         :class="isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
-                         title="Tema Renk Seçenekleri">
-                        <button type="button" @click="setTheme('theme-emerald')" style="background-color: #10b981 !important;" class="w-5 h-5 rounded-full transition-all hover:scale-125 cursor-pointer shadow-sm active:scale-95" :class="themeName === 'theme-emerald' ? 'ring-2 ring-emerald-400 scale-110 !opacity-100' : 'opacity-70 hover:opacity-100'" title="Zümrüt Yeşili"></button>
-                        <button type="button" @click="setTheme('theme-sapphire')" style="background-color: #0284c7 !important;" class="w-5 h-5 rounded-full transition-all hover:scale-125 cursor-pointer shadow-sm active:scale-95" :class="themeName === 'theme-sapphire' ? 'ring-2 ring-sky-400 scale-110 !opacity-100' : 'opacity-70 hover:opacity-100'" title="Okyanus Mavisi"></button>
-                        <button type="button" @click="setTheme('theme-purple')" style="background-color: #9333ea !important;" class="w-5 h-5 rounded-full transition-all hover:scale-125 cursor-pointer shadow-sm active:scale-95" :class="themeName === 'theme-purple' ? 'ring-2 ring-purple-400 scale-110 !opacity-100' : 'opacity-70 hover:opacity-100'" title="Asil Mor"></button>
-                        <button type="button" @click="setTheme('theme-amber')" style="background-color: #d97706 !important;" class="w-5 h-5 rounded-full transition-all hover:scale-125 cursor-pointer shadow-sm active:scale-95" :class="themeName === 'theme-amber' ? 'ring-2 ring-amber-400 scale-110 !opacity-100' : 'opacity-70 hover:opacity-100'" title="Altın Sarısı"></button>
-                        <button type="button" @click="setTheme('theme-rose')" style="background-color: #e11d48 !important;" class="w-5 h-5 rounded-full transition-all hover:scale-125 cursor-pointer shadow-sm active:scale-95" :class="themeName === 'theme-rose' ? 'ring-2 ring-rose-400 scale-110 !opacity-100' : 'opacity-70 hover:opacity-100'" title="Gül Kurusu"></button>
-                    </div>
-
                     <!-- GECE / GÜNDÜZ DÜĞMESİ -->
                     <button @click="toggleDarkMode" class="h-9 w-9 rounded-xl border text-xs flex items-center justify-center transition shadow-sm cursor-pointer"
                             :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-amber-400' : 'bg-white border-slate-200 text-slate-700'"
@@ -1880,7 +1909,7 @@
                             <!-- BEDENLERİ GİZLE / GÖSTER -->
                             <button @click="toggleSizesCollapsed"
                                     class="h-9 px-2.5 rounded-xl text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 select-none"
-                                    :class="areSizesCollapsed ? 'bg-amber-600 hover:bg-amber-500' : 'btn-theme'"
+                                    :class="areSizesCollapsed ? 'btn-theme-contrast' : 'btn-theme'"
                                     :title="areSizesCollapsed ? 'Tüm beden sütunlarını genişlet' : 'Tüm beden sütunlarını gizle'">
                                 <span>Bedenleri</span>
                                 <span class="text-[9.5px] text-white/90 font-semibold">{{ areSizesCollapsed ? 'Göster' : 'Gizle' }}</span>
@@ -1889,7 +1918,7 @@
                             <!-- KUMAŞ DETAYLARINI GİZLE / GÖSTER -->
                             <button @click="toggleFabricCollapsed"
                                     class="h-9 px-2.5 rounded-xl text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 select-none"
-                                    :class="areFabricColsCollapsed ? 'bg-amber-600 hover:bg-amber-500' : 'btn-theme'"
+                                    :class="areFabricColsCollapsed ? 'btn-theme-contrast' : 'btn-theme'"
                                     :title="areFabricColsCollapsed ? 'Kumaş detay sütunlarını genişlet / göster' : 'Kumaş detay sütunlarını gizle'">
                                 <span>Kumaşları</span>
                                 <span class="text-[9.5px] text-white/90 font-semibold">{{ areFabricColsCollapsed ? 'Detay Göster' : 'Detay Gizle' }}</span>
@@ -6394,6 +6423,132 @@
                 <!-- 7. MENÜ & ALAN ÖZELLEŞTİRME & TAM SİSTEM YEDEKLEME PANELİ -->
                 <section v-if="activeMenu === 'menu_yonetimi'" class="space-y-6 w-full max-w-[1600px] mx-auto px-1 sm:px-4 pb-16">
                     
+                    <!-- DÜĞME VE SİSTEM TEMA RENGİ ÖZELLEŞTİRME KARTI -->
+                    <div class="p-6 rounded-2xl border transition shadow-sm space-y-6"
+                         :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b"
+                             :class="isDarkMode ? 'border-slate-800' : 'border-slate-100'">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+                                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+                                        <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+                                        <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+                                        <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+                                        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="text-lg font-black tracking-tight" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                            Düğme ve Sistem Tema Rengi
+                                        </h3>
+                                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                            Kişisel / Bilgisayara Özel Hafıza
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 mt-0.5">
+                                        Sistemdeki tüm düğmelerin ana rengini ve tıklama/aktif kontrast rengini buradan seçebilirsiniz. Seçiminiz bu bilgisayar için kalıcı olarak saklanır.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Seçili Tema Bilgi Rozeti -->
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-semibold text-slate-400">Aktif Düğme Rengi:</span>
+                                <div class="px-3.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 shadow-xs"
+                                     :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-100 border-slate-200 text-slate-800'">
+                                    <span class="w-3 h-3 rounded-full shrink-0 shadow-xs"
+                                          :style="{ backgroundColor: THEME_CONFIGS[themeName]?.primary || '#10b981' }"></span>
+                                    <span>{{ THEME_CONFIGS[themeName]?.name || 'Zümrüt Yeşili' }}</span>
+                                    <span class="text-[10px] px-1.5 py-0.2 rounded font-mono font-extrabold"
+                                          :class="themeName === 'theme-amber' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-500'">
+                                        Kontrast: {{ THEME_CONFIGS[themeName]?.contrastName || 'Altın Sarısı' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5 Tema Seçenek Kartı Grid -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                            <div v-for="t in themeOptionsList" :key="t.id"
+                                 @click="setTheme(t.id)"
+                                 class="p-4 rounded-xl border-2 transition-all cursor-pointer relative group flex flex-col justify-between select-none"
+                                 :class="[
+                                     themeName === t.id 
+                                         ? (isDarkMode ? 'bg-slate-800/90 border-emerald-500 shadow-md ring-2 ring-emerald-500/30' : 'bg-white border-emerald-500 shadow-md ring-2 ring-emerald-500/20')
+                                         : (isDarkMode ? 'bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-800/40' : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-white')
+                                 ]">
+                                
+                                <!-- Üst Satır: Renk Çemberi ve Başlık -->
+                                <div>
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div class="flex items-center gap-2.5">
+                                            <span class="w-7 h-7 rounded-xl shadow-md border-2 border-white/20 transition transform group-hover:scale-110 flex items-center justify-center shrink-0"
+                                                  :style="{ backgroundColor: t.primary }">
+                                                <svg v-if="themeName === t.id" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                    <polyline points="20 6 9 17 4 12"/>
+                                                </svg>
+                                            </span>
+                                            <div>
+                                                <span class="text-xs font-black block" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                                    {{ t.name }}
+                                                </span>
+                                                <span class="text-[10px] font-mono text-slate-400 block">{{ t.primary }}</span>
+                                            </div>
+                                        </div>
+                                        <span v-if="themeName === t.id"
+                                              class="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-md btn-theme text-white shadow-xs">
+                                            Seçili
+                                        </span>
+                                    </div>
+
+                                    <!-- Kontrast Kuralı Göstergesi -->
+                                    <div class="p-2 rounded-lg border text-[11px] space-y-1 mb-3 transition"
+                                         :class="isDarkMode ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-white border-slate-200 text-slate-700'">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[10px] text-slate-400 font-medium">Tıklama Kontrastı:</span>
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs" :style="{ backgroundColor: t.contrast }"></span>
+                                                <span class="font-bold text-[10.5px]" :style="{ color: t.contrast }">{{ t.contrastName }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Alt Kısım: Canlı Düğme Butonu -->
+                                <div class="pt-2 border-t" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                    <button type="button"
+                                            @click.stop="setTheme(t.id)"
+                                            class="w-full py-1.5 px-2 rounded-lg text-white text-[11px] font-bold transition shadow-sm active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                                            :style="{
+                                                backgroundColor: t.primary
+                                            }">
+                                        <span>Düğmeyi Seç</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Akıllı Kontrast Kuralı Açıklama Kutusu -->
+                        <div class="p-4 rounded-xl border flex items-start gap-3 transition"
+                             :class="isDarkMode ? 'bg-slate-950/70 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'">
+                            <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
+                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            </div>
+                            <div class="text-xs space-y-1">
+                                <div class="font-bold flex items-center gap-2">
+                                    <span :class="isDarkMode ? 'text-white' : 'text-slate-900'">Akıllı Düğme Tıklama & Aktif Kontrast Kuralı:</span>
+                                    <span class="text-[10px] font-mono px-2 py-0.2 rounded bg-amber-500/10 text-amber-500 font-bold">Özel Mantık</span>
+                                </div>
+                                <p class="text-slate-400 leading-relaxed text-[11.5px]">
+                                    <b class="text-emerald-400">Zümrüt Yeşili</b>, <b class="text-sky-400">Okyanus Mavisi</b>, <b class="text-purple-400">Asil Mor</b> ve <b class="text-rose-400">Gül Kurusu</b> temalarında düğmelere tıklandığında veya aktif hale geldiğinde zıt kontrast renk olarak <span class="text-amber-500 font-bold">Altın Sarısı</span> kullanılır.<br>
+                                    Ana tema olarak <b class="text-amber-500">Altın Sarısı</b> seçildiğinde ise, düğmenin kaybolmaması ve net ayırt edilmesi için zıt kontrast rengi otomatik olarak <span class="text-emerald-500 font-bold">Zümrüt Yeşili</span>'ne döner.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- KİŞİSEL YAZI TİPİ, FONT BÜYÜKLÜĞÜ VE YAZI RENGİ ÖZELLEŞTİRME KARTI -->
                     <div class="p-6 rounded-2xl border transition shadow-sm space-y-6"
                          :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
@@ -6634,6 +6789,21 @@
                                         <div class="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Sipariş Adedi</div>
                                         <div class="font-bold font-mono">14.500 Adet</div>
                                     </div>
+                                </div>
+
+                                <!-- Düğme ve Kontrast Canlı Testi -->
+                                <div class="mt-3.5 pt-3 border-t flex flex-wrap items-center gap-3"
+                                     :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                    <span class="text-[11px] font-bold text-slate-400">Düğme Canlı Testi:</span>
+                                    <button type="button" class="btn-theme px-3.5 py-1.5 rounded-xl text-xs font-bold transition shadow-sm hover:brightness-110 active:scale-95 cursor-pointer select-none">
+                                        Normal Düğme (Tıklayın)
+                                    </button>
+                                    <button type="button" class="btn-theme-contrast px-3.5 py-1.5 rounded-xl text-xs font-bold transition shadow-sm hover:brightness-110 active:scale-95 cursor-pointer select-none">
+                                        Aktif Kontrast Düğme
+                                    </button>
+                                    <span class="text-[11px] text-slate-400 italic">
+                                        (Tıklandığında veya aktif olduğunda Altın Sarısı / Zümrüt Yeşili zıt kontrast rengine döner)
+                                    </span>
                                 </div>
                             </div>
                         </div>
