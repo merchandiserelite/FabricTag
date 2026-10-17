@@ -10406,6 +10406,39 @@ window.__texflowApp = createApp({
             return val;
         };
 
+        const getCartonSizeHeaders = (carton = null) => {
+            // 1. If carton has detected_sizes list
+            if (carton && Array.isArray(carton.detected_sizes) && carton.detected_sizes.length > 0) {
+                return carton.detected_sizes;
+            }
+            // 2. If packingData has detected_sizes list
+            if (packingData.value && Array.isArray(packingData.value.detected_sizes) && packingData.value.detected_sizes.length > 0) {
+                return packingData.value.detected_sizes;
+            }
+            // 3. If carton has sizes object keys
+            if (carton && carton.sizes && typeof carton.sizes === 'object') {
+                const keys = Object.keys(carton.sizes);
+                if (keys.length > 0) return keys;
+            }
+            // 4. If carton has items with sizes
+            if (carton && Array.isArray(carton.items) && carton.items.length > 0) {
+                const szSet = new Set();
+                carton.items.forEach(it => {
+                    if (it && it.sizes && typeof it.sizes === 'object') {
+                        Object.keys(it.sizes).forEach(k => szSet.add(k));
+                    }
+                });
+                if (szSet.size > 0) return Array.from(szSet);
+            }
+            // 5. If packingData has size_summary keys
+            if (packingData.value && packingData.value.size_summary && typeof packingData.value.size_summary === 'object') {
+                const keys = Object.keys(packingData.value.size_summary);
+                if (keys.length > 0) return keys;
+            }
+            // 6. Fallback default
+            return ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+        };
+
         const isProcessingPacking = ref(false);
         const packingProcessSuccess = ref(false);
         const packingProcessSuccessMsg = ref('');
@@ -11623,7 +11656,8 @@ window.__texflowApp = createApp({
             getPrintCartonPairs,
             printShowPokaBadge,
             printCustomBrand,
-            formatCartonSizeQty
+            formatCartonSizeQty,
+            getCartonSizeHeaders
         };
 
 

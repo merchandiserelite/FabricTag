@@ -5715,11 +5715,7 @@
                                                                 :class="[designerTemplate.show_grid_lines ? 'border-b border-black' : 'border-b border-transparent']">
                                                                 <th class="p-1 text-left" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Style</th>
                                                                 <th class="p-1 text-left" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Colour</th>
-                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">XS</th>
-                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">S</th>
-                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">M</th>
-                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">L</th>
-                                                                <th class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">XL</th>
+                                                                <th v-for="sz in getCartonSizeHeaders(null)" :key="'dt-sz-'+sz" class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">{{ sz }}</th>
                                                                 <th class="p-1 font-black">Total</th>
                                                             </tr>
                                                         </thead>
@@ -5729,11 +5725,9 @@
                                                                 :class="[designerTemplate.show_grid_lines ? 'border-b border-black' : 'border-b border-transparent']">
                                                                 <td class="p-1 text-left font-mono font-bold" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">43A05-03830D</td>
                                                                 <td class="p-1 text-left text-[10px]" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">444-2 Cinnamon</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">5</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">8</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">12</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">10</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">5</td>
+                                                                <td v-for="(sz, idx) in getCartonSizeHeaders(null)" :key="'dt-r0-'+sz" class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">
+                                                                    {{ [5, 8, 12, 10, 5, 4, 3][idx] || 5 }}
+                                                                </td>
                                                                 <td class="p-1 font-mono font-black text-xs">40</td>
                                                             </tr>
                                                             <!-- 2. Ürün Varyantı (x2) -->
@@ -5741,11 +5735,9 @@
                                                                 :class="[designerTemplate.show_grid_lines ? 'border-b border-black' : 'border-b border-transparent']">
                                                                 <td class="p-1 text-left font-mono font-bold" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">43A05-03830D</td>
                                                                 <td class="p-1 text-left text-[10px]" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">200-1 Dark Blue</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">2</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">4</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">6</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">4</td>
-                                                                <td class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">2</td>
+                                                                <td v-for="(sz, idx) in getCartonSizeHeaders(null)" :key="'dt-r1-'+sz" class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">
+                                                                    {{ [2, 4, 6, 4, 2, 1, 1][idx] || 2 }}
+                                                                </td>
                                                                 <td class="p-1 font-mono font-black text-xs">18</td>
                                                             </tr>
                                                         </tbody>
@@ -6016,12 +6008,7 @@
                                                         <tr class="border-b border-black font-bold text-[11px] bg-white">
                                                             <th class="border-r border-black p-1 text-left w-24">Style</th>
                                                             <th class="border-r border-black p-1 text-left w-28">Colour</th>
-                                                            <th class="border-r border-black p-1">XS</th>
-                                                            <th class="border-r border-black p-1">S</th>
-                                                            <th class="border-r border-black p-1">M</th>
-                                                            <th class="border-r border-black p-1">L</th>
-                                                            <th class="border-r border-black p-1">XL</th>
-                                                            <th class="border-r border-black p-1">XXL</th>
+                                                            <th v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-h0-'+sz" class="border-r border-black p-1">{{ sz }}</th>
                                                             <th class="p-1 font-black">Total</th>
                                                         </tr>
                                                     </thead>
@@ -6030,12 +6017,9 @@
                                                         <tr class="border-b border-black text-[12px] font-semibold h-8">
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].model : '-' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].color : '-' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XS) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.S) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.M) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.L) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XL) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes && pair[0].items[0].sizes.XXL) }}</td>
+                                                            <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-0-'+sz" class="border-r border-black p-1 font-mono">
+                                                                {{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes ? pair[0].items[0].sizes[sz] : '') }}
+                                                            </td>
                                                             <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[0] ? formatCartonSizeQty(pair[0].items[0].total_qty) : '' }}</td>
                                                         </tr>
                                                         <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
@@ -6043,12 +6027,9 @@
                                                             :class="{'opacity-20': !pair[0].items || pair[0].items.length < 2}">
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].model : '' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].color : '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XS) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.S) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.M) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.L) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XL) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes && pair[0].items[1].sizes.XXL) }}</td>
+                                                            <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-1-'+sz" class="border-r border-black p-1 font-mono">
+                                                                {{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes ? pair[0].items[1].sizes[sz] : '') }}
+                                                            </td>
                                                             <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[1] ? formatCartonSizeQty(pair[0].items[1].total_qty) : '' }}</td>
                                                         </tr>
                                                     </tbody>
@@ -6115,12 +6096,7 @@
                                                         <tr class="border-b border-black font-bold text-[11px] bg-white">
                                                             <th class="border-r border-black p-1 text-left w-24">Style</th>
                                                             <th class="border-r border-black p-1 text-left w-28">Colour</th>
-                                                            <th class="border-r border-black p-1">XS</th>
-                                                            <th class="border-r border-black p-1">S</th>
-                                                            <th class="border-r border-black p-1">M</th>
-                                                            <th class="border-r border-black p-1">L</th>
-                                                            <th class="border-r border-black p-1">XL</th>
-                                                            <th class="border-r border-black p-1">XXL</th>
+                                                            <th v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-h1-'+sz" class="border-r border-black p-1">{{ sz }}</th>
                                                             <th class="p-1 font-black">Total</th>
                                                         </tr>
                                                     </thead>
@@ -6129,12 +6105,9 @@
                                                         <tr class="border-b border-black text-[12px] font-semibold h-8">
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].model : '-' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].color : '-' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XS) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.S) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.M) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.L) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XL) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes && pair[1].items[0].sizes.XXL) }}</td>
+                                                            <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-0-'+sz" class="border-r border-black p-1 font-mono">
+                                                                {{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes ? pair[1].items[0].sizes[sz] : '') }}
+                                                            </td>
                                                             <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[0] ? formatCartonSizeQty(pair[1].items[0].total_qty) : '' }}</td>
                                                         </tr>
                                                         <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
@@ -6142,12 +6115,9 @@
                                                             :class="{'opacity-20': !pair[1].items || pair[1].items.length < 2}">
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].model : '' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].color : '' }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XS) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.S) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.M) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.L) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XL) }}</td>
-                                                            <td class="border-r border-black p-1 font-mono">{{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes && pair[1].items[1].sizes.XXL) }}</td>
+                                                            <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-1-'+sz" class="border-r border-black p-1 font-mono">
+                                                                {{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes ? pair[1].items[1].sizes[sz] : '') }}
+                                                            </td>
                                                             <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[1] ? formatCartonSizeQty(pair[1].items[1].total_qty) : '' }}</td>
                                                         </tr>
                                                     </tbody>
@@ -6231,12 +6201,7 @@
                                                     <tr class="border-b border-black font-bold text-xs bg-white">
                                                         <th class="border-r border-black p-2 text-left w-36">Style</th>
                                                         <th class="border-r border-black p-2 text-left w-44">Colour</th>
-                                                        <th class="border-r border-black p-2">XS</th>
-                                                        <th class="border-r border-black p-2">S</th>
-                                                        <th class="border-r border-black p-2">M</th>
-                                                        <th class="border-r border-black p-2">L</th>
-                                                        <th class="border-r border-black p-2">XL</th>
-                                                        <th class="border-r border-black p-2">XXL</th>
+                                                        <th v-for="sz in getCartonSizeHeaders(c)" :key="'sz-hc-'+sz" class="border-r border-black p-2">{{ sz }}</th>
                                                         <th class="p-2 font-black">Total</th>
                                                     </tr>
                                                 </thead>
@@ -6244,12 +6209,9 @@
                                                     <tr class="border-b border-black text-sm font-semibold h-10">
                                                         <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[0] ? c.items[0].model : '-' }}</td>
                                                         <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XS) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.S) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.M) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.L) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XL) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes && c.items[0].sizes.XXL) }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-0-'+sz" class="border-r border-black p-2 font-mono">
+                                                            {{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes ? c.items[0].sizes[sz] : '') }}
+                                                        </td>
                                                         <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[0] ? formatCartonSizeQty(c.items[0].total_qty) : '' }}</td>
                                                     </tr>
                                                     <!-- 2. Ürün Satırı -->
@@ -6257,12 +6219,9 @@
                                                         :class="{'opacity-20': !c.items || c.items.length < 2}">
                                                         <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[1] ? c.items[1].model : '' }}</td>
                                                         <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[1] ? c.items[1].color : '' }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XS) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.S) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.M) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.L) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XL) }}</td>
-                                                        <td class="border-r border-black p-2 font-mono">{{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes && c.items[1].sizes.XXL) }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-1-'+sz" class="border-r border-black p-2 font-mono">
+                                                            {{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes ? c.items[1].sizes[sz] : '') }}
+                                                        </td>
                                                         <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[1] ? formatCartonSizeQty(c.items[1].total_qty) : '' }}</td>
                                                     </tr>
                                                 </tbody>

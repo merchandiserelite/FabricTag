@@ -2016,12 +2016,51 @@ Critical Rules:
                     is_vertical_block = True
                     break
 
-        known_sizes = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '34', '36', '38', '40', '42', '44', '46', '48']
+        # Dynamic size detection: Detect whatever size headers are in the Excel file
+        meta_kw = [
+            'koli', 'carton', 'box', 'ctn', 'no', 'sira', 'row', 'asorti',
+            'style', 'model', 'artikel', 'art',
+            'renk', 'color', 'colour',
+            'shop', 'kanal', 'channel', 'store', 'magaza', 'dukkan',
+            'toplam', 'total', 'koli icindeki', 'adet', 'qty', 'quantity',
+            'brand', 'marka', 'customer', 'musteri',
+            'agirlik', 'weight', 'net', 'brut', 'gross', 'gw', 'nw',
+            'ebat', 'olcu', 'olculer', 'dimension', 'measurement', 'measurements',
+            'birim', 'unit', 'gr', 'gram', 'kg',
+            'not', 'note', 'notes', 'aciklama',
+            'grup', 'group', 'grup say', 'group count', 'bedenler', 'beden', 'sizes', 'size'
+        ]
+        known_alpha = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '4XL', '5XL', 'STD', 'OS', 'ONE SIZE']
+
         size_cols = {}
-        for c_idx, h in enumerate(headers):
-            h_u = h.upper()
-            if h_u in known_sizes:
-                size_cols[h_u] = c_idx
+        for c_idx, raw_h in enumerate(rows[header_idx]):
+            if raw_h is None:
+                continue
+
+            # Pure integer/float size (e.g. 1, 2, 3 or 34, 36, 38)
+            if isinstance(raw_h, (int, float)) and 0 <= raw_h <= 999:
+                s_name = str(int(raw_h)) if (isinstance(raw_h, int) or raw_h.is_integer()) else str(raw_h)
+                size_cols[s_name] = c_idx
+                continue
+
+            s = str(raw_h).strip()
+            if not s:
+                continue
+
+            s_u = s.upper()
+            s_l = s.lower().replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+
+            if s_u in known_alpha or s.isdigit() or re.match(r'^\d+[\s\/\-]\d+$', s) or re.match(r'^(?:XXS|XS|S|M|L|XL|XXL|2XL|3XL)[\s\/\-](?:XXS|XS|S|M|L|XL|XXL|2XL|3XL)$', s, re.IGNORECASE):
+                size_cols[s_u] = c_idx
+                continue
+
+            # Check if it matches any known metadata keywords
+            if any(s_l == kw or s_l.startswith(kw + ' ') or s_l.endswith(' ' + kw) for kw in meta_kw):
+                continue
+
+            # Any remaining short string token that doesn't conflict with key terms
+            if len(s) <= 8 and not any(k in s_l for k in ['koli', 'toplam', 'total', 'model', 'style', 'color', 'renk', 'shop', 'brand', 'adet', 'kg', 'net', 'brut']):
+                size_cols[s_u] = c_idx
 
         raw_items = []
         model_set = set()
@@ -2151,7 +2190,7 @@ Critical Rules:
                 for sz_name, sz_cidx in size_cols.items():
                     if len(r) > sz_cidx and r[sz_cidx] is not None:
                         try:
-                            s_qty = int(r[sz_cidx])
+                            s_qty = int(float(r[sz_cidx]))
                             if s_qty > 0: row_sizes[sz_name] = s_qty
                         except: pass
 
@@ -2265,6 +2304,7 @@ Critical Rules:
                     'measurements': item.get('measurements') or '60X40X30',
                     'total_qty': qty,
                     'sizes': dict(sizes),
+                    'detected_sizes': list(size_cols.keys()),
                     'items': [{
                         'model': mod,
                         'color': col,
@@ -2320,6 +2360,7 @@ Critical Rules:
             "total_cartons": len(cartons),
             "total_quantity": sum(c['total_qty'] for c in cartons),
             "size_summary": dict(size_summary),
+            "detected_sizes": list(size_cols.keys()),
             "channel_summary": channel_summary,
             "cartons": cartons
         }
@@ -2426,6 +2467,11 @@ Do not include markdown code block formatting or explanations, output only raw J
                         c["carton_label_text"] = f"CARTON NO: {c.get('carton_no', 1)} OF {c.get('group_count', 1)}"
 
                     parsed["channel_summary"] = channel_summary
+                    if "size_summary" in parsed and isinstance(parsed["size_summary"], dict):
+                        parsed["detected_sizes"] = list(parsed["size_summary"].keys())
+                    for c in parsed.get("cartons", []):
+                        if "detected_sizes" not in c and "detected_sizes" in parsed:
+                            c["detected_sizes"] = parsed["detected_sizes"]
                     return parsed
             except Exception as e:
                 print(f"Gemini {m_name} parse error: {e}")
