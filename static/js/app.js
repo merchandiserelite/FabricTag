@@ -204,6 +204,30 @@ window.__texflowApp = createApp({
             { size: '16px', label: '16px (Ekstra Büyük)' }
         ];
 
+        const colorPresetsLight = [
+            { name: 'Kırmızı', hex: '#dc2626' },
+            { name: 'Koyu Yeşil', hex: '#166534' },
+            { name: 'Canlı Mavi', hex: '#2563eb' },
+            { name: 'Bordo', hex: '#991b1b' },
+            { name: 'Zümrüt Yeşili', hex: '#059669' },
+            { name: 'Lacivert', hex: '#1e3a8a' },
+            { name: 'Canlı Mor', hex: '#7c3aed' },
+            { name: 'Amber / Turuncu', hex: '#d97706' },
+            { name: 'Net Siyah', hex: '#000000' },
+            { name: 'Koyu Füme', hex: '#334155' }
+        ];
+
+        const colorPresetsDark = [
+            { name: 'Saf Beyaz', hex: '#ffffff' },
+            { name: 'Canlı Mavi', hex: '#60a5fa' },
+            { name: 'Canlı Yeşil', hex: '#22c55e' },
+            { name: 'Canlı Kırmızı', hex: '#f87171' },
+            { name: 'Altın Sarısı', hex: '#facc15' },
+            { name: 'Turkuaz', hex: '#2dd4bf' },
+            { name: 'Lila / Mor', hex: '#c084fc' },
+            { name: 'Platin Gri', hex: '#e2e8f0' }
+        ];
+
         const defaultFontPrefs = {
             fontFamily: "'Inter', sans-serif",
             fontSize: '12px',
@@ -260,25 +284,31 @@ window.__texflowApp = createApp({
                 .master-table thead th,
                 .master-table thead th *,
                 .master-table tbody td,
-                .master-table tbody td *:not(.image-badge):not(.image-action-text),
+                .master-table tbody td *:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
                 .master-table tbody input,
                 .master-table tbody select,
                 .master-table tbody textarea,
-                .master-table tbody span:not(.image-badge):not(.image-action-text),
-                .master-table tbody div:not(.image-badge):not(.image-action-text) {
+                .master-table tbody span:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+                .master-table tbody div:not(.poka-badge):not(.image-badge):not(.action-btn-icon) {
                     font-family: ${prefs.fontFamily} !important;
                     font-size: calc(${prefs.fontSize} * var(--table-font-scale, 1)) !important;
                 }
                 html:not(.dark) .master-table tbody td,
-                html:not(.dark) .master-table tbody input:not(.text-theme):not(.text-amber-500):not(.text-emerald-600):not(.text-rose-500),
-                html:not(.dark) .master-table tbody span:not(.text-theme):not(.text-amber-500):not(.text-emerald-600):not(.text-rose-500):not(.badge),
-                html:not(.dark) .master-table tbody div:not(.badge) {
+                html:not(.dark) .master-table tbody td *:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+                html:not(.dark) .master-table tbody input,
+                html:not(.dark) .master-table tbody select,
+                html:not(.dark) .master-table tbody textarea,
+                html:not(.dark) .master-table tbody span:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+                html:not(.dark) .master-table tbody div:not(.poka-badge):not(.image-badge):not(.action-btn-icon) {
                     color: ${prefs.fontColorLight} !important;
                 }
                 html.dark .master-table tbody td,
-                html.dark .master-table tbody input:not(.text-theme):not(.text-amber-500):not(.text-emerald-400):not(.text-rose-400),
-                html.dark .master-table tbody span:not(.text-theme):not(.text-amber-500):not(.text-emerald-400):not(.text-rose-400):not(.badge),
-                html.dark .master-table tbody div:not(.badge) {
+                html.dark .master-table tbody td *:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+                html.dark .master-table tbody input,
+                html.dark .master-table tbody select,
+                html.dark .master-table tbody textarea,
+                html.dark .master-table tbody span:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+                html.dark .master-table tbody div:not(.poka-badge):not(.image-badge):not(.action-btn-icon) {
                     color: ${prefs.fontColorDark} !important;
                 }
             `;
@@ -11799,6 +11829,8 @@ window.__texflowApp = createApp({
             isStockCarton,
             availableFonts,
             fontSizesList,
+            colorPresetsLight,
+            colorPresetsDark,
             userFontPrefs,
             saveUserFontPrefs,
             resetUserFontPrefs,

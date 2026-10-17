@@ -956,15 +956,21 @@
             font-size: calc(var(--user-font-size, 12px) * var(--table-font-scale, 1)) !important;
         }
         html:not(.dark) .master-table tbody td,
-        html:not(.dark) .master-table tbody input:not(.text-theme):not(.text-amber-500):not(.text-emerald-600):not(.text-rose-500),
-        html:not(.dark) .master-table tbody span:not(.text-theme):not(.text-amber-500):not(.text-emerald-600):not(.text-rose-500):not(.badge),
-        html:not(.dark) .master-table tbody div:not(.badge) {
+        html:not(.dark) .master-table tbody td *:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+        html:not(.dark) .master-table tbody input,
+        html:not(.dark) .master-table tbody select,
+        html:not(.dark) .master-table tbody textarea,
+        html:not(.dark) .master-table tbody span:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+        html:not(.dark) .master-table tbody div:not(.poka-badge):not(.image-badge):not(.action-btn-icon) {
             color: var(--user-font-color, #0f172a) !important;
         }
         html.dark .master-table tbody td,
-        html.dark .master-table tbody input:not(.text-theme):not(.text-amber-500):not(.text-emerald-400):not(.text-rose-400),
-        html.dark .master-table tbody span:not(.text-theme):not(.text-amber-500):not(.text-emerald-400):not(.text-rose-400):not(.badge),
-        html.dark .master-table tbody div:not(.badge) {
+        html.dark .master-table tbody td *:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+        html.dark .master-table tbody input,
+        html.dark .master-table tbody select,
+        html.dark .master-table tbody textarea,
+        html.dark .master-table tbody span:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+        html.dark .master-table tbody div:not(.poka-badge):not(.image-badge):not(.action-btn-icon) {
             color: var(--user-font-color-dark, #f8fafc) !important;
         }
     </style>
@@ -2500,7 +2506,7 @@
                                             
                                             <!-- 1. Müşteri -->
                                             <template v-if="col.key === 'customer_name'">
-                                                <span class="font-bold text-theme truncate block" :title="item.customer_name">{{ item.customer_name }}</span>
+                                                <span class="font-bold truncate block" :title="item.customer_name">{{ item.customer_name }}</span>
                                             </template>
 
 
@@ -2511,7 +2517,6 @@
                                                        @change="onBrandChange(item, $event)"
                                                        @keydown.enter="$event.target.blur()"
                                                        class="w-full bg-transparent border-0 outline-none focus:bg-slate-500/10 hover:bg-slate-500/5 px-1 py-0.5 rounded text-xs font-medium transition truncate"
-                                                       :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'"
                                                        placeholder="Marka...">
                                             </template>
 
@@ -2522,7 +2527,6 @@
                                                        @change="onChannelChange(item, $event)"
                                                        @keydown.enter="$event.target.blur()"
                                                        class="w-full bg-transparent border-0 outline-none focus:bg-slate-500/10 hover:bg-slate-500/5 px-1 py-0.5 rounded text-xs font-semibold transition truncate"
-                                                       :class="isDarkMode ? 'text-emerald-400' : 'text-emerald-600'"
                                                        placeholder="Kanal...">
                                             </template>
 
@@ -2531,7 +2535,6 @@
                                                 <input :value="item.po_number"
                                                        @change="updateCellWithLog(item.id, 'po_number', $event.target.value, 'PO No Güncellendi')"
                                                        class="w-full bg-transparent border-0 outline-none focus:bg-slate-500/10 hover:bg-slate-500/5 px-1 py-0.5 rounded text-xs font-mono font-bold transition truncate"
-                                                       :class="isDarkMode ? 'text-white' : 'text-slate-900'"
                                                        placeholder="PO No...">
                                             </template>
 
@@ -2539,7 +2542,7 @@
                                             <template v-else-if="col.key === 'style_no'">
                                                 <input :value="item.style_no"
                                                        @change="updateCellWithLog(item.id, 'style_no', $event.target.value, 'Model No Güncellendi')"
-                                                       class="w-full bg-transparent border-0 outline-none focus:bg-slate-500/10 hover:bg-slate-500/5 px-1 py-0.5 rounded text-xs font-mono font-bold text-amber-500 transition truncate"
+                                                       class="w-full bg-transparent border-0 outline-none focus:bg-slate-500/10 hover:bg-slate-500/5 px-1 py-0.5 rounded text-xs font-mono font-bold transition truncate"
                                                        placeholder="Model No...">
                                             </template>
 
@@ -2587,14 +2590,14 @@
 
                                             <!-- 8. AYRI SİPARİŞ AYI SÜTUNU -->
                                             <template v-else-if="col.key === 'order_month'">
-                                                <span class="font-medium text-xs text-theme text-center block truncate" :title="getOrderMonth(item.order_date)">
+                                                <span class="font-medium text-xs text-center block truncate" :title="getOrderMonth(item.order_date)">
                                                     {{ getOrderMonth(item.order_date) || '-' }}
                                                 </span>
                                             </template>
 
                                             <!-- 9. AYRI SİPARİŞ YILI SÜTUNU -->
                                             <template v-else-if="col.key === 'order_year'">
-                                                <span class="font-mono text-xs font-semibold text-center block truncate" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'" :title="getOrderYear(item.order_date)">
+                                                <span class="font-mono text-xs font-semibold text-center block truncate" :title="getOrderYear(item.order_date)">
                                                     {{ getOrderYear(item.order_date) || '-' }}
                                                 </span>
                                             </template>
@@ -2607,14 +2610,14 @@
                                                            :value="item.delivery_date"
                                                            @change="updateSmartDate(item, 'delivery_date', $event.target.value)"
                                                            placeholder="GG.AA"
-                                                           class="w-full bg-transparent border-0 outline-none text-xs font-mono font-semibold text-amber-500 text-center hover:bg-slate-500/10 rounded px-1 py-0.5 transition"
+                                                           class="w-full bg-transparent border-0 outline-none text-xs font-mono font-semibold text-center hover:bg-slate-500/10 rounded px-1 py-0.5 transition"
                                                            title="Teslimat tarihi girin (ör: 25.09 veya 25.09.2026)">
                                                 </div>
                                             </template>
 
                                             <!-- 11. AYRI TESLİMAT AYI SÜTUNU -->
                                             <template v-else-if="col.key === 'delivery_month'">
-                                                <span class="font-medium text-xs text-amber-500 text-center block truncate" :title="getDeliveryMonth(item.delivery_date)">
+                                                <span class="font-medium text-xs text-center block truncate" :title="getDeliveryMonth(item.delivery_date)">
                                                     {{ getDeliveryMonth(item.delivery_date) || '-' }}
                                                 </span>
                                             </template>
@@ -3173,7 +3176,7 @@
                                                     <input type="month"
                                                            :value="item.custom_fields ? item.custom_fields[col.key] : ''"
                                                            @change="updateCustomFieldDirect(item, col.key, $event.target.value)"
-                                                           class="bg-transparent border-0 outline-none text-xs font-mono text-center cursor-pointer hover:bg-slate-500/10 rounded px-1 py-0.5 transition font-semibold text-theme">
+                                                           class="bg-transparent border-0 outline-none text-xs font-mono text-center cursor-pointer hover:bg-slate-500/10 rounded px-1 py-0.5 transition font-semibold">
                                                 </div>
 
                                                 <!-- B. Tarih Türü (Akıllı Girişli) -->
@@ -6509,48 +6512,79 @@
                             <!-- Kolon 3: Font Renkleri (Gündüz & Gece) -->
                             <div class="p-4 rounded-xl border space-y-3"
                                  :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
-                                <label class="text-xs font-bold flex items-center gap-1.5" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
-                                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-                                    Yazı Rengi Ayarları
-                                </label>
+                                <div class="flex items-center justify-between">
+                                    <label class="text-xs font-bold flex items-center gap-1.5" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                        <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                                        Yazı Rengi (Tüm Yazılar Tek Renk)
+                                    </label>
+                                    <span class="text-[10px] text-slate-400 font-medium">Canlı & Net Renkler</span>
+                                </div>
 
                                 <!-- Gündüz Teması Rengi -->
                                 <div class="space-y-1.5">
                                     <div class="flex items-center justify-between text-[11px]">
                                         <span class="font-medium text-slate-400">☀️ Gündüz Teması Yazı Rengi:</span>
-                                        <span class="font-mono font-bold text-xs" :style="{ color: userFontPrefs.fontColorLight }">{{ userFontPrefs.fontColorLight }}</span>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <input type="color" v-model="userFontPrefs.fontColorLight" @input="applyUserFontPrefs"
-                                               class="w-8 h-8 rounded-lg border border-slate-300 cursor-pointer p-0.5 bg-transparent">
-                                        <div class="flex items-center gap-1 flex-1">
-                                            <button v-for="c in ['#0f172a', '#000000', '#1e293b', '#0f2347', '#064e3b']" :key="c"
-                                                    @click="userFontPrefs.fontColorLight = c; applyUserFontPrefs();"
-                                                    type="button"
-                                                    class="w-6 h-6 rounded-md border transition hover:scale-110 cursor-pointer shadow-xs"
-                                                    :style="{ backgroundColor: c, borderColor: userFontPrefs.fontColorLight === c ? '#10b981' : 'rgba(150,150,150,0.3)' }"
-                                                    :title="c"></button>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="w-3 h-3 rounded-full border border-slate-300" :style="{ backgroundColor: userFontPrefs.fontColorLight }"></span>
+                                            <span class="font-mono font-bold text-xs" :style="{ color: userFontPrefs.fontColorLight }">{{ userFontPrefs.fontColorLight }}</span>
                                         </div>
+                                    </div>
+                                    <!-- Canlı ve Belirgin Renk Butonları -->
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button v-for="c in colorPresetsLight" :key="c.hex"
+                                                @click="userFontPrefs.fontColorLight = c.hex; applyUserFontPrefs();"
+                                                type="button"
+                                                class="px-2 py-1 rounded-lg text-[10.5px] font-bold border transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                                                :class="userFontPrefs.fontColorLight === c.hex ? 'ring-2 ring-emerald-500 font-extrabold shadow-sm' : 'hover:scale-105'"
+                                                :style="{
+                                                    backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+                                                    color: c.hex,
+                                                    borderColor: userFontPrefs.fontColorLight === c.hex ? c.hex : (isDarkMode ? '#334155' : '#cbd5e1')
+                                                }">
+                                            <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ backgroundColor: c.hex }"></span>
+                                            <span>{{ c.name }}</span>
+                                        </button>
+                                        <!-- Özel Renk Seçici Kutusu -->
+                                        <label class="px-2 py-0.5 rounded-lg border text-[10.5px] font-medium transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                               :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-300 text-slate-700'"
+                                               title="Özel Renk Seç (Renk Paleti)">
+                                            <input type="color" v-model="userFontPrefs.fontColorLight" @input="applyUserFontPrefs" class="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer">
+                                            <span class="text-[10px]">Özel...</span>
+                                        </label>
                                     </div>
                                 </div>
 
                                 <!-- Gece Teması Rengi -->
-                                <div class="space-y-1.5 pt-1 border-t" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                                <div class="space-y-1.5 pt-2 border-t" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
                                     <div class="flex items-center justify-between text-[11px]">
                                         <span class="font-medium text-slate-400">🌙 Gece Teması Yazı Rengi:</span>
-                                        <span class="font-mono font-bold text-xs" :style="{ color: userFontPrefs.fontColorDark }">{{ userFontPrefs.fontColorDark }}</span>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <input type="color" v-model="userFontPrefs.fontColorDark" @input="applyUserFontPrefs"
-                                               class="w-8 h-8 rounded-lg border border-slate-600 cursor-pointer p-0.5 bg-transparent">
-                                        <div class="flex items-center gap-1 flex-1">
-                                            <button v-for="c in ['#ffffff', '#f8fafc', '#f1f5f9', '#e2e8f0', '#fef08a']" :key="c"
-                                                    @click="userFontPrefs.fontColorDark = c; applyUserFontPrefs();"
-                                                    type="button"
-                                                    class="w-6 h-6 rounded-md border transition hover:scale-110 cursor-pointer shadow-xs"
-                                                    :style="{ backgroundColor: c, borderColor: userFontPrefs.fontColorDark === c ? '#10b981' : 'rgba(150,150,150,0.3)' }"
-                                                    :title="c"></button>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="w-3 h-3 rounded-full border border-slate-600" :style="{ backgroundColor: userFontPrefs.fontColorDark }"></span>
+                                            <span class="font-mono font-bold text-xs" :style="{ color: userFontPrefs.fontColorDark }">{{ userFontPrefs.fontColorDark }}</span>
                                         </div>
+                                    </div>
+                                    <!-- Canlı ve Belirgin Gece Renk Butonları -->
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button v-for="c in colorPresetsDark" :key="c.hex"
+                                                @click="userFontPrefs.fontColorDark = c.hex; applyUserFontPrefs();"
+                                                type="button"
+                                                class="px-2 py-1 rounded-lg text-[10.5px] font-bold border transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                                                :class="userFontPrefs.fontColorDark === c.hex ? 'ring-2 ring-emerald-500 font-extrabold shadow-sm' : 'hover:scale-105'"
+                                                :style="{
+                                                    backgroundColor: isDarkMode ? '#0f172a' : '#f8fafc',
+                                                    color: c.hex,
+                                                    borderColor: userFontPrefs.fontColorDark === c.hex ? c.hex : (isDarkMode ? '#334155' : '#cbd5e1')
+                                                }">
+                                            <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ backgroundColor: c.hex }"></span>
+                                            <span>{{ c.name }}</span>
+                                        </button>
+                                        <!-- Özel Renk Seçici Kutusu -->
+                                        <label class="px-2 py-0.5 rounded-lg border text-[10.5px] font-medium transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                               :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-300 text-slate-700'"
+                                               title="Özel Gece Rengi Seç (Renk Paleti)">
+                                            <input type="color" v-model="userFontPrefs.fontColorDark" @input="applyUserFontPrefs" class="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer">
+                                            <span class="text-[10px]">Özel...</span>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -6562,10 +6596,10 @@
                             <div class="flex items-center justify-between">
                                 <span class="text-xs font-bold text-slate-400 flex items-center gap-1.5">
                                     <svg class="w-3.5 h-3.5 text-theme" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                                    Canlı Önizleme Testi (Çarşaf Listesi Hücreleri Bu Şekilde Görünür):
+                                    Canlı Önizleme Testi (Müşteri, Model No ve Tüm Tablo Tek Renk Görünür):
                                 </span>
                                 <span class="text-[11px] text-slate-400 font-mono">
-                                    Font: {{ userFontPrefs.fontFamily }} | Boyut: {{ userFontPrefs.fontSize }}
+                                    Font: {{ userFontPrefs.fontFamily }} | Boyut: {{ userFontPrefs.fontSize }} | Renk: {{ isDarkMode ? userFontPrefs.fontColorDark : userFontPrefs.fontColorLight }}
                                 </span>
                             </div>
                             <div class="overflow-x-auto p-3 rounded-lg border transition"
@@ -6578,7 +6612,7 @@
                                 <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 items-center">
                                     <div>
                                         <div class="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Müşteri</div>
-                                        <div class="font-bold text-theme">ZARA INTERNATIONAL</div>
+                                        <div class="font-bold">ZARA INTERNATIONAL</div>
                                     </div>
                                     <div>
                                         <div class="text-[10px] uppercase font-bold text-slate-400 mb-0.5">PO No</div>
@@ -6586,7 +6620,7 @@
                                     </div>
                                     <div>
                                         <div class="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Model No</div>
-                                        <div class="font-mono font-bold text-amber-500">MD-2026-X</div>
+                                        <div class="font-mono font-bold">MD-2026-X</div>
                                     </div>
                                     <div>
                                         <div class="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Kumaş Kalite</div>
@@ -6598,7 +6632,7 @@
                                     </div>
                                     <div>
                                         <div class="text-[10px] uppercase font-bold text-slate-400 mb-0.5">Sipariş Adedi</div>
-                                        <div class="font-bold font-mono text-emerald-500">14.500 Adet</div>
+                                        <div class="font-bold font-mono">14.500 Adet</div>
                                     </div>
                                 </div>
                             </div>
