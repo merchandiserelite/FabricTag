@@ -1852,6 +1852,7 @@ Critical Rules:
 
     CHANNEL_BADGES = {
         "STOCK AVT": {"hex": "#7030A0", "name": "Mor (Stock AVT)"},
+        "AVT STOCK": {"hex": "#7030A0", "name": "Mor (AVT Stock)"},
         "MOSCOW STOCK": {"hex": "#00B0F0", "name": "Mavi (Moscow Stock)"},
         "WHOLESALE": {"hex": "#92D050", "name": "Yeşil (Wholesale)"},
         "WEBSHOP": {"hex": "#FF0000", "name": "Kırmızı (Webshop)"},
@@ -1864,9 +1865,11 @@ Critical Rules:
     def get_channel_badge(cls, channel_name: str) -> Dict[str, str]:
         norm = str(channel_name or '').strip().upper()
         # Specific compound names take precedence
-        for k in ["MOSCOW STOCK", "STOCK WHOLESALE", "STOCK AVT", "AVT SHOPS", "WEBSHOP", "WHOLESALE"]:
+        for k in ["MOSCOW STOCK", "STOCK WHOLESALE", "STOCK AVT", "AVT STOCK", "AVT SHOPS", "WEBSHOP", "WHOLESALE"]:
             if k in norm:
                 return cls.CHANNEL_BADGES[k]
+        if "STOCK" in norm and "AVT" in norm:
+            return cls.CHANNEL_BADGES["STOCK AVT"]
         for k, v in cls.CHANNEL_BADGES.items():
             if k in norm:
                 return v
@@ -2182,8 +2185,15 @@ Critical Rules:
                 if not any(r): continue
                 
                 m_val = str(r[col_map['model']]).strip() if 'model' in col_map and len(r) > col_map['model'] and r[col_map['model']] else (detected_style or '')
+                color_val = str(r[col_map['color']]).strip() if 'color' in col_map and len(r) > col_map['color'] and r[col_map['color']] else ''
+                channel_val = str(r[col_map['channel']]).strip() if 'channel' in col_map and len(r) > col_map['channel'] and r[col_map['channel']] else 'GENEL'
+                cust_val = str(r[col_map['customer']]).strip() if 'customer' in col_map and len(r) > col_map['customer'] and r[col_map['customer']] else detected_customer
+                carton_no = r[col_map['carton']] if 'carton' in col_map and len(r) > col_map['carton'] else None
+                try: carton_no = int(float(carton_no))
+                except: pass
+
                 tot_val = r[col_map['total_qty']] if 'total_qty' in col_map and len(r) > col_map['total_qty'] else 0
-                try: tot_num = int(tot_val or 0)
+                try: tot_num = int(float(tot_val or 0))
                 except: tot_num = 0
 
                 row_sizes = {}
@@ -2196,14 +2206,14 @@ Critical Rules:
 
                 calc_tot = sum(row_sizes.values())
                 if tot_num == 0 and calc_tot > 0: tot_num = calc_tot
-                if tot_num == 0: continue
 
-                color_val = str(r[col_map['color']]).strip() if 'color' in col_map and len(r) > col_map['color'] and r[col_map['color']] else ''
-                channel_val = str(r[col_map['channel']]).strip() if 'channel' in col_map and len(r) > col_map['channel'] and r[col_map['channel']] else 'GENEL'
-                cust_val = str(r[col_map['customer']]).strip() if 'customer' in col_map and len(r) > col_map['customer'] and r[col_map['customer']] else detected_customer
-                carton_no = r[col_map['carton']] if 'carton' in col_map and len(r) > col_map['carton'] else None
-                try: carton_no = int(carton_no)
-                except: pass
+                chan_u = channel_val.upper().strip()
+                is_stock_row = ('STOCK' in chan_u and 'AVT' in chan_u) or chan_u in ['AVT STOCK', 'STOCK AVT', 'STOCK', 'AVT-STOCK', 'STOCK-AVT']
+                is_last_carton_row = (carton_no is not None and (color_val or m_val) and (r_idx >= len(rows) - 2 or is_stock_row))
+
+                # Do not skip if it's an AVT STOCK / STOCK AVT channel or last carton row
+                if tot_num == 0 and not is_stock_row and not is_last_carton_row:
+                    continue
 
                 group_cnt = None
                 if 'group_count' in col_map and len(r) > col_map['group_count']:
@@ -2246,7 +2256,8 @@ Critical Rules:
                     'unit_weight': unit_gr,
                     'gross_weight': gw_val,
                     'net_weight': 0.0,
-                    'measurements': '60X40X30'
+                    'measurements': '60X40X30',
+                    'is_stock': is_stock_row
                 })
 
         # 5. Group multi-row items into cartons based on Excel Row 10 formula rule
@@ -2264,6 +2275,7 @@ Critical Rules:
             grp_cnt = item.get('group_count')
             unit_w = item.get('unit_weight') or 0.14
             gw = item.get('gross_weight') or 0.0
+            is_stk = item.get('is_stock', False)
 
             can_merge = False
             if cur_carton and cur_carton['carton_no'] == c_no:
@@ -2288,8 +2300,10 @@ Critical Rules:
                     cur_carton['gross_weight'] = round(cur_carton['total_qty'] * unit_w + 0.5, 2)
                 if grp_cnt and grp_cnt > 0:
                     cur_carton['group_count'] = grp_cnt
+                if is_stk:
+                    cur_carton['is_stock'] = True
             else:
-                calc_gw = round(gw, 2) if gw > 0 else round(qty * unit_w + 0.5, 2)
+                calc_gw = round(gw, 2) if gw > 0 else (round(qty * unit_w + 0.5, 2) if qty > 0 else 1.0)
                 cur_carton = {
                     'carton_id': len(cartons) + 1,
                     'carton_no': c_no or (len(cartons) + 1),
@@ -2305,6 +2319,7 @@ Critical Rules:
                     'total_qty': qty,
                     'sizes': dict(sizes),
                     'detected_sizes': list(size_cols.keys()),
+                    'is_stock': is_stk,
                     'items': [{
                         'model': mod,
                         'color': col,

@@ -10396,7 +10396,17 @@ window.__texflowApp = createApp({
         const printShowPokaBadge = ref(false); // Default: false (koli ustunde rozet gizli / silinmis)
         const printCustomBrand = ref('');
 
-        const formatCartonSizeQty = (val) => {
+        const isStockCarton = (carton) => {
+            if (!carton) return false;
+            if (carton.is_stock) return true;
+            const ch = (carton.channel || '').toUpperCase().trim();
+            return (ch.includes('STOCK') && ch.includes('AVT')) || ch === 'AVT STOCK' || ch === 'STOCK AVT' || ch === 'STOCK';
+        };
+
+        const formatCartonSizeQty = (val, carton = null) => {
+            if (carton && (isStockCarton(carton) || carton.total_qty === 0)) {
+                return '';
+            }
             if (val === null || val === undefined || val === '' || val === false || val === 0 || val === '0' || val === 0.0 || val === '-' || (typeof val === 'string' && val.trim() === '0')) {
                 return '';
             }
@@ -11657,7 +11667,8 @@ window.__texflowApp = createApp({
             printShowPokaBadge,
             printCustomBrand,
             formatCartonSizeQty,
-            getCartonSizeHeaders
+            getCartonSizeHeaders,
+            isStockCarton
         };
 
 

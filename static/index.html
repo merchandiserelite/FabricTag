@@ -5343,7 +5343,10 @@
 
                                             <!-- Bedenler -->
                                             <td class="p-3 text-center">
-                                                <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                                                <div v-if="isStockCarton(c) || !c.sizes || Object.keys(c.sizes).length === 0" class="text-[11px] text-purple-400 font-bold italic">
+                                                    Boş (Stock)
+                                                </div>
+                                                <div v-else class="flex items-center justify-center gap-1.5 flex-wrap">
                                                     <span v-for="(q, sz) in (c.items && c.items[0] ? c.items[0].sizes : {})" :key="'csz-'+sz"
                                                           class="px-1.5 py-0.5 rounded text-[10px] font-mono border"
                                                           :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'">
@@ -5353,8 +5356,8 @@
                                             </td>
 
                                             <!-- Toplam Koli Adeti -->
-                                            <td class="p-3 text-center font-mono font-bold text-emerald-500">
-                                                {{ c.total_qty }} ad
+                                            <td class="p-3 text-center font-mono font-bold" :class="isStockCarton(c) ? 'text-slate-400 font-normal' : 'text-emerald-500'">
+                                                {{ isStockCarton(c) ? '-' : (c.total_qty + ' ad') }}
                                             </td>
 
                                             <!-- Brüt Ağırlık -->
@@ -6018,9 +6021,9 @@
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].model : '-' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].color : '-' }}</td>
                                                             <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-0-'+sz" class="border-r border-black p-1 font-mono">
-                                                                {{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes ? pair[0].items[0].sizes[sz] : '') }}
+                                                                {{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes ? pair[0].items[0].sizes[sz] : '', pair[0]) }}
                                                             </td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[0] ? formatCartonSizeQty(pair[0].items[0].total_qty) : '' }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[0] ? formatCartonSizeQty(pair[0].items[0].total_qty, pair[0]) : '' }}</td>
                                                         </tr>
                                                         <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
                                                         <tr class="border-b border-black text-[12px] font-semibold h-8"
@@ -6028,9 +6031,9 @@
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].model : '' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].color : '' }}</td>
                                                             <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-1-'+sz" class="border-r border-black p-1 font-mono">
-                                                                {{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes ? pair[0].items[1].sizes[sz] : '') }}
+                                                                {{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes ? pair[0].items[1].sizes[sz] : '', pair[0]) }}
                                                             </td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[1] ? formatCartonSizeQty(pair[0].items[1].total_qty) : '' }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[1] ? formatCartonSizeQty(pair[0].items[1].total_qty, pair[0]) : '' }}</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -6106,9 +6109,9 @@
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].model : '-' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].color : '-' }}</td>
                                                             <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-0-'+sz" class="border-r border-black p-1 font-mono">
-                                                                {{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes ? pair[1].items[0].sizes[sz] : '') }}
+                                                                {{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes ? pair[1].items[0].sizes[sz] : '', pair[1]) }}
                                                             </td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[0] ? formatCartonSizeQty(pair[1].items[0].total_qty) : '' }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[0] ? formatCartonSizeQty(pair[1].items[0].total_qty, pair[1]) : '' }}</td>
                                                         </tr>
                                                         <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
                                                         <tr class="border-b border-black text-[12px] font-semibold h-8"
@@ -6116,9 +6119,9 @@
                                                             <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].model : '' }}</td>
                                                             <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].color : '' }}</td>
                                                             <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-1-'+sz" class="border-r border-black p-1 font-mono">
-                                                                {{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes ? pair[1].items[1].sizes[sz] : '') }}
+                                                                {{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes ? pair[1].items[1].sizes[sz] : '', pair[1]) }}
                                                             </td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[1] ? formatCartonSizeQty(pair[1].items[1].total_qty) : '' }}</td>
+                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[1] ? formatCartonSizeQty(pair[1].items[1].total_qty, pair[1]) : '' }}</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -6210,9 +6213,9 @@
                                                         <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[0] ? c.items[0].model : '-' }}</td>
                                                         <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
                                                         <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-0-'+sz" class="border-r border-black p-2 font-mono">
-                                                            {{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes ? c.items[0].sizes[sz] : '') }}
+                                                            {{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes ? c.items[0].sizes[sz] : '', c) }}
                                                         </td>
-                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[0] ? formatCartonSizeQty(c.items[0].total_qty) : '' }}</td>
+                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[0] ? formatCartonSizeQty(c.items[0].total_qty, c) : '' }}</td>
                                                     </tr>
                                                     <!-- 2. Ürün Satırı -->
                                                     <tr class="border-b border-black text-sm font-semibold h-10"
@@ -6220,9 +6223,9 @@
                                                         <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[1] ? c.items[1].model : '' }}</td>
                                                         <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[1] ? c.items[1].color : '' }}</td>
                                                         <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-1-'+sz" class="border-r border-black p-2 font-mono">
-                                                            {{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes ? c.items[1].sizes[sz] : '') }}
+                                                            {{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes ? c.items[1].sizes[sz] : '', c) }}
                                                         </td>
-                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[1] ? formatCartonSizeQty(c.items[1].total_qty) : '' }}</td>
+                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[1] ? formatCartonSizeQty(c.items[1].total_qty, c) : '' }}</td>
                                                     </tr>
                                                 </tbody>
                                             </table>
