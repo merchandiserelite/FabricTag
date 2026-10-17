@@ -5565,7 +5565,7 @@ window.__texflowApp = createApp({
             return (carsafPrintRows.value || []).reduce((acc, r) => acc + (parseFloat(r.total_quantity) || 0), 0);
         });
 
-        const defaultPrintColWidths = {
+        const defaultPrintColWidthsNoChannel = {
             image: 20,
             style: 12,
             color: 17,
@@ -5575,25 +5575,210 @@ window.__texflowApp = createApp({
             notes: 11
         };
 
+        const defaultPrintColWidthsWithChannel = {
+            image: 18,
+            style: 11,
+            color: 15,
+            channel: 10,
+            fabric: 20,
+            quantity: 8,
+            price: 8,
+            notes: 10
+        };
+
+        const carsafPrintShowChannels = ref(localStorage.getItem('carsaf_print_show_channels') === 'true');
+
+        const defaultBaseColOrder = ['image', 'style', 'color', 'channel', 'fabric', 'quantity', 'price', 'notes'];
+
+        const loadSavedColOrder = () => {
+            try {
+                const saved = localStorage.getItem('carsaf_print_col_order');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        const validKeys = defaultBaseColOrder.filter(k => parsed.includes(k));
+                        defaultBaseColOrder.forEach(k => {
+                            if (!validKeys.includes(k)) validKeys.push(k);
+                        });
+                        return validKeys;
+                    }
+                }
+            } catch (e) {}
+            return [...defaultBaseColOrder];
+        };
+
+        const carsafPrintColOrder = ref(loadSavedColOrder());
+
+        const activeCarsafPrintCols = computed(() => {
+            return carsafPrintColOrder.value.filter(k => {
+                if (k === 'channel' && !carsafPrintShowChannels.value) return false;
+                return true;
+            });
+        });
+
+        const getColOrder = () => {
+            return activeCarsafPrintCols.value;
+        };
+
+        const getCarsafColTitle = (key) => {
+            const map = {
+                image: 'Görsel / Başlık',
+                style: 'Style No',
+                color: 'Renk / Varyant',
+                channel: 'Kanal',
+                fabric: 'Kumaş Detayı',
+                quantity: 'Adet',
+                price: 'Birim Fiyat',
+                notes: 'Notlar'
+            };
+            return map[key] || key;
+        };
+
+        const getCarsafColHeaderTitle = (key) => {
+            const map = {
+                image: 'GÖRSEL',
+                style: 'STYLE',
+                color: 'RENK',
+                channel: 'KANAL',
+                fabric: 'KUMAŞ',
+                quantity: 'ADET',
+                price: 'PRICE',
+                notes: 'NOTLAR'
+            };
+            return map[key] || key.toUpperCase();
+        };
+
+        const moveCarsafCol = (colKey, direction) => {
+            const currentActive = [...activeCarsafPrintCols.value];
+            const idx = currentActive.indexOf(colKey);
+            if (idx < 0) return;
+            const targetIdx = idx + direction;
+            if (targetIdx < 0 || targetIdx >= currentActive.length) return;
+
+            const targetKey = currentActive[targetIdx];
+
+            const fullOrder = [...carsafPrintColOrder.value];
+            const fullIdx1 = fullOrder.indexOf(colKey);
+            const fullIdx2 = fullOrder.indexOf(targetKey);
+
+            if (fullIdx1 >= 0 && fullIdx2 >= 0) {
+                fullOrder[fullIdx1] = targetKey;
+                fullOrder[fullIdx2] = colKey;
+                carsafPrintColOrder.value = fullOrder;
+                localStorage.setItem('carsaf_print_col_order', JSON.stringify(fullOrder));
+            }
+        };
+
+        const carsafDraggedColKey = ref(null);
+        const carsafDragOverColKey = ref(null);
+
+        const onCarsafColDragStart = (colKey, e) => {
+            carsafDraggedColKey.value = colKey;
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', colKey);
+            }
+        };
+
+        const onCarsafColDragOver = (colKey, e) => {
+            e.preventDefault();
+            if (carsafDraggedColKey.value && carsafDraggedColKey.value !== colKey) {
+                carsafDragOverColKey.value = colKey;
+                if (e.dataTransfer) {
+                    e.dataTransfer.dropEffect = 'move';
+                }
+            }
+        };
+
+        const onCarsafColDragLeave = (colKey, e) => {
+            if (carsafDragOverColKey.value === colKey) {
+                carsafDragOverColKey.value = null;
+            }
+        };
+
+        const onCarsafColDrop = (colKey, e) => {
+            e.preventDefault();
+            const sourceKey = carsafDraggedColKey.value;
+            carsafDraggedColKey.value = null;
+            carsafDragOverColKey.value = null;
+
+            if (!sourceKey || sourceKey === colKey) return;
+
+            const currentOrder = [...carsafPrintColOrder.value];
+            const srcIdx = currentOrder.indexOf(sourceKey);
+            const destIdx = currentOrder.indexOf(colKey);
+
+            if (srcIdx >= 0 && destIdx >= 0) {
+                currentOrder.splice(srcIdx, 1);
+                currentOrder.splice(destIdx, 0, sourceKey);
+                carsafPrintColOrder.value = currentOrder;
+                localStorage.setItem('carsaf_print_col_order', JSON.stringify(currentOrder));
+            }
+        };
+
         const loadSavedPrintColWidths = () => {
+            const defaults = carsafPrintShowChannels.value ? defaultPrintColWidthsWithChannel : defaultPrintColWidthsNoChannel;
             try {
                 const saved = localStorage.getItem('carsaf_print_col_widths_pct');
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    if (parsed && typeof parsed.image === 'number' && (parsed.image + parsed.style + parsed.color + parsed.fabric + parsed.quantity + parsed.price + parsed.notes) === 100) {
-                        return Object.assign({}, defaultPrintColWidths, parsed);
+                    if (parsed && typeof parsed.image === 'number') {
+                        const res = Object.assign({}, defaults, parsed);
+                        if (carsafPrintShowChannels.value && !res.channel) {
+                            res.channel = 10;
+                        }
+                        return res;
                     }
                 }
             } catch (e) {}
-            return Object.assign({}, defaultPrintColWidths);
+            return Object.assign({}, defaults);
         };
 
         const carsafPrintColWidths = ref(loadSavedPrintColWidths());
 
+        const normalizeColWidths = () => {
+            const keys = getColOrder();
+            let sum = keys.reduce((acc, k) => acc + (carsafPrintColWidths.value[k] || 0), 0);
+            if (sum !== 100 && sum > 0) {
+                const diff = 100 - sum;
+                const target = keys.includes('fabric') ? 'fabric' : keys[0];
+                carsafPrintColWidths.value[target] = (carsafPrintColWidths.value[target] || 20) + diff;
+            }
+        };
+
         const resetCarsafPrintColWidths = () => {
-            carsafPrintColWidths.value = Object.assign({}, defaultPrintColWidths);
-            localStorage.removeItem('carsaf_print_col_widths_pct');
-            showToast('Sütun genişlikleri varsayılan oranlara sıfırlandı', 'info');
+            carsafPrintColOrder.value = [...defaultBaseColOrder];
+            localStorage.removeItem('carsaf_print_col_order');
+            if (carsafPrintShowChannels.value) {
+                carsafPrintColWidths.value = Object.assign({}, defaultPrintColWidthsWithChannel);
+            } else {
+                carsafPrintColWidths.value = Object.assign({}, defaultPrintColWidthsNoChannel);
+            }
+            localStorage.setItem('carsaf_print_col_widths_pct', JSON.stringify(carsafPrintColWidths.value));
+            showToast('Sütun sırası ve genişlikleri varsayılan oranlara sıfırlandı', 'info');
+        };
+
+        const toggleShowChannels = () => {
+            localStorage.setItem('carsaf_print_show_channels', carsafPrintShowChannels.value ? 'true' : 'false');
+            if (carsafPrintShowChannels.value) {
+                if (!carsafPrintColWidths.value.channel) {
+                    carsafPrintColWidths.value.channel = 10;
+                    carsafPrintColWidths.value.fabric = Math.max(10, (carsafPrintColWidths.value.fabric || 23) - 4);
+                    carsafPrintColWidths.value.color = Math.max(10, (carsafPrintColWidths.value.color || 17) - 3);
+                    carsafPrintColWidths.value.image = Math.max(10, (carsafPrintColWidths.value.image || 20) - 3);
+                    normalizeColWidths();
+                }
+            } else {
+                if (carsafPrintColWidths.value.channel) {
+                    const chW = carsafPrintColWidths.value.channel;
+                    delete carsafPrintColWidths.value.channel;
+                    carsafPrintColWidths.value.fabric = (carsafPrintColWidths.value.fabric || 20) + Math.ceil(chW / 2);
+                    carsafPrintColWidths.value.color = (carsafPrintColWidths.value.color || 15) + Math.floor(chW / 2);
+                    normalizeColWidths();
+                }
+            }
+            localStorage.setItem('carsaf_print_col_widths_pct', JSON.stringify(carsafPrintColWidths.value));
+            buildCarsafPrintRows();
         };
 
         const adjustColWidth = (colKey, delta) => {
@@ -5611,14 +5796,15 @@ window.__texflowApp = createApp({
         const startCarsafPrintColResize = (colKey, e) => {
             e.stopPropagation();
             e.preventDefault();
-            const colOrder = ['image', 'style', 'color', 'fabric', 'quantity', 'price', 'notes'];
+            const colOrder = getColOrder();
             const idx = colOrder.indexOf(colKey);
             if (idx < 0 || idx >= colOrder.length - 1) return;
             const nextKey = colOrder[idx + 1];
 
             const startX = e.pageX;
-            const initialCurrent = carsafPrintColWidths.value[colKey] || defaultPrintColWidths[colKey];
-            const initialNext = carsafPrintColWidths.value[nextKey] || defaultPrintColWidths[nextKey];
+            const defaults = carsafPrintShowChannels.value ? defaultPrintColWidthsWithChannel : defaultPrintColWidthsNoChannel;
+            const initialCurrent = carsafPrintColWidths.value[colKey] || defaults[colKey] || 10;
+            const initialNext = carsafPrintColWidths.value[nextKey] || defaults[nextKey] || 10;
 
             const tableEl = document.getElementById('carsaf-print-table');
             const tableWidthPx = tableEl ? tableEl.offsetWidth : 750;
@@ -5736,6 +5922,7 @@ window.__texflowApp = createApp({
                         } catch (e) {}
                     }
 
+                    const ch = (s.channel || '').toString().trim();
                     if (!groups[groupKey]) {
                         const rowObj = {
                             id: s.id,
@@ -5744,6 +5931,8 @@ window.__texflowApp = createApp({
                             image_url_2: s.image_url_2 || '',
                             style_no: s.style_no || '',
                             color_name: getDisplayColor(s),
+                            channel: ch,
+                            channelsSet: new Set(ch ? [ch] : []),
                             fabric_article: s.fabric_article || '',
                             total_quantity: qty,
                             price_formatted: priceStr,
@@ -5755,6 +5944,10 @@ window.__texflowApp = createApp({
                         const existing = groups[groupKey];
                         existing.ids.push(s.id);
                         existing.total_quantity += qty;
+                        if (ch && existing.channelsSet) {
+                            existing.channelsSet.add(ch);
+                            existing.channel = Array.from(existing.channelsSet).filter(Boolean).join(', ');
+                        }
                         if (!existing.image_url && (s.image_url || s.image_url_2)) {
                             existing.image_url = s.image_url || '';
                             existing.image_url_2 = s.image_url_2 || '';
@@ -5800,6 +5993,7 @@ window.__texflowApp = createApp({
                         image_url_2: s.image_url_2 || '',
                         style_no: s.style_no || '',
                         color_name: getDisplayColor(s),
+                        channel: (s.channel || '').toString().trim(),
                         fabric_article: s.fabric_article || '',
                         total_quantity: s.total_quantity || 0,
                         price_formatted: priceStr,
@@ -5882,7 +6076,9 @@ window.__texflowApp = createApp({
                 const ids = allIds.join(',');
                 const title = encodeURIComponent(carsafPrintTitle.value || 'İMALAT ÖZET LİSTESİ');
                 const consolidateParam = carsafPrintConsolidateChannels.value ? '&consolidate=1' : '';
-                const url = `/api/styles/export-carsaf-excel?ids=${ids}&title=${title}${consolidateParam}`;
+                const showChannelsParam = carsafPrintShowChannels.value ? '&show_channels=1' : '';
+                const colOrderParam = `&col_order=${encodeURIComponent(activeCarsafPrintCols.value.join(','))}`;
+                const url = `/api/styles/export-carsaf-excel?ids=${ids}&title=${title}${consolidateParam}${showChannelsParam}${colOrderParam}`;
 
                 const a = document.createElement('a');
                 a.href = url;
@@ -6490,9 +6686,13 @@ window.__texflowApp = createApp({
         const getDisplayColor = (item) => {
             if (!item) return '';
             const code = (item.color_code || '').toString().trim();
-            const name = (item.color_name || '').toString().trim();
+            let name = (item.color_name || '').toString().trim();
             if (code && name) {
-                if (name.toLowerCase().startsWith(code.toLowerCase())) {
+                // Parantez içindeki yinelenen renk kodunu temizle
+                try {
+                    name = name.replace(new RegExp(`\\s*\\(${code.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\)`, 'gi'), '').trim();
+                } catch (e) {}
+                if (name.toLowerCase().includes(code.toLowerCase())) {
                     return name;
                 }
                 return `${code} ${name}`;
@@ -10194,6 +10394,7 @@ window.__texflowApp = createApp({
         const printCustomWidth = ref(297);
         const printCustomHeight = ref(210);
         const printShowPokaBadge = ref(false); // Default: false (koli ustunde rozet gizli / silinmis)
+        const printCustomBrand = ref('');
 
         const formatCartonSizeQty = (val) => {
             if (val === null || val === undefined || val === '' || val === false || val === 0 || val === '0' || val === 0.0 || val === '-' || (typeof val === 'string' && val.trim() === '0')) {
@@ -10275,6 +10476,9 @@ window.__texflowApp = createApp({
                 printShowPokaBadge.value = !!tpl.poka_badge_enabled;
             } else {
                 printShowPokaBadge.value = false;
+            }
+            if (tpl.layout_json && tpl.layout_json.brand) {
+                printCustomBrand.value = String(tpl.layout_json.brand).replace(/^BRAND\s*:\s*/i, '').trim();
             }
         };
 
@@ -10371,7 +10575,8 @@ window.__texflowApp = createApp({
                 margin_mm: printMarginMm.value,
                 font_scale: printFontScale.value,
                 layout_json: Object.assign({}, activeCartonTemplate.value ? activeCartonTemplate.value.layout_json : {}, {
-                    poka_badge_enabled: printShowPokaBadge.value
+                    poka_badge_enabled: printShowPokaBadge.value,
+                    brand: printCustomBrand.value ? `BRAND: ${printCustomBrand.value}` : 'BRAND: ANNA'
                 }),
                 is_default: true
             };
@@ -10612,6 +10817,9 @@ window.__texflowApp = createApp({
                 packingData.value = json.parsed_data;
                 matchedPackingStyle.value = json.matched_style;
                 candidatePackingStyles.value = json.candidate_styles || [];
+                if (json.parsed_data && json.parsed_data.brand) {
+                    printCustomBrand.value = json.parsed_data.brand;
+                }
                 
                 // Automatically match customer's carton template
                 if (json.parsed_data && json.parsed_data.customer) {
@@ -10637,6 +10845,9 @@ window.__texflowApp = createApp({
                 packingData.value = json.parsed_data;
                 matchedPackingStyle.value = json.matched_style;
                 candidatePackingStyles.value = json.candidate_styles || [];
+                if (json.parsed_data && json.parsed_data.brand) {
+                    printCustomBrand.value = json.parsed_data.brand;
+                }
                 await loadCartonTemplates('Anna van Toor B.V.');
                 showToast('success', `Örnek Anna Van Toor çeki listesi yüklendi (${json.parsed_data.total_cartons} koli, ${json.parsed_data.total_quantity} adet).`);
                 refreshIcons();
@@ -11163,6 +11374,17 @@ window.__texflowApp = createApp({
             adjustColWidth,
             startCarsafPrintColResize,
             resetCarsafPrintColWidths,
+            carsafPrintColOrder,
+            activeCarsafPrintCols,
+            getCarsafColTitle,
+            getCarsafColHeaderTitle,
+            moveCarsafCol,
+            carsafDraggedColKey,
+            carsafDragOverColKey,
+            onCarsafColDragStart,
+            onCarsafColDragOver,
+            onCarsafColDragLeave,
+            onCarsafColDrop,
 
             setCarsafPrintOrientation,
             setCarsafPrintRowHeight,
@@ -11172,8 +11394,10 @@ window.__texflowApp = createApp({
             isCarsafExportingExcel,
             exportCarsafPrintToExcel,
             carsafPrintConsolidateChannels,
+            carsafPrintShowChannels,
             carsafPrintTotalQty,
             toggleConsolidateChannels,
+            toggleShowChannels,
             buildCarsafPrintRows,
             isExportingExcel,
             exportOrdersToExcel,
@@ -11398,6 +11622,7 @@ window.__texflowApp = createApp({
             getPrintCartonsList,
             getPrintCartonPairs,
             printShowPokaBadge,
+            printCustomBrand,
             formatCartonSizeQty
         };
 

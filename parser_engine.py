@@ -1851,17 +1851,22 @@ Critical Rules:
     # =========================================================================
 
     CHANNEL_BADGES = {
-        "STOCK AVT": {"hex": "#6b248a", "name": "Mor (Stock AVT)"},
-        "MOSCOW STOCK": {"hex": "#0284c7", "name": "Mavi (Moscow Stock)"},
-        "WHOLESALE": {"hex": "#10b981", "name": "Yeşil (Wholesale)"},
-        "WEBSHOP": {"hex": "#ef4444", "name": "Kırmızı (Webshop)"},
-        "AVT SHOPS": {"hex": "#f59e0b", "name": "Sarı (AVT Shops)"},
-        "DEFAULT": {"hex": "#4f46e5", "name": "İndigo"}
+        "STOCK AVT": {"hex": "#7030A0", "name": "Mor (Stock AVT)"},
+        "MOSCOW STOCK": {"hex": "#00B0F0", "name": "Mavi (Moscow Stock)"},
+        "WHOLESALE": {"hex": "#92D050", "name": "Yeşil (Wholesale)"},
+        "WEBSHOP": {"hex": "#FF0000", "name": "Kırmızı (Webshop)"},
+        "AVT SHOPS": {"hex": "#FFFF00", "name": "Sarı (AVT Shops)"},
+        "STOCK WHOLESALE": {"hex": "#7030A0", "name": "Mor (Stock Wholesale)"},
+        "DEFAULT": {"hex": "#4F46E5", "name": "İndigo"}
     }
 
     @classmethod
     def get_channel_badge(cls, channel_name: str) -> Dict[str, str]:
         norm = str(channel_name or '').strip().upper()
+        # Specific compound names take precedence
+        for k in ["MOSCOW STOCK", "STOCK WHOLESALE", "STOCK AVT", "AVT SHOPS", "WEBSHOP", "WHOLESALE"]:
+            if k in norm:
+                return cls.CHANNEL_BADGES[k]
         for k, v in cls.CHANNEL_BADGES.items():
             if k in norm:
                 return v
@@ -1945,16 +1950,34 @@ Critical Rules:
         if not rows:
             raise ValueError("Çeki listesi sayfası boş veya okunamadı.")
 
-        # 2. Check for Style No & Customer in header area (top 15 rows)
+        # 2. Check for Brand, Style No & Customer in header area (top 15 rows)
         detected_customer = "Anna van Toor B.V."
+        detected_brand = ""
         detected_style = ""
         for r in rows[:15]:
             for val in r:
                 s_val = str(val or '').strip()
+                if not s_val: continue
+                # Match "ANNA VAN TOOR <BRAND>"
+                m_avt = re.search(r'ANNA\s+VAN\s+TOOR\s*(.*)', s_val, re.IGNORECASE)
+                if m_avt:
+                    candidate = m_avt.group(1).strip()
+                    candidate = re.sub(r'^[–\-:\s]+', '', candidate).strip()
+                    candidate = re.sub(r'(?:INV\+P\.LIST|ÇEKİ\s*LİSTESİ|CEKI\s*LISTESI|KOLİ\s*ÜSTÜ|KOLI\s*USTU|SS\d+).*', '', candidate, flags=re.IGNORECASE).strip()
+                    if candidate and not detected_brand:
+                        detected_brand = candidate
+                # Match "BRAND: <BRAND>" or "BRAND : <BRAND>"
+                m_br = re.search(r'BRAND\s*:\s*([A-Za-z0-9\s\-]+)', s_val, re.IGNORECASE)
+                if m_br and not detected_brand:
+                    b_val = m_br.group(1).strip()
+                    if b_val: detected_brand = b_val
                 if not detected_style and re.match(r'^\d{2}[A-Za-z]\d{2}-[\w\d]+$', s_val):
                     detected_style = s_val
                 if 'anna' in s_val.lower() and 'van' in s_val.lower():
                     detected_customer = "Anna van Toor B.V."
+
+        if not detected_brand:
+            detected_brand = "ANNA"
 
         # 3. Header row detection
         header_idx = -1
@@ -1970,6 +1993,20 @@ Critical Rules:
 
         headers = [str(c or '').strip() for c in rows[header_idx]]
         headers_upper = [h.upper() for h in headers]
+
+        # Style detection directly under STYLE header (e.g. Row 3 under 'STYLE' header: '55-04- Pully')
+        style_col_idx = -1
+        for c_idx, h in enumerate(headers_upper):
+            if 'STYLE' in h or 'MODEL' in h:
+                style_col_idx = c_idx
+                break
+
+        if style_col_idx != -1 and len(rows) > header_idx + 1:
+            cell_below = rows[header_idx + 1]
+            if len(cell_below) > style_col_idx and cell_below[style_col_idx] is not None:
+                val_below = str(cell_below[style_col_idx] or '').strip()
+                if val_below and val_below.upper() not in ['TOPLAM', 'TOTAL', 'NONE', '']:
+                    detected_style = val_below
 
         # 4. Check if Format B (Vertical block with Koli in col 0, Color in col 1, Channel in col 2)
         is_vertical_block = False
@@ -2006,7 +2043,7 @@ Critical Rules:
                 if 'TOPLAM' in val1.upper():
                     continue
                     
-                if not detected_style and re.match(r'^\d{2}[A-Za-z]\d{2}-[\w\d]+$', val1):
+                if not detected_style and val1 and not any(k in val1.upper() for k in ['KOLİ', 'STYLE', 'TOPLAM']):
                     detected_style = val1
                     continue
                     
@@ -2050,6 +2087,7 @@ Critical Rules:
                         'color': cur_color,
                         'channel': cur_channel,
                         'customer': detected_customer,
+                        'brand': detected_brand,
                         'sizes': row_sizes,
                         'total_qty': tot_qty,
                         'gross_weight': 0.0,
@@ -2083,13 +2121,19 @@ Critical Rules:
                 elif h_norm in ['gr', 'gram', 'unit_gr', 'birim_gr', 'kg'] or 'birim' in h_norm:
                     col_map['unit_weight'] = c_idx
 
+            # Smart channel detection: inspect row values for channel names if not explicitly mapped
+            channel_keywords = ['WEBSHOP', 'AVT SHOPS', 'SHOPS', 'WHOLESALE', 'STOCK', 'MOSCOW', 'MAGAZA', 'MAĞAZA']
             if 'channel' not in col_map:
-                for c_idx, h in enumerate(headers):
-                    if any(k in h.lower() for k in ['kanal', 'channel', 'dükkan', 'dukkan', 'store']):
+                for c_idx in range(len(headers)):
+                    vals = [str(r[c_idx] or '').strip().upper() for r in rows[header_idx+1:min(len(rows), header_idx+10)] if len(r) > c_idx]
+                    if any(any(kw in v for kw in channel_keywords) for v in vals):
                         col_map['channel'] = c_idx
                         break
+
+            # Color detection: look for color header that is NOT mapped to channel
             if 'color' not in col_map:
                 for c_idx, h in enumerate(headers):
+                    if c_idx == col_map.get('channel'): continue
                     if any(k in h.lower() for k in ['color', 'renk', 'colour']):
                         col_map['color'] = c_idx
                         break
@@ -2156,6 +2200,7 @@ Critical Rules:
                     'color': color_val,
                     'channel': channel_val or 'GENEL',
                     'customer': cust_val,
+                    'brand': detected_brand,
                     'sizes': row_sizes,
                     'total_qty': tot_num,
                     'group_count': group_cnt,
@@ -2213,6 +2258,7 @@ Critical Rules:
                     'color': col,
                     'model': mod,
                     'customer': item.get('customer') or detected_customer,
+                    'brand': item.get('brand') or detected_brand or 'ANNA',
                     'group_count': grp_cnt,
                     'gross_weight': calc_gw,
                     'net_weight': item.get('net_weight') or 0.0,
@@ -2265,6 +2311,7 @@ Critical Rules:
             "success": True,
             "source_type": "EXCEL",
             "customer": detected_customer,
+            "brand": detected_brand or "ANNA",
             "style_no": detected_style or (list(model_set)[0] if model_set else ""),
             "models": list(model_set) or ([detected_style] if detected_style else []),
             "color": list(color_set)[0] if color_set else "",

@@ -31,5 +31,6 @@ build/
 *.spec
 
 data/backups/
+data/backup_config.json
 *.zip
 scratch_check_*.py

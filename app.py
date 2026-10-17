@@ -1829,7 +1829,14 @@ def api_export_styles_excel_post(req: ExportExcelRequest, authorization: Optiona
 
 # ----------------- ÖZET YAZDIR İMALAT ÇARŞAF EXCEL EXPORT -----------------
 
-def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, title: Optional[str] = None, company_id: int = 1, consolidate: Optional[str] = "0") -> Response:
+def generate_carsaf_print_excel_workbook(
+    style_ids: Optional[List[int]] = None,
+    title: Optional[str] = None,
+    company_id: int = 1,
+    consolidate: Optional[str] = "0",
+    show_channels: Optional[str] = "0",
+    col_order: Optional[str] = None
+) -> Response:
     conn = get_db()
     c = conn.cursor()
     
@@ -1859,6 +1866,8 @@ def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, 
     c.execute(sql, tuple(params))
     styles = [dict(r) for r in c.fetchall()]
     
+    is_show_channels = show_channels in ["1", "true", "True", True]
+
     # Kanalları topla seçeneği aktifse aynı model ve renkteki satırları birleştirip adetleri topla
     if consolidate in ["1", "true", "True", True]:
         consolidated = []
@@ -1871,19 +1880,26 @@ def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, 
             group_key = f"{s_cust}___{s_no}___{c_name}___{c_code}"
             
             qty = int(s.get("total_quantity") or 0)
+            s_chan = (s.get("channel") or "").strip()
             if group_key not in groups:
                 new_s = dict(s)
                 new_s["total_quantity"] = qty
+                new_s["_channels_list"] = [s_chan] if s_chan else []
                 groups[group_key] = new_s
                 consolidated.append(new_s)
             else:
                 groups[group_key]["total_quantity"] += qty
+                if s_chan and s_chan not in groups[group_key].get("_channels_list", []):
+                    groups[group_key].setdefault("_channels_list", []).append(s_chan)
                 if not groups[group_key].get("image_url") and s.get("image_url"):
                     groups[group_key]["image_url"] = s.get("image_url")
                 if not groups[group_key].get("image_url_2") and s.get("image_url_2"):
                     groups[group_key]["image_url_2"] = s.get("image_url_2")
                 if not groups[group_key].get("notes") and s.get("notes"):
                     groups[group_key]["notes"] = s.get("notes")
+        for item in consolidated:
+            if "_channels_list" in item:
+                item["channel"] = ", ".join(item["_channels_list"])
         styles = consolidated
 
     wb = openpyxl.Workbook()
@@ -1921,39 +1937,61 @@ def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, 
     align_left = Alignment(horizontal="left", vertical="center")
     align_left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
     
+    # Sütun Tanımları ve Sıralaması
+    col_defs = {
+        "image": {"title": "GÖRSEL", "width": 16, "align": align_center},
+        "style": {"title": "STYLE", "width": 18, "align": align_center},
+        "color": {"title": "RENK", "width": 22, "align": align_left_wrap},
+        "channel": {"title": "KANAL", "width": 16, "align": align_center},
+        "fabric": {"title": "KUMAŞ", "width": 30, "align": align_left_wrap},
+        "quantity": {"title": "ADET", "width": 12, "align": align_center},
+        "price": {"title": "PRICE", "width": 14, "align": align_center},
+        "notes": {"title": "NOTLAR", "width": 26, "align": align_left_wrap},
+    }
+
+    default_order = ["image", "style", "color", "channel", "fabric", "quantity", "price", "notes"] if is_show_channels else ["image", "style", "color", "fabric", "quantity", "price", "notes"]
+    
+    if col_order:
+        requested = [k.strip() for k in col_order.split(",") if k.strip() in col_defs]
+        if not is_show_channels:
+            requested = [k for k in requested if k != "channel"]
+        col_keys = []
+        for k in requested:
+            if k not in col_keys:
+                col_keys.append(k)
+        for k in default_order:
+            if k not in col_keys:
+                col_keys.append(k)
+    else:
+        col_keys = default_order
+
+    num_cols = len(col_keys)
+
     # 1. Başlık Banner'ı
     header_title_text = (title or "MÜŞTERİ SEZON İMALAT ÇARŞAF LİSTESİ").strip().upper()
-    ws.merge_cells("A1:G1")
+    last_col_letter = get_column_letter(num_cols)
+    ws.merge_cells(f"A1:{last_col_letter}1")
+
     title_cell = ws["A1"]
     title_cell.value = header_title_text
     title_cell.font = font_title
     title_cell.alignment = align_center
     title_cell.fill = fill_title
     ws.row_dimensions[1].height = 32
-    for c_idx in range(1, 8):
+    for c_idx in range(1, num_cols + 1):
         ws.cell(row=1, column=c_idx).border = border_thin
         
     # 2. Sütun Başlıkları
-    headers = ["GÖRSEL", "STYLE", "RENK", "KUMAŞ", "ADET", "PRICE", "NOTLAR"]
     ws.row_dimensions[2].height = 25
-    for c_idx, h_name in enumerate(headers, start=1):
-        c_cell = ws.cell(row=2, column=c_idx, value=h_name)
+    for c_idx, col_key in enumerate(col_keys, start=1):
+        c_def = col_defs[col_key]
+        c_cell = ws.cell(row=2, column=c_idx, value=c_def["title"])
         c_cell.fill = fill_yellow
         c_cell.font = font_header
-        c_cell.alignment = align_center if c_idx in (1, 2, 5, 6) else align_left
+        c_cell.alignment = align_center if col_key in ("image", "style", "channel", "quantity", "price") else align_left
         c_cell.border = border_thin
-        
-    col_widths = {
-        "A": 16,
-        "B": 18,
-        "C": 24,
-        "D": 32,
-        "E": 12,
-        "F": 14,
-        "G": 28
-    }
-    for col_let, w in col_widths.items():
-        ws.column_dimensions[col_let].width = w
+        col_letter = get_column_letter(c_idx)
+        ws.column_dimensions[col_letter].width = c_def["width"]
         
     # 3. Satırlar
     curr_row = 2
@@ -1962,124 +2000,137 @@ def generate_carsaf_print_excel_workbook(style_ids: Optional[List[int]] = None, 
         row_fill = fill_white if (curr_row % 2 == 1) else fill_zebra
         ws.row_dimensions[curr_row].height = 75
         
-        for c_idx in range(1, 8):
+        for c_idx, col_key in enumerate(col_keys, start=1):
             cell = ws.cell(row=curr_row, column=c_idx)
             cell.fill = row_fill
             cell.border = border_thin
             
-        # Görsel
-        img_added = False
-        img_url = s.get("image_url") or s.get("image_url_2")
-        if img_url and os.path.exists(UPLOADS_DIR):
-            try:
-                fn = os.path.basename(img_url.split("?")[0])
-                possible_paths = [
-                    os.path.join(UPLOADS_DIR, fn),
-                    os.path.join(UPLOADS_DIR, "styles", fn)
-                ]
-                img_path = next((p for p in possible_paths if os.path.isfile(p)), None)
-                if img_path:
-                    with PILImage.open(img_path) as pil_img:
-                        orig_w, orig_h = pil_img.size
-                        max_w, max_h = 95, 90
-                        ratio = min(max_w / max(1, orig_w), max_h / max(1, orig_h))
-                        new_w = max(1, int(orig_w * ratio))
-                        new_h = max(1, int(orig_h * ratio))
+            if col_key == "image":
+                img_added = False
+                img_url = s.get("image_url") or s.get("image_url_2")
+                if img_url and os.path.exists(UPLOADS_DIR):
+                    try:
+                        fn = os.path.basename(img_url.split("?")[0])
+                        possible_paths = [
+                            os.path.join(UPLOADS_DIR, fn),
+                            os.path.join(UPLOADS_DIR, "styles", fn)
+                        ]
+                        img_path = next((p for p in possible_paths if os.path.isfile(p)), None)
+                        if img_path:
+                            with PILImage.open(img_path) as pil_img:
+                                orig_w, orig_h = pil_img.size
+                                max_w, max_h = 95, 90
+                                ratio = min(max_w / max(1, orig_w), max_h / max(1, orig_h))
+                                new_w = max(1, int(orig_w * ratio))
+                                new_h = max(1, int(orig_h * ratio))
 
-                    xl_img = OpenpyxlImage(img_path)
-                    xl_img.width = new_w
-                    xl_img.height = new_h
+                            xl_img = OpenpyxlImage(img_path)
+                            xl_img.width = new_w
+                            xl_img.height = new_h
 
-                    col_w_px = int(16 * 7.5)
-                    row_h_px = int(75 * 1.33)
-                    x_off_px = max(0, (col_w_px - new_w) // 2)
-                    y_off_px = max(0, (row_h_px - new_h) // 2)
+                            col_w_px = int(col_defs["image"]["width"] * 7.5)
+                            row_h_px = int(75 * 1.33)
+                            x_off_px = max(0, (col_w_px - new_w) // 2)
+                            y_off_px = max(0, (row_h_px - new_h) // 2)
 
-                    marker = AnchorMarker(col=0, colOff=pixels_to_EMU(x_off_px), row=curr_row - 1, rowOff=pixels_to_EMU(y_off_px))
-                    size = XDRPositiveSize2D(pixels_to_EMU(new_w), pixels_to_EMU(new_h))
-                    xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
-                    ws.add_image(xl_img)
-                    img_added = True
-            except Exception:
-                pass
+                            marker = AnchorMarker(col=c_idx - 1, colOff=pixels_to_EMU(x_off_px), row=curr_row - 1, rowOff=pixels_to_EMU(y_off_px))
+                            size = XDRPositiveSize2D(pixels_to_EMU(new_w), pixels_to_EMU(new_h))
+                            xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
+                            ws.add_image(xl_img)
+                            img_added = True
+                    except Exception:
+                        pass
 
-        if not img_added:
-            cell_a = ws.cell(row=curr_row, column=1, value="[Resim Yok]")
-            cell_a.font = font_muted
-            cell_a.alignment = align_center
+                if not img_added:
+                    cell.value = "[Resim Yok]"
+                    cell.font = font_muted
+                    cell.alignment = align_center
 
-        # Style No
-        cell_b = ws.cell(row=curr_row, column=2, value=s.get("style_no") or "")
-        cell_b.font = font_bold
-        cell_b.alignment = align_center
+            elif col_key == "style":
+                cell.value = s.get("style_no") or ""
+                cell.font = font_bold
+                cell.alignment = align_center
 
-        # Renk
-        c_code = (s.get("color_code") or "").strip()
-        c_name = (s.get("color_name") or "").strip()
-        color_disp = f"{c_name} ({c_code})" if (c_code and c_name) else (c_name or c_code or "-")
-        cell_c = ws.cell(row=curr_row, column=3, value=color_disp)
-        cell_c.font = font_bold
-        cell_c.alignment = align_left_wrap
+            elif col_key == "color":
+                c_code = (s.get("color_code") or "").strip()
+                c_name = (s.get("color_name") or "").strip()
+                if c_code and c_name:
+                    c_name_clean = re.sub(rf'\s*\({re.escape(c_code)}\)', '', c_name, flags=re.IGNORECASE).strip()
+                    if c_code.lower() in c_name_clean.lower():
+                        color_disp = c_name_clean
+                    else:
+                        color_disp = f"{c_code} {c_name_clean}".strip()
+                else:
+                    color_disp = c_name or c_code or "-"
+                cell.value = color_disp
+                cell.font = font_bold
+                cell.alignment = align_left_wrap
 
-        # Kumaş
-        fabric_text = s.get("fabric_article") or s.get("fabric_type") or "-"
-        cell_d = ws.cell(row=curr_row, column=4, value=fabric_text)
-        cell_d.font = font_normal
-        cell_d.alignment = align_left_wrap
+            elif col_key == "channel":
+                cell.value = s.get("channel") or "-"
+                cell.font = font_bold
+                cell.alignment = align_center
 
-        # Adet
-        qty = int(s.get("total_quantity") or 0)
-        cell_e = ws.cell(row=curr_row, column=5, value=qty)
-        cell_e.font = font_bold
-        cell_e.alignment = align_center
-        cell_e.number_format = "#,##0"
+            elif col_key == "fabric":
+                fabric_text = s.get("fabric_article") or s.get("fabric_type") or "-"
+                cell.value = fabric_text
+                cell.font = font_normal
+                cell.alignment = align_left_wrap
 
-        # Price (Sütun 6 / F Sütunu - SEMBOL ÖNDE, VİRGÜLLÜ, GERÇEK SAYI)
-        p_val = s.get("unit_price")
-        cur_sym, cur_fmt = get_excel_currency_format(s.get("currency"))
-        
-        cell_f = ws.cell(row=curr_row, column=6)
-        cell_f.font = font_bold
-        cell_f.alignment = align_center
-        
-        pf = safe_price_float(p_val)
-        if pf is not None:
-            cell_f.value = pf
-            cell_f.number_format = cur_fmt
-        elif p_val is not None and str(p_val).strip() != "":
-            s_clean = str(p_val).strip().replace(".", ",")
-            cell_f.value = f"{cur_sym} {s_clean}"
-        else:
-            cell_f.value = None
+            elif col_key == "quantity":
+                qty = int(s.get("total_quantity") or 0)
+                cell.value = qty
+                cell.font = font_bold
+                cell.alignment = align_center
+                cell.number_format = "#,##0"
 
-        # Notlar
-        notes_val = s.get("notes") or ""
-        if not notes_val and s.get("custom_fields_json"):
-            try:
-                cf = json.loads(s["custom_fields_json"])
-                notes_val = cf.get("notes") or cf.get("notlar") or ""
-            except Exception:
-                pass
-        cell_g = ws.cell(row=curr_row, column=7, value=notes_val)
-        cell_g.font = font_normal
-        cell_g.alignment = align_left_wrap
+            elif col_key == "price":
+                p_val = s.get("unit_price")
+                cur_sym, cur_fmt = get_excel_currency_format(s.get("currency"))
+                cell.font = font_bold
+                cell.alignment = align_center
+                pf = safe_price_float(p_val)
+                if pf is not None:
+                    cell.value = pf
+                    cell.number_format = cur_fmt
+                elif p_val is not None and str(p_val).strip() != "":
+                    s_clean = str(p_val).strip().replace(".", ",")
+                    cell.value = f"{cur_sym} {s_clean}"
+                else:
+                    cell.value = None
+
+            elif col_key == "notes":
+                notes_val = s.get("notes") or ""
+                if not notes_val and s.get("custom_fields_json"):
+                    try:
+                        cf = json.loads(s["custom_fields_json"])
+                        notes_val = cf.get("notes") or cf.get("notlar") or ""
+                    except Exception:
+                        pass
+                cell.value = notes_val
+                cell.font = font_normal
+                cell.alignment = align_left_wrap
 
     # 4. Toplam Satırı
     if curr_row >= 3:
         sum_row = curr_row + 1
         ws.row_dimensions[sum_row].height = 28
-        for c_idx in range(1, 8):
+        for c_idx in range(1, num_cols + 1):
             c = ws.cell(row=sum_row, column=c_idx)
             c.fill = fill_total
             c.border = border_total
 
-        ws.cell(row=sum_row, column=2, value=f"TOPLAM ({len(styles)} Model)").font = font_total
-        ws.cell(row=sum_row, column=2).alignment = align_center
+        label_col = 2 if num_cols >= 2 else 1
+        ws.cell(row=sum_row, column=label_col, value=f"TOPLAM ({len(styles)} Model)").font = font_total
+        ws.cell(row=sum_row, column=label_col).alignment = align_center
         
-        cell_sum_qty = ws.cell(row=sum_row, column=5, value=f"=SUM(E3:E{curr_row})")
-        cell_sum_qty.font = font_total
-        cell_sum_qty.alignment = align_center
-        cell_sum_qty.number_format = "#,##0"
+        if "quantity" in col_keys:
+            qty_col_idx = col_keys.index("quantity") + 1
+            qty_col_letter = get_column_letter(qty_col_idx)
+            cell_sum_qty = ws.cell(row=sum_row, column=qty_col_idx, value=f"=SUM({qty_col_letter}3:{qty_col_letter}{curr_row})")
+            cell_sum_qty.font = font_total
+            cell_sum_qty.alignment = align_center
+            cell_sum_qty.number_format = "#,##0"
 
     output = io.BytesIO()
     wb.save(output)
@@ -2105,6 +2156,8 @@ def api_export_carsaf_excel_get(
     ids: Optional[str] = Query(None),
     title: Optional[str] = Query(None),
     consolidate: Optional[str] = Query("0"),
+    show_channels: Optional[str] = Query("0"),
+    col_order: Optional[str] = Query(None),
     authorization: Optional[str] = Header(None)
 ):
     user = None
@@ -2120,7 +2173,7 @@ def api_export_carsaf_excel_get(
         except Exception:
             pass
             
-    return generate_carsaf_print_excel_workbook(style_ids, title, company_id, consolidate)
+    return generate_carsaf_print_excel_workbook(style_ids, title, company_id, consolidate, show_channels, col_order)
 
 
 # ----------------- BUDGET EXCEL EXPORT (ÖRNEK BÜTÇE FORMATI) -----------------

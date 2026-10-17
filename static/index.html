@@ -5904,6 +5904,14 @@
                                     <option value="none">Kenarlıksız</option>
                                 </select>
 
+                                <!-- MARKA / BRAND ALANI -->
+                                <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700 text-xs">
+                                    <span class="text-slate-400 font-bold">Marka:</span>
+                                    <input v-model="printCustomBrand" type="text" placeholder="ANNA / MOSCOW"
+                                           class="w-28 bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-white font-bold uppercase text-[11px] focus:outline-none focus:border-purple-400"
+                                           title="Koli üstü etiketindeki marka metnini değiştirin">
+                                </div>
+
                                 <!-- 5. SAYFA YAPISINI KAYDET DÜĞMESİ -->
                                 <button @click="saveCurrentPrintPageLayout"
                                         class="px-3 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30"
@@ -5998,7 +6006,7 @@
                                                 <div class="text-[13px] leading-tight text-gray-800">Energieweg 35</div>
                                                 <div class="text-[13px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
                                                 <div class="text-[13px] leading-tight text-gray-800">The Netherlands</div>
-                                                <div class="mt-2 text-[14px] font-black tracking-wide">BRAND: ANNA</div>
+                                                <div class="mt-2 text-[14px] font-black tracking-wide">BRAND: {{ (printCustomBrand || pair[0].brand || activeCartonTemplate?.layout_json?.brand || 'ANNA').toUpperCase() }}</div>
                                             </div>
 
                                             <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL -->
@@ -6097,7 +6105,7 @@
                                                 <div class="text-[13px] leading-tight text-gray-800">Energieweg 35</div>
                                                 <div class="text-[13px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
                                                 <div class="text-[13px] leading-tight text-gray-800">The Netherlands</div>
-                                                <div class="mt-2 text-[14px] font-black tracking-wide">BRAND: ANNA</div>
+                                                <div class="mt-2 text-[14px] font-black tracking-wide">BRAND: {{ (printCustomBrand || pair[1].brand || activeCartonTemplate?.layout_json?.brand || 'ANNA').toUpperCase() }}</div>
                                             </div>
 
                                             <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL -->
@@ -6212,7 +6220,7 @@
                                                 <div class="text-[14px] leading-tight text-gray-800">Energieweg 35</div>
                                                 <div class="text-[14px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
                                                 <div class="text-[14px] leading-tight text-gray-800">The Netherlands</div>
-                                                <div class="mt-3 text-[16px] font-black tracking-wide">BRAND: ANNA</div>
+                                                <div class="mt-3 text-[16px] font-black tracking-wide">BRAND: {{ (printCustomBrand || c.brand || activeCartonTemplate?.layout_json?.brand || 'ANNA').toUpperCase() }}</div>
                                             </div>
                                         </div>
 
@@ -9920,37 +9928,36 @@
                     </button>
                 </div>
 
-                <!-- Sütun Genişlikleri Açılır Ayar Paneli (Hover Popover) -->
+                <!-- Sütun Genişlikleri & Sıralama Açılır Ayar Paneli (Hover Popover) -->
                 <div class="relative group/widths">
                     <button class="px-2.5 py-1.5 rounded-xl border text-[11px] font-bold text-slate-400 hover:text-slate-200 transition cursor-pointer flex items-center gap-1"
                             :class="isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'"
-                            title="Her sütunun genişlik yüzdesini tek tek ayarlayın">
+                            title="Her sütunun sırasını ve genişlik yüzdesini ayarlayın">
                         <i data-lucide="columns" class="w-3.5 h-3.5"></i>
-                        <span>Sütun Genişlikleri (%)</span>
+                        <span>Sütun Sırası & Oranları (%)</span>
                     </button>
-                    <div class="hidden group-hover/widths:flex absolute right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl shadow-2xl p-3 z-50 flex-col gap-1.5 min-w-[210px] text-xs">
+                    <div class="hidden group-hover/widths:flex absolute right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl shadow-2xl p-3 z-50 flex-col gap-1.5 min-w-[270px] text-xs">
                         <div class="text-[10.5px] font-black uppercase text-slate-400 pb-1 border-b flex justify-between items-center">
-                            <span>Sütun Oranları</span>
+                            <span>Sütun Sırası & Oranları</span>
                             <span class="text-indigo-500 font-mono">Toplam %100</span>
                         </div>
-                        <div v-for="col in [
-                            { key: 'image', title: 'Görsel / Başlık' },
-                            { key: 'style', title: 'Style No' },
-                            { key: 'color', title: 'Renk / Varyant' },
-                            { key: 'fabric', title: 'Kumaş Detayı' },
-                            { key: 'quantity', title: 'Adet' },
-                            { key: 'price', title: 'Birim Fiyat' },
-                            { key: 'notes', title: 'Notlar' }
-                        ]" :key="col.key" class="flex items-center justify-between gap-2 py-0.5">
-                            <span class="text-slate-600 dark:text-slate-300 font-medium">{{ col.title }}:</span>
+                        <div v-for="(colKey, cIdx) in activeCarsafPrintCols" :key="colKey" class="flex items-center justify-between gap-2 py-0.5">
                             <div class="flex items-center gap-1">
-                                <button @click="adjustColWidth(col.key, -1)" class="w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-red-500 hover:text-white font-bold text-center leading-none cursor-pointer">-</button>
-                                <span class="w-9 text-center font-mono font-black text-indigo-500">%{{ carsafPrintColWidths[col.key] }}</span>
-                                <button @click="adjustColWidth(col.key, 1)" class="w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500 hover:text-white font-bold text-center leading-none cursor-pointer">+</button>
+                                <button @click="moveCarsafCol(colKey, -1)" :disabled="cIdx === 0" class="w-4 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-indigo-600 hover:text-white disabled:opacity-25 disabled:cursor-not-allowed font-bold text-[9px] text-center leading-none cursor-pointer" title="Sola / Yukarı Taşı">▲</button>
+                                <button @click="moveCarsafCol(colKey, 1)" :disabled="cIdx === activeCarsafPrintCols.length - 1" class="w-4 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-indigo-600 hover:text-white disabled:opacity-25 disabled:cursor-not-allowed font-bold text-[9px] text-center leading-none cursor-pointer" title="Sağa / Aşağı Taşı">▼</button>
+                                <span class="text-slate-600 dark:text-slate-300 font-medium ml-1">{{ getCarsafColTitle(colKey) }}:</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button @click="adjustColWidth(colKey, -1)" class="w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-red-500 hover:text-white font-bold text-center leading-none cursor-pointer">-</button>
+                                <span class="w-9 text-center font-mono font-black text-indigo-500">%{{ carsafPrintColWidths[colKey] }}</span>
+                                <button @click="adjustColWidth(colKey, 1)" class="w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500 hover:text-white font-bold text-center leading-none cursor-pointer">+</button>
                             </div>
                         </div>
+                        <div class="text-[10px] text-slate-400 dark:text-slate-500 italic mt-0.5">
+                            İpucu: Tablo başlıklarını sürükleyip bırakarak da yerlerini değiştirebilirsiniz.
+                        </div>
                         <button @click="resetCarsafPrintColWidths" class="mt-1 pt-1.5 border-t text-[10.5px] text-center text-amber-500 hover:underline font-bold cursor-pointer">
-                            Varsayılan Oranlara Dön
+                            Varsayılan Sıra ve Oranlara Dön
                         </button>
                     </div>
                 </div>
@@ -9973,6 +9980,17 @@
                            @change="toggleConsolidateChannels"
                            class="w-4 h-4 rounded text-indigo-600 focus:ring-0 cursor-pointer accent-indigo-600">
                     <span class="whitespace-nowrap">Kanalları Topla</span>
+                </label>
+
+                <!-- Kanalları Göster Kutucuğu -->
+                <label class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-sm cursor-pointer transition select-none"
+                       :class="carsafPrintShowChannels ? 'bg-indigo-600/15 border-indigo-500/50 text-indigo-500 dark:text-indigo-400' : (isDarkMode ? 'bg-slate-800/80 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700')"
+                       title="Özet yazdırma tablosuna Kanal sütununu ekler">
+                    <input type="checkbox"
+                           v-model="carsafPrintShowChannels"
+                           @change="toggleShowChannels"
+                           class="w-4 h-4 rounded text-indigo-600 focus:ring-0 cursor-pointer accent-indigo-600">
+                    <span class="whitespace-nowrap">Kanalları Göster</span>
                 </label>
 
                 <!-- Yazdır / PDF Butonu -->
@@ -10011,66 +10029,49 @@
                 
                 <table id="carsaf-print-table" class="w-full text-left border-collapse print-table" style="table-layout: fixed; width: 100%;">
                     
-                    <!-- BAŞLIK SATIRI (AÇIK SARI RENK İLE DOLDURULMUŞ: #FFFF00, YÜZDE ESASLI SÜTUNLAR) -->
+                    <!-- BAŞLIK SATIRI (AÇIK SARI RENK İLE DOLDURULMUŞ: #FFFF00, YÜZDE ESASLI VE SIRALANABİLİR SÜTUNLAR) -->
                     <thead>
                         <tr class="print-header-light-yellow border-b-2 border-slate-500"
                             style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
                             
-                            <!-- 1. SOL ÜST MÜŞTERİ / SEZON / İMALAT BAŞLIĞI (GÖRSEL SÜTUNU) -->
-                            <th class="print-header-light-yellow p-1.5 text-center border-r border-slate-400 font-black text-xs uppercase tracking-wider relative select-none"
-                                :style="{ width: carsafPrintColWidths.image + '%' }"
-                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
-                                <input v-model="carsafPrintTitle"
-                                       placeholder="MÜŞTERİ SEZON İMALAT..."
-                                       class="w-full text-center bg-transparent border-0 outline-none font-black text-xs text-black uppercase tracking-wider focus:ring-0">
-                                <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('image', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
-                            </th>
+                            <!-- DİNAMİK SÜTUN BAŞLIKLARI (SÜRÜKLE-BIRAK VEYA OKLARLA SIRALANABİLİR) -->
+                            <th v-for="(colKey, cIdx) in activeCarsafPrintCols"
+                                :key="colKey"
+                                draggable="true"
+                                @dragstart="onCarsafColDragStart(colKey, $event)"
+                                @dragover="onCarsafColDragOver(colKey, $event)"
+                                @dragleave="onCarsafColDragLeave(colKey, $event)"
+                                @drop="onCarsafColDrop(colKey, $event)"
+                                class="print-header-light-yellow p-1 font-extrabold text-xs uppercase tracking-wider relative select-none cursor-move transition-colors group/th"
+                                :class="[
+                                    carsafDragOverColKey === colKey ? 'ring-2 ring-indigo-500 ring-inset bg-amber-200' : '',
+                                    carsafDraggedColKey === colKey ? 'opacity-40' : '',
+                                    cIdx < activeCarsafPrintCols.length - 1 ? 'border-r border-slate-400' : '',
+                                    colKey === 'image' || colKey === 'style' || colKey === 'channel' || colKey === 'quantity' || colKey === 'price' ? 'text-center' : 'text-left'
+                                ]"
+                                :style="{ width: carsafPrintColWidths[colKey] + '%' }"
+                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;"
+                                :title="'Sırasını değiştirmek için sürükleyin veya oklara tıklayın'">
+                                
+                                <template v-if="colKey === 'image'">
+                                    <div class="flex items-center justify-between gap-1 px-0.5">
+                                        <button v-if="cIdx > 0" @click.stop="moveCarsafCol('image', -1)" class="no-print opacity-0 group-hover/th:opacity-100 hover:text-indigo-600 cursor-pointer text-[10px] font-black" title="Sola Taşı">◀</button>
+                                        <input v-model="carsafPrintTitle"
+                                               placeholder="MÜŞTERİ SEZON İMALAT..."
+                                               class="w-full text-center bg-transparent border-0 outline-none font-black text-xs text-black uppercase tracking-wider focus:ring-0">
+                                        <button v-if="cIdx < activeCarsafPrintCols.length - 1" @click.stop="moveCarsafCol('image', 1)" class="no-print opacity-0 group-hover/th:opacity-100 hover:text-indigo-600 cursor-pointer text-[10px] font-black" title="Sağa Taşı">▶</button>
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <div class="flex items-center justify-between gap-1 px-1">
+                                        <button v-if="cIdx > 0" @click.stop="moveCarsafCol(colKey, -1)" class="no-print opacity-0 group-hover/th:opacity-100 hover:text-indigo-600 cursor-pointer text-[10px] font-black" title="Sola Taşı">◀</button>
+                                        <span class="flex-1 whitespace-nowrap" :class="colKey === 'color' || colKey === 'fabric' || colKey === 'notes' ? 'text-left' : 'text-center'">{{ getCarsafColHeaderTitle(colKey) }}</span>
+                                        <button v-if="cIdx < activeCarsafPrintCols.length - 1" @click.stop="moveCarsafCol(colKey, 1)" class="no-print opacity-0 group-hover/th:opacity-100 hover:text-indigo-600 cursor-pointer text-[10px] font-black" title="Sağa Taşı">▶</button>
+                                    </div>
+                                </template>
 
-                            <!-- 2. STYLE -->
-                            <th class="print-header-light-yellow p-1.5 text-center border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none whitespace-nowrap"
-                                :style="{ width: carsafPrintColWidths.style + '%' }"
-                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
-                                <span>STYLE</span>
-                                <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('style', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
-                            </th>
-
-                            <!-- 3. RENK -->
-                            <th class="print-header-light-yellow p-1.5 text-left border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none"
-                                :style="{ width: carsafPrintColWidths.color + '%' }"
-                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
-                                <span>RENK</span>
-                                <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('color', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
-                            </th>
-
-                            <!-- 4. KUMAŞ -->
-                            <th class="print-header-light-yellow p-1.5 text-left border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none"
-                                :style="{ width: carsafPrintColWidths.fabric + '%' }"
-                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
-                                <span>KUMAŞ</span>
-                                <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('fabric', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
-                            </th>
-
-                            <!-- 5. ADET -->
-                            <th class="print-header-light-yellow p-1.5 text-center border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none whitespace-nowrap"
-                                :style="{ width: carsafPrintColWidths.quantity + '%' }"
-                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
-                                <span>ADET</span>
-                                <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('quantity', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
-                            </th>
-
-                            <!-- 6. PRICE -->
-                            <th class="print-header-light-yellow p-1.5 text-center border-r border-slate-400 font-extrabold text-xs uppercase tracking-wider relative select-none whitespace-nowrap"
-                                :style="{ width: carsafPrintColWidths.price + '%' }"
-                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
-                                <span>PRICE</span>
-                                <div class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize('price', $event)" title="Genişliği ayarlamak için sürükleyin"></div>
-                            </th>
-
-                            <!-- 7. NOTLAR -->
-                            <th class="print-header-light-yellow p-1.5 text-left font-extrabold text-xs uppercase tracking-wider relative select-none whitespace-nowrap"
-                                :style="{ width: carsafPrintColWidths.notes + '%' }"
-                                style="background-color: #FFFF00 !important; box-shadow: inset 0 0 0 1000px #FFFF00 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; color: #000000 !important;">
-                                <span>NOTLAR</span>
+                                <!-- SÜTUN GENİŞLİK BOYUTLANDIRICI (RESIZER) -->
+                                <div v-if="cIdx < activeCarsafPrintCols.length - 1" class="resizer no-print" @mousedown.stop.prevent="startCarsafPrintColResize(colKey, $event)" title="Genişliği ayarlamak için sürükleyin"></div>
                             </th>
 
                             <!-- SATIR SİL BUTONU BAŞLIĞI (BASKIDA GİZLENİR) -->
@@ -10079,53 +10080,76 @@
                         </tr>
                     </thead>
 
-                    <!-- TABLO GÖVDESİ (RENKSİZ / BEYAZ ZEMİN, AYARLANABİLİR SATIR YÜKSEKLİĞİ) -->
+                    <!-- TABLO GÖVDESİ (RENKSİZ / BEYAZ ZEMİN, AYARLANABİLİR SATIR YÜKSEKLİĞİ VE DİNAMİK SÜTUN SIRASI) -->
                     <tbody class="divide-y divide-slate-300 font-sans" style="background-color: #ffffff !important; color: #000000 !important;">
                         <tr v-for="(r, rIdx) in carsafPrintRows" :key="r.id"
                             class="print-row-white hover:bg-slate-50 transition"
                             :style="{ height: carsafPrintRowHeight + 'px', minHeight: carsafPrintRowHeight + 'px', maxHeight: carsafPrintRowHeight + 'px', backgroundColor: '#ffffff !important', color: '#000000 !important', pageBreakInside: 'avoid', breakInside: 'avoid' }">
                             
-                            <!-- 1. GÖRSEL (AYARLANABİLİR BOYUT) -->
-                            <td class="p-1 text-center align-middle border-r border-slate-300 overflow-hidden"
-                                :style="{ height: carsafPrintRowHeight + 'px' }">
-                                <div class="w-full mx-auto flex items-center justify-center overflow-hidden"
-                                     :style="{ height: Math.max(30, carsafPrintRowHeight - 6) + 'px' }">
-                                    <img v-if="r.image_url" :src="r.image_url" class="max-w-full max-h-full object-contain">
-                                    <img v-else-if="r.image_url_2" :src="r.image_url_2" class="max-w-full max-h-full object-contain">
-                                    <div v-else class="text-slate-300 text-[10.5px] font-mono">[Resim Yok]</div>
-                                </div>
-                            </td>
+                            <template v-for="(colKey, cIdx) in activeCarsafPrintCols" :key="colKey">
+                                <!-- GÖRSEL (AYARLANABİLİR BOYUT) -->
+                                <td v-if="colKey === 'image'"
+                                    class="p-1 text-center align-middle overflow-hidden"
+                                    :class="cIdx < activeCarsafPrintCols.length - 1 ? 'border-r border-slate-300' : ''"
+                                    :style="{ height: carsafPrintRowHeight + 'px' }">
+                                    <div class="w-full mx-auto flex items-center justify-center overflow-hidden"
+                                         :style="{ height: Math.max(30, carsafPrintRowHeight - 6) + 'px' }">
+                                        <img v-if="r.image_url" :src="r.image_url" class="max-w-full max-h-full object-contain">
+                                        <img v-else-if="r.image_url_2" :src="r.image_url_2" class="max-w-full max-h-full object-contain">
+                                        <div v-else class="text-slate-300 text-[10.5px] font-mono">[Resim Yok]</div>
+                                    </div>
+                                </td>
 
-                            <!-- 2. STYLE -->
-                            <td class="p-1 text-center align-middle border-r border-slate-300 font-black text-xs sm:text-sm text-black whitespace-nowrap">
-                                {{ r.style_no }}
-                            </td>
+                                <!-- STYLE -->
+                                <td v-else-if="colKey === 'style'"
+                                    class="p-1 text-center align-middle font-black text-xs sm:text-sm text-black whitespace-nowrap"
+                                    :class="cIdx < activeCarsafPrintCols.length - 1 ? 'border-r border-slate-300' : ''">
+                                    {{ r.style_no }}
+                                </td>
 
-                            <!-- 3. RENK -->
-                            <td class="p-1.5 text-left align-middle border-r border-slate-300 font-bold text-xs text-black leading-tight break-words">
-                                {{ r.color_name }}
-                            </td>
+                                <!-- RENK -->
+                                <td v-else-if="colKey === 'color'"
+                                    class="p-1.5 text-left align-middle font-bold text-xs text-black leading-tight break-words"
+                                    :class="cIdx < activeCarsafPrintCols.length - 1 ? 'border-r border-slate-300' : ''">
+                                    {{ r.color_name }}
+                                </td>
 
-                            <!-- 4. KUMAŞ -->
-                            <td class="p-1.5 text-left align-middle border-r border-slate-300 font-bold text-xs text-black leading-tight break-words">
-                                {{ r.fabric_article }}
-                            </td>
+                                <!-- KANAL -->
+                                <td v-else-if="colKey === 'channel'"
+                                    class="p-1 text-center align-middle font-extrabold text-xs text-black whitespace-nowrap"
+                                    :class="cIdx < activeCarsafPrintCols.length - 1 ? 'border-r border-slate-300' : ''">
+                                    {{ r.channel || '-' }}
+                                </td>
 
-                            <!-- 5. ADET -->
-                            <td class="p-1 text-center align-middle border-r border-slate-300 font-black text-xs sm:text-sm text-black whitespace-nowrap">
-                                {{ r.total_quantity }}
-                            </td>
+                                <!-- KUMAŞ -->
+                                <td v-else-if="colKey === 'fabric'"
+                                    class="p-1.5 text-left align-middle font-bold text-xs text-black leading-tight break-words"
+                                    :class="cIdx < activeCarsafPrintCols.length - 1 ? 'border-r border-slate-300' : ''">
+                                    {{ r.fabric_article }}
+                                </td>
 
-                            <!-- 6. PRICE -->
-                            <td class="p-1 text-center align-middle border-r border-slate-300 font-black text-xs text-black whitespace-nowrap">
-                                {{ r.price_formatted }}
-                            </td>
+                                <!-- ADET -->
+                                <td v-else-if="colKey === 'quantity'"
+                                    class="p-1 text-center align-middle font-black text-xs sm:text-sm text-black whitespace-nowrap"
+                                    :class="cIdx < activeCarsafPrintCols.length - 1 ? 'border-r border-slate-300' : ''">
+                                    {{ r.total_quantity }}
+                                </td>
 
-                            <!-- 7. NOTLAR -->
-                            <td class="p-1.5 text-left align-middle text-xs text-black leading-tight break-words overflow-hidden">
-                                <input v-model="r.notes" placeholder=""
-                                       class="w-full bg-transparent border-0 outline-none text-xs font-medium text-black focus:ring-0 p-0 break-words">
-                            </td>
+                                <!-- PRICE -->
+                                <td v-else-if="colKey === 'price'"
+                                    class="p-1 text-center align-middle font-black text-xs text-black whitespace-nowrap"
+                                    :class="cIdx < activeCarsafPrintCols.length - 1 ? 'border-r border-slate-300' : ''">
+                                    {{ r.price_formatted }}
+                                </td>
+
+                                <!-- NOTLAR -->
+                                <td v-else-if="colKey === 'notes'"
+                                    class="p-1.5 text-left align-middle text-xs text-black leading-tight break-words overflow-hidden"
+                                    :class="cIdx < activeCarsafPrintCols.length - 1 ? 'border-r border-slate-300' : ''">
+                                    <input v-model="r.notes" placeholder=""
+                                           class="w-full bg-transparent border-0 outline-none text-xs font-medium text-black focus:ring-0 p-0 break-words">
+                                </td>
+                            </template>
 
                             <!-- SATIR SİL BUTONU (BASKIDA GİZLENİR: no-print) -->
                             <td class="p-0.5 text-center align-middle no-print w-6">
