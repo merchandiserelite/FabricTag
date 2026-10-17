@@ -3877,6 +3877,10 @@ window.__texflowApp = createApp({
             });
         };
 
+        const activeDropdownOptions = ref([]);
+        let activeDropdownAllOptions = [];
+        const activeDropdownSelectedSet = ref(new Set());
+
         const getVisibleDistinctValuesForColumn = (colKey) => {
             const all = getCascadingDistinctValuesForColumn(colKey);
             const q = (columnFilterSearch.value[colKey] || '').toLowerCase().trim();
@@ -3899,11 +3903,16 @@ window.__texflowApp = createApp({
             } else {
                 activeFilterDropdown.value = colKey;
                 columnFilterSearch.value[colKey] = '';
-                const availableVals = getCascadingDistinctValuesForColumn(colKey);
+                // Precalculate once and cache for this open dropdown session
+                activeDropdownAllOptions = getCascadingDistinctValuesForColumn(colKey);
+                activeDropdownOptions.value = activeDropdownAllOptions;
+                
                 if (columnFilters.value[colKey] !== undefined && columnFilters.value[colKey] !== null) {
                     tempColumnFilters.value[colKey] = [...columnFilters.value[colKey]];
+                    activeDropdownSelectedSet.value = new Set(columnFilters.value[colKey]);
                 } else {
-                    tempColumnFilters.value[colKey] = [...availableVals];
+                    tempColumnFilters.value[colKey] = [...activeDropdownAllOptions];
+                    activeDropdownSelectedSet.value = new Set(activeDropdownAllOptions);
                 }
             }
             refreshIcons();
@@ -3911,59 +3920,60 @@ window.__texflowApp = createApp({
 
         const onColumnSearchInput = (colKey) => {
             const q = (columnFilterSearch.value[colKey] || '').toLowerCase().trim();
-            const visible = getVisibleDistinctValuesForColumn(colKey);
             if (!q) {
-                const allVals = getCascadingDistinctValuesForColumn(colKey);
-                tempColumnFilters.value[colKey] = [...allVals];
+                activeDropdownOptions.value = activeDropdownAllOptions;
             } else {
-                // Arama yapıldığında eşleşenleri otomatik seç
-                tempColumnFilters.value[colKey] = [...visible];
+                activeDropdownOptions.value = activeDropdownAllOptions.filter(v => v.toLowerCase().includes(q));
             }
         };
 
         const isValSelectedInColumn = (colKey, val) => {
+            if (activeFilterDropdown.value === colKey) {
+                return activeDropdownSelectedSet.value.has(val);
+            }
             const arr = tempColumnFilters.value[colKey];
             if (arr === undefined || arr === null) return true;
             return arr.includes(val);
         };
 
         const toggleValSelection = (colKey, val, checked) => {
-            if (!tempColumnFilters.value[colKey]) {
-                tempColumnFilters.value[colKey] = [...getCascadingDistinctValuesForColumn(colKey)];
-            }
-            const arr = tempColumnFilters.value[colKey];
+            const s = new Set(activeDropdownSelectedSet.value);
             if (checked) {
-                if (!arr.includes(val)) arr.push(val);
+                s.add(val);
             } else {
-                tempColumnFilters.value[colKey] = arr.filter(v => v !== val);
+                s.delete(val);
             }
+            activeDropdownSelectedSet.value = s;
+            tempColumnFilters.value[colKey] = Array.from(s);
         };
 
         const selectAllForColumn = (colKey) => {
-            const visible = getVisibleDistinctValuesForColumn(colKey);
-            const current = new Set(tempColumnFilters.value[colKey] || []);
-            visible.forEach(v => current.add(v));
-            tempColumnFilters.value[colKey] = Array.from(current);
+            const s = new Set(activeDropdownSelectedSet.value);
+            (activeDropdownOptions.value || []).forEach(v => s.add(v));
+            activeDropdownSelectedSet.value = s;
+            tempColumnFilters.value[colKey] = Array.from(s);
         };
 
         const clearColumnFilter = (colKey) => {
-            const visible = new Set(getVisibleDistinctValuesForColumn(colKey));
-            const current = tempColumnFilters.value[colKey] || [];
-            tempColumnFilters.value[colKey] = current.filter(v => !visible.has(v));
+            const s = new Set(activeDropdownSelectedSet.value);
+            (activeDropdownOptions.value || []).forEach(v => s.delete(v));
+            activeDropdownSelectedSet.value = s;
+            tempColumnFilters.value[colKey] = Array.from(s);
         };
 
         const applyColumnFilter = (colKey) => {
-            const availableVals = getCascadingDistinctValuesForColumn(colKey);
-            const selected = tempColumnFilters.value[colKey] || [];
+            const availableVals = activeDropdownAllOptions.length > 0 ? activeDropdownAllOptions : getCascadingDistinctValuesForColumn(colKey);
+            const selectedSet = activeDropdownSelectedSet.value;
             
             // Eğer aktif listedeki tüm değerler seçildiyse sütun filtresini kaldır (Excel gibi)
-            const allSelected = availableVals.length > 0 && availableVals.every(v => selected.includes(v));
+            const allSelected = availableVals.length > 0 && availableVals.every(v => selectedSet.has(v));
             if (allSelected) {
                 delete columnFilters.value[colKey];
             } else {
-                columnFilters.value[colKey] = [...selected];
+                columnFilters.value[colKey] = Array.from(selectedSet);
             }
             activeFilterDropdown.value = null;
+            carsafRenderLimit.value = 80;
             refreshIcons();
         };
 
@@ -3983,6 +3993,7 @@ window.__texflowApp = createApp({
             tempColumnFilters.value = {};
             activeFilterDropdown.value = null;
             carsafSearchQuery.value = '';
+            carsafRenderLimit.value = 80;
             refreshIcons();
         };
 
@@ -4032,21 +4043,33 @@ window.__texflowApp = createApp({
                 });
             }
 
-            // 1. Column Filter Pass
-            let result = preFiltered.filter(s => {
-                for (const colKey of Object.keys(columnFilters.value)) {
-                    if (!isColumnFiltered(colKey)) continue;
+            // 1. Column Filter Pass (High-Speed O(1) Set evaluation)
+            const activeFilterEntries = [];
+            for (const colKey of Object.keys(columnFilters.value)) {
+                if (isColumnFiltered(colKey)) {
                     const selectedVals = columnFilters.value[colKey];
                     if (selectedVals.length === 0) {
-                        return false;
+                        return [];
                     }
-                    const rowVal = getStyleColumnValue(s, colKey);
-                    if (!selectedVals.includes(rowVal)) {
-                        return false;
-                    }
+                    activeFilterEntries.push({
+                        key: colKey,
+                        valSet: new Set(selectedVals)
+                    });
                 }
-                return true;
-            });
+            }
+
+            let result = preFiltered;
+            if (activeFilterEntries.length > 0) {
+                result = preFiltered.filter(s => {
+                    for (let i = 0; i < activeFilterEntries.length; i++) {
+                        const rowVal = getStyleColumnValue(s, activeFilterEntries[i].key);
+                        if (!activeFilterEntries[i].valSet.has(rowVal)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+            }
 
 
             // 2. Sorting Pass
@@ -4097,6 +4120,35 @@ window.__texflowApp = createApp({
 
             return result;
         });
+
+        // PROGRESSIVE LAZY ROW RENDERING FOR 400+ ORDERS (Prevents DOM Freezing)
+        const carsafRenderLimit = ref(80);
+
+        const displayedFilteredStyles = computed(() => {
+            const list = filteredStyles.value || [];
+            if (list.length <= carsafRenderLimit.value) {
+                return list;
+            }
+            return list.slice(0, carsafRenderLimit.value);
+        });
+
+        const showAllCarsafRows = () => {
+            carsafRenderLimit.value = 999999;
+        };
+
+        const onCarsafTableScroll = (e) => {
+            const el = e.target;
+            if (!el) return;
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 350) {
+                if (carsafRenderLimit.value < (filteredStyles.value || []).length) {
+                    carsafRenderLimit.value += 60;
+                }
+            }
+        };
+
+        watch([carsafSearchQuery, columnFilters, sortColumn, sortDirection], () => {
+            carsafRenderLimit.value = 80;
+        }, { deep: true });
 
         // SÜZÜLEN SİPARİŞLERİN BEDEN VE GENEL TOPLAMLARI
         const filteredTotals = computed(() => {
@@ -11328,6 +11380,12 @@ window.__texflowApp = createApp({
             navigateToStyleInSheet,
             styles,
             filteredStyles,
+            displayedFilteredStyles,
+            carsafRenderLimit,
+            showAllCarsafRows,
+            onCarsafTableScroll,
+            activeDropdownOptions,
+            activeDropdownSelectedSet,
             carsafSearchQuery,
             visibleColumns,
             displayedColumns,

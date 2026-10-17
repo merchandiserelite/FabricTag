@@ -32,6 +32,8 @@ from openpyxl.utils.units import pixels_to_EMU
 from openpyxl.utils import get_column_letter
 from PIL import Image as PILImage
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from collections import defaultdict
 from pydantic import BaseModel
 
 from database import (
@@ -45,6 +47,8 @@ from fabrictag_connector import FabricTagConnector
 init_db()
 
 app = FastAPI(title="TexFlow - Smart Textile Production Suite", version="2.8.0")
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,7 +65,10 @@ license_manager.start_background_license_checker()
 async def license_security_middleware(request: Request, call_next):
     path = request.url.path
     if path.startswith("/static") or path.startswith("/favicon.ico"):
-        return await call_next(request)
+        res = await call_next(request)
+        if request.method == "GET" and res.status_code == 200:
+            res.headers["Cache-Control"] = "public, max-age=3600"
+        return res
     
     lic = license_manager.check_license()
     if not lic.get("is_valid", True):
@@ -735,10 +742,57 @@ def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
         return found
 
     all_sizes_set = set()
+    style_ids = [s["id"] for s in styles]
+
+    # Pre-fetch all child relations in high-speed batches to eliminate 2,000+ sequential N+1 queries
+    sizes_by_style = defaultdict(list)
+    fl1_by_style = {}
+    fl2_by_style = {}
+    logs_by_style = defaultdict(list)
+    audit_counts = defaultdict(int)
+
+    if style_ids:
+        for i in range(0, len(style_ids), 500):
+            chunk = style_ids[i:i + 500]
+            placeholders = ",".join("?" for _ in chunk)
+
+            # 1. Size Distributions
+            c.execute(f"SELECT * FROM size_distributions WHERE style_id IN ({placeholders}) ORDER BY sort_order ASC, id ASC", chunk)
+            for row in c.fetchall():
+                sizes_by_style[row["style_id"]].append(dict(row))
+
+            # 2. Fabric Links (ordered ASC so highest id overwrites, matching ORDER BY id DESC LIMIT 1)
+            c.execute(f"SELECT * FROM fabric_links WHERE style_id IN ({placeholders}) ORDER BY id ASC", chunk)
+            for row in c.fetchall():
+                rd = dict(row)
+                sid = rd["style_id"]
+                slot = rd.get("fabric_slot")
+                if slot == 2:
+                    fl2_by_style[sid] = rd
+                elif slot == 1 or slot is None:
+                    fl1_by_style[sid] = rd
+
+            # 3. Production Status Logs (ordered DESC, take up to 15 per style)
+            c.execute(f"SELECT * FROM production_status_logs WHERE style_id IN ({placeholders}) ORDER BY id DESC", chunk)
+            for row in c.fetchall():
+                sid = row["style_id"]
+                if len(logs_by_style[sid]) < 15:
+                    logs_by_style[sid].append(dict(row))
+
+            # 4. Audit Log Counts
+            c.execute(f"SELECT style_id, COUNT(*) FROM audit_logs WHERE style_id IN ({placeholders}) GROUP BY style_id", chunk)
+            for row in c.fetchall():
+                audit_counts[row[0]] = row[1]
+
+    def is_empty_val(v):
+        if not v:
+            return True
+        sv = str(v).strip().upper()
+        return sv in ["", "KODSUZ", "YOK", "NONE", "NULL", "-"]
 
     for s in styles:
-        c.execute("SELECT * FROM size_distributions WHERE style_id = ? ORDER BY sort_order ASC, id ASC", (s["id"],))
-        sizes_rows = [dict(sz) for sz in c.fetchall()]
+        sid = s["id"]
+        sizes_rows = sizes_by_style.get(sid, [])
         s["sizes"] = sizes_rows
         
         size_map = {}
@@ -762,16 +816,8 @@ def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
         
         s["custom_fields"] = json.loads(s.get("custom_fields_json") or "{}")
 
-        def is_empty_val(v):
-            if not v:
-                return True
-            sv = str(v).strip().upper()
-            return sv in ["", "KODSUZ", "YOK", "NONE", "NULL", "-"]
-
         # Slot 1 Fabric resolution
-        c.execute("SELECT * FROM fabric_links WHERE style_id = ? AND (fabric_slot = 1 OR fabric_slot IS NULL) ORDER BY id DESC LIMIT 1", (s["id"],))
-        fl1 = c.fetchone()
-        fl1_dict = dict(fl1) if fl1 else None
+        fl1_dict = fl1_by_style.get(sid)
         s["fabric_link"] = fl1_dict
         f1_meta = resolve_fabric_meta(fl1_dict.get("fabrictag_id") if fl1_dict else None, s.get("fabric_article") or s.get("fabric_type"))
         if f1_meta:
@@ -810,9 +856,7 @@ def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
             s["fabric_color_1"] = ""
 
         # Slot 2 Fabric resolution
-        c.execute("SELECT * FROM fabric_links WHERE style_id = ? AND fabric_slot = 2 ORDER BY id DESC LIMIT 1", (s["id"],))
-        fl2 = c.fetchone()
-        fl2_dict = dict(fl2) if fl2 else None
+        fl2_dict = fl2_by_style.get(sid)
         s["fabric_link_2"] = fl2_dict
         f2_meta = resolve_fabric_meta(fl2_dict.get("fabrictag_id") if fl2_dict else None, s.get("fabric_article_2") or s.get("fabric_type_2"))
         if f2_meta:
@@ -880,14 +924,8 @@ def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
         else:
             s["actual_cost_data"] = None
 
-
-        c.execute("SELECT * FROM production_status_logs WHERE style_id = ? ORDER BY id DESC LIMIT 15", (s["id"],))
-        s["recent_logs"] = [dict(lg) for lg in c.fetchall()]
-
-
-
-        c.execute("SELECT COUNT(*) FROM audit_logs WHERE style_id = ?", (s["id"],))
-        s["audit_count"] = c.fetchone()[0]
+        s["recent_logs"] = logs_by_style.get(sid, [])
+        s["audit_count"] = audit_counts.get(sid, 0)
 
     # Also load custom columns
     c.execute("SELECT * FROM custom_columns WHERE company_id = ? ORDER BY sort_order ASC, id ASC", (company_id,))

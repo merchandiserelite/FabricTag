@@ -40,6 +40,9 @@ def get_db():
     conn.execute("PRAGMA synchronous = NORMAL")
     conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA cache_size = -64000")
+    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute("PRAGMA mmap_size = 268435456")
     return conn
 
 
@@ -251,6 +254,21 @@ def init_db():
     )
     """)
 
+    # Custom Columns (+ Sütun Ekle)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS custom_columns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_id INTEGER DEFAULT 1,
+        col_key TEXT UNIQUE,
+        title TEXT NOT NULL,
+        col_type TEXT NOT NULL,
+        options_json TEXT,
+        width INTEGER DEFAULT 120,
+        sort_order INTEGER DEFAULT 99,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # 10. Freeform Cost Studies (Serbest Fiyat Çalışmaları)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS free_cost_studies (
@@ -401,6 +419,8 @@ def init_db():
         cursor.execute("ALTER TABLE styles ADD COLUMN image_url TEXT")
     if "image_url_2" not in style_cols:
         cursor.execute("ALTER TABLE styles ADD COLUMN image_url_2 TEXT")
+    if "brand" not in style_cols:
+        cursor.execute("ALTER TABLE styles ADD COLUMN brand TEXT DEFAULT ''")
 
     cursor.execute("PRAGMA table_info(size_distributions)")
     size_cols = [r[1] for r in cursor.fetchall()]
@@ -483,6 +503,16 @@ def init_db():
             """, (company_id, key, tr, en, icon, path, order, roles))
         else:
             cursor.execute("UPDATE dynamic_menus SET is_visible = 1 WHERE menu_key = ? AND is_visible = 0", (key,))
+
+    # Create High-Performance Indexes for 400+ style instant lookups
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_styles_company_order ON styles(company_id, order_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_styles_order_id ON styles(order_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_styles_company_id ON styles(company_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_size_dist_style_id ON size_distributions(style_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fabric_links_style_id ON fabric_links(style_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_prod_logs_style_id ON production_status_logs(style_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_style_id ON audit_logs(style_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_company_id ON orders(company_id)")
 
     conn.commit()
     conn.close()
