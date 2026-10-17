@@ -54,23 +54,27 @@ window.__texflowApp = createApp({
         };
 
         // =========================================================================
-        // AKILLI EKRAN ÇÖZÜNÜRLÜĞÜ & OTOMATİK SIĞDIRMA MOTORU (EXCEL-LIKE AUTO FIT)
+        // AKILLI EKRAN ÇÖZÜNÜRLÜĞÜ & EN-BOY ÖLÇEKLEME MOTORU (RESPONSIVE AUTO-SCALE)
         // =========================================================================
         const getAutoFitZoom = () => {
-            const w = window.innerWidth || (window.screen ? window.screen.width : 1920);
-            const h = window.innerHeight || (window.screen ? window.screen.height : 1080);
+            // Mevcut zoom faktörünü hesaba katarak gerçek ekran/pencere çözünürlüğünü bulur
+            const currentZoom = parseFloat(document.documentElement.style.zoom) || 1;
+            const w = Math.round(window.innerWidth ? window.innerWidth * currentZoom : (window.screen ? window.screen.width : 1920));
+            const h = Math.round(window.innerHeight ? window.innerHeight * currentZoom : (window.screen ? window.screen.height : 1080));
             
-            // Excel gibi ekrana sığdırma:
-            if (w < 1200 || h < 700) {
-                return 75; // Küçük laptop / 1080p %150 ölçek
+            // Küçük ekranlar ve düşük çözünürlükler için en-boy orantılı küçültme kademeleri:
+            if (w < 1100 || h < 640) {
+                return 70; // Çok küçük ekranlar / 1024x768 / netbook
+            } else if (w < 1280 || h < 720) {
+                return 75; // 1280x720 / 1080p %150 ölçekli laptop
             } else if (w < 1440 || h < 820) {
-                return 80; // 1366x768 standart laptop / 1080p %125 ölçek
-            } else if (w < 1680) {
-                return 85; // 1440x900 veya 1600x900
+                return 80; // Standart 1366x768 laptop / 1080p %125 ölçekli laptop
+            } else if (w < 1680 || h < 900) {
+                return 85; // 1440x900 / 1600x900 ekranlar
             } else if (w < 1920) {
-                return 90; // Standart 1080p laptop/monitör
+                return 92; // 1080p laptop ekranı
             } else {
-                return 100; // Geniş 1080p ve 2K/4K ekranlar
+                return 100; // Geniş 1080p ve 2K/4K monitörler
             }
         };
 
@@ -82,19 +86,36 @@ window.__texflowApp = createApp({
                 : getAutoFitZoom()
         );
 
+        const screenInfo = ref({
+            width: window.innerWidth || 1920,
+            height: window.innerHeight || 1080
+        });
+
+        const updateScreenInfo = () => {
+            const currentZoom = parseFloat(document.documentElement.style.zoom) || 1;
+            screenInfo.value = {
+                width: Math.round(window.innerWidth ? window.innerWidth * currentZoom : (window.screen ? window.screen.width : 1920)),
+                height: Math.round(window.innerHeight ? window.innerHeight * currentZoom : (window.screen ? window.screen.height : 1080))
+            };
+        };
+
         const applyGlobalZoom = (level) => {
-            const scale = Math.min(150, Math.max(65, level)) / 100;
-            // Excel gibi ekran asla daralmaz, pencereye tam oturur
+            const scale = Math.min(150, Math.max(60, level)) / 100;
+            const root = document.documentElement;
+            if (root) {
+                // Chrome, Edge, Safari, IE ve modern tarayıcılarda tüm arayüzü en ve boy olarak orantılı ölçekler
+                root.style.zoom = scale.toString();
+                root.style.setProperty('--ui-scale', scale.toString());
+                root.style.setProperty('--table-font-scale', '1');
+            }
             if (document.body && document.body.style.zoom) {
-                document.body.style.zoom = '1';
+                document.body.style.zoom = '';
             }
-            if (document.documentElement) {
-                document.documentElement.style.setProperty('--table-font-scale', scale.toString());
-            }
+            updateScreenInfo();
         };
 
         const setZoom = (level, isManual = true) => {
-            const next = Math.min(150, Math.max(65, level));
+            const next = Math.min(150, Math.max(60, level));
             zoomLevel.value = next;
             if (isManual) {
                 zoomMode.value = 'manual';
@@ -111,7 +132,7 @@ window.__texflowApp = createApp({
         const toggleAutoZoom = () => {
             if (zoomMode.value === 'auto') {
                 setZoom(100, true);
-                showToast('info', 'Yazı Boyutu: Sabit %100');
+                showToast('Sabit %100 tam boyut seçildi.', 'info');
             } else {
                 zoomMode.value = 'auto';
                 localStorage.setItem('texflow_zoom_mode', 'auto');
@@ -119,7 +140,7 @@ window.__texflowApp = createApp({
                 const autoVal = getAutoFitZoom();
                 zoomLevel.value = autoVal;
                 applyGlobalZoom(autoVal);
-                showToast('success', `Yazı Boyutu Ekrana Uyarlandı (%${autoVal})`);
+                showToast(`Ekran çözünürlüğüne otomatik uyarlandı (%${autoVal})`, 'success');
             }
             refreshIcons();
         };
@@ -10524,6 +10545,7 @@ window.__texflowApp = createApp({
             let resizeTimer = null;
             window.addEventListener('resize', () => {
                 isMobile.value = window.innerWidth < 768;
+                updateScreenInfo();
                 if (zoomMode.value === 'auto') {
                     clearTimeout(resizeTimer);
                     resizeTimer = setTimeout(() => {
@@ -11227,6 +11249,8 @@ window.__texflowApp = createApp({
             isMobile,
             zoomLevel,
             zoomMode,
+            setZoom,
+            screenInfo,
             changeZoom,
             resetZoom,
             toggleAutoZoom,

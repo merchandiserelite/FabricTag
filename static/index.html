@@ -225,6 +225,35 @@
             --tw-ring-color: var(--theme-primary) !important;
         }
 
+        /* =========================================================================
+           DÜŞÜK ÇÖZÜNÜRLÜK & KÜÇÜK EKRANLAR İÇİN AKILLI EN-BOY UYARLAMA (COMPACT UI)
+           ========================================================================= */
+        html {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+        }
+
+        /* 1440px ve altı veya 820px altı ekranlar için sol menü ve üst bar optimizasyonu */
+        @media screen and (max-width: 1440px), screen and (max-height: 820px) {
+            aside.w-72 {
+                width: 15rem !important; /* 288px -> 240px */
+            }
+            header.h-16 {
+                height: 3.25rem !important; /* 64px -> 52px */
+            }
+        }
+
+        /* 1280px ve altı veya 740px altı laptoplar için ekstra kompakt mod */
+        @media screen and (max-width: 1280px), screen and (max-height: 740px) {
+            aside.w-72 {
+                width: 13.5rem !important; /* 288px -> 216px */
+            }
+            header.h-16 {
+                height: 3rem !important; /* 64px -> 48px */
+            }
+        }
+
         /* OFF-WHITE VE RAHAT TUTULABİLİR KAYDIRMA ÇUBUĞU (SCROLLBAR) */
         .custom-scrollbar::-webkit-scrollbar {
             width: 14px;
@@ -1262,11 +1291,11 @@
                         </button>
                     </div>
 
-                    <!-- YAZI BOYUTU ÖLÇEĞİ (METİNLERİ BÜYÜTÜP KÜÇÜLTÜR, EKRANI DARALTMAZ) -->
+                    <!-- EKRAN & GÖRÜNÜM ÖLÇEĞİ (TÜM ARAYÜZÜ, MENÜLERİ VE YAZILARI EN-BOY OLARAK KÜÇÜLTÜR/BÜYÜTÜR) -->
                     <div class="h-9 flex items-center rounded-xl border text-xs font-bold transition shadow-sm overflow-hidden"
                          :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-800'"
-                         title="Yazı Boyutu Ölçeği (Tıklayarak %100 ve Özel Boyut arasında geçiş yapabilirsiniz)">
-                        <button @click="changeZoom(-5)" class="h-full px-2.5 hover:bg-slate-700/40 text-slate-400 hover:text-white font-black text-sm flex items-center justify-center transition select-none cursor-pointer" title="Yazıları Küçült (-5%)">-</button>
+                         title="Ekran & Görünüm Ölçeği (Tüm menüleri, kutucukları ve yazıları en-boy olarak küçültür / büyütür)">
+                        <button @click="changeZoom(-5)" class="h-full px-2.5 hover:bg-slate-700/40 text-slate-400 hover:text-white font-black text-sm flex items-center justify-center transition select-none cursor-pointer" title="Ekranı Küçült (-5%)">-</button>
                         
                         <button @click="toggleAutoZoom"
                                 class="h-full px-2.5 text-xs font-bold transition cursor-pointer select-none tracking-tight font-mono border-x flex items-center gap-1"
@@ -1274,13 +1303,13 @@
                                     isDarkMode ? 'border-slate-700 hover:bg-slate-700/50' : 'border-slate-200 hover:bg-slate-100',
                                     zoomMode === 'auto' ? 'text-emerald-500 font-extrabold' : 'text-theme'
                                 ]"
-                                :title="zoomMode === 'auto' ? 'Varsayılan Yazı Boyutu (Tıklayarak %100 yapabilirsiniz)' : 'Özel Yazı Boyutu (Tıklayarak Sıfırlayabilirsiniz)'">
-                            <i data-lucide="type" class="w-3.5 h-3.5" :class="zoomMode === 'auto' ? 'text-emerald-500' : 'text-slate-400'"></i>
+                                :title="zoomMode === 'auto' ? 'Otomatik Ekrana Sığdırma Aktif (Tıklayarak %100 yapabilirsiniz)' : 'Özel Görünüm Ölçeği (Tıklayarak Otomatik Sığdırmaya Dönebilirsiniz)'">
+                            <i :data-lucide="zoomMode === 'auto' ? 'maximize' : 'zoom-in'" class="w-3.5 h-3.5" :class="zoomMode === 'auto' ? 'text-emerald-500' : 'text-slate-400'"></i>
                             <span>%{{ zoomLevel }}</span>
                             <span v-if="zoomMode === 'auto'" class="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-500 font-sans uppercase font-extrabold">Oto</span>
                         </button>
                         
-                        <button @click="changeZoom(5)" class="h-full px-2.5 hover:bg-slate-700/40 text-slate-400 hover:text-white font-black text-sm flex items-center justify-center transition select-none cursor-pointer" title="Yazıları Büyüt (+5%)">+</button>
+                        <button @click="changeZoom(5)" class="h-full px-2.5 hover:bg-slate-700/40 text-slate-400 hover:text-white font-black text-sm flex items-center justify-center transition select-none cursor-pointer" title="Ekranı Büyüt (+5%)">+</button>
                     </div>
 
                     <!-- GECE / GÜNDÜZ DÜĞMESİ -->
@@ -6544,6 +6573,166 @@
                                 <p class="text-slate-400 leading-relaxed text-[11.5px]">
                                     <b class="text-emerald-400">Zümrüt Yeşili</b>, <b class="text-sky-400">Okyanus Mavisi</b>, <b class="text-purple-400">Asil Mor</b> ve <b class="text-rose-400">Gül Kurusu</b> temalarında düğmelere tıklandığında veya aktif hale geldiğinde zıt kontrast renk olarak <span class="text-amber-500 font-bold">Altın Sarısı</span> kullanılır.<br>
                                     Ana tema olarak <b class="text-amber-500">Altın Sarısı</b> seçildiğinde ise, düğmenin kaybolmaması ve net ayırt edilmesi için zıt kontrast rengi otomatik olarak <span class="text-emerald-500 font-bold">Zümrüt Yeşili</span>'ne döner.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- EKRAN ÇÖZÜNÜRLÜĞÜ & GÖRÜNÜM ÖLÇEĞİ (KOMPAKT MOD / EKRANA SIĞDIRMA) KARTI -->
+                    <div class="p-6 rounded-2xl border transition shadow-sm space-y-6"
+                         :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b"
+                             :class="isDarkMode ? 'border-slate-800' : 'border-slate-100'">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-500 shrink-0">
+                                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                                        <line x1="8" y1="21" x2="16" y2="21"/>
+                                        <line x1="12" y1="17" x2="12" y2="21"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="text-lg font-black tracking-tight" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                            Ekran Çözünürlüğü ve Görünüm Ölçeği (Kompakt Mod)
+                                        </h3>
+                                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-500 border border-sky-500/20">
+                                            Tüm Tarayıcılar ile Uyumlu (Chrome / Edge / IE)
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 mt-0.5">
+                                        Küçük laptop ekranları (1366x768, 1280x720) ve düşük çözünürlüklerde menüleri, kutucukları, form alanlarını ve yazıları en-boy olarak ideal oranda küçültür; ekranın ferah ve düzenli görünmesini sağlar.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Algılanan Ekran & Aktif Ölçek Durumu -->
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div class="px-3.5 py-1.5 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 shadow-xs"
+                                     :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'">
+                                    <svg class="w-3.5 h-3.5 text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+                                    <span>Pencere: {{ screenInfo.width }} × {{ screenInfo.height }} px</span>
+                                </div>
+                                <div class="px-3.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 shadow-xs"
+                                     :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-100 border-slate-200 text-slate-800'">
+                                    <span class="w-2.5 h-2.5 rounded-full" :class="zoomMode === 'auto' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'"></span>
+                                    <span>Ölçek: %{{ zoomLevel }}</span>
+                                    <span class="text-[10px] font-mono px-1.5 py-0.2 rounded font-extrabold"
+                                          :class="zoomMode === 'auto' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-500'">
+                                        {{ zoomMode === 'auto' ? 'Otomatik Sığdırma' : 'Manuel Seçim' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ölçek Seçim Butonları -->
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-bold flex items-center gap-1.5" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                    <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+                                    Hızlı Ölçek ve Ekrana Sığdırma Seçenekleri:
+                                </label>
+                                <div class="flex items-center gap-1.5">
+                                    <button @click="changeZoom(-5)"
+                                            type="button"
+                                            class="px-2.5 py-1 rounded-lg border text-xs font-black transition cursor-pointer hover:bg-slate-500/10 active:scale-95"
+                                            :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-300 text-slate-700'"
+                                            title="Ölçeği %5 Küçült">
+                                        - %5
+                                    </button>
+                                    <button @click="changeZoom(5)"
+                                            type="button"
+                                            class="px-2.5 py-1 rounded-lg border text-xs font-black transition cursor-pointer hover:bg-slate-500/10 active:scale-95"
+                                            :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-300 text-slate-700'"
+                                            title="Ölçeği %5 Büyüt">
+                                        + %5
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2.5">
+                                <!-- 1. Otomatik Sığdırma Butonu -->
+                                <button type="button"
+                                        @click="toggleAutoZoom"
+                                        class="p-3 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                                        :class="zoomMode === 'auto' ? 'ring-2 ring-emerald-500 border-emerald-500 font-extrabold btn-theme text-white' : (isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50')">
+                                    <div class="flex items-center gap-1">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+                                        <span class="text-xs font-bold">Otomatik</span>
+                                    </div>
+                                    <span class="text-[10px] opacity-80 leading-tight">Ekrana Sığdır</span>
+                                </button>
+
+                                <!-- 2. %70 Çok Küçük Ekran -->
+                                <button type="button"
+                                        @click="setZoom(70, true)"
+                                        class="p-3 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                                        :class="zoomMode === 'manual' && zoomLevel === 70 ? 'ring-2 ring-sky-500 border-sky-500 font-extrabold bg-sky-600 text-white' : (isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50')">
+                                    <span class="text-xs font-black font-mono">%70</span>
+                                    <span class="text-[10px] opacity-80 leading-tight">Çok Küçük (1024x768)</span>
+                                </button>
+
+                                <!-- 3. %75 Kompakt -->
+                                <button type="button"
+                                        @click="setZoom(75, true)"
+                                        class="p-3 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                                        :class="zoomMode === 'manual' && zoomLevel === 75 ? 'ring-2 ring-sky-500 border-sky-500 font-extrabold bg-sky-600 text-white' : (isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50')">
+                                    <span class="text-xs font-black font-mono">%75</span>
+                                    <span class="text-[10px] opacity-80 leading-tight">Kompakt (1280x720)</span>
+                                </button>
+
+                                <!-- 4. %80 Standart Laptop (1366x768) -->
+                                <button type="button"
+                                        @click="setZoom(80, true)"
+                                        class="p-3 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                                        :class="zoomMode === 'manual' && zoomLevel === 80 ? 'ring-2 ring-sky-500 border-sky-500 font-extrabold bg-sky-600 text-white' : (isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50')">
+                                    <span class="text-xs font-black font-mono">%80</span>
+                                    <span class="text-[10px] opacity-80 leading-tight">Laptop (1366x768)</span>
+                                </button>
+
+                                <!-- 5. %85 Dengeli -->
+                                <button type="button"
+                                        @click="setZoom(85, true)"
+                                        class="p-3 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                                        :class="zoomMode === 'manual' && zoomLevel === 85 ? 'ring-2 ring-sky-500 border-sky-500 font-extrabold bg-sky-600 text-white' : (isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50')">
+                                    <span class="text-xs font-black font-mono">%85</span>
+                                    <span class="text-[10px] opacity-80 leading-tight">Dengeli (1440x900)</span>
+                                </button>
+
+                                <!-- 6. %90 Standart -->
+                                <button type="button"
+                                        @click="setZoom(90, true)"
+                                        class="p-3 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                                        :class="zoomMode === 'manual' && zoomLevel === 90 ? 'ring-2 ring-sky-500 border-sky-500 font-extrabold bg-sky-600 text-white' : (isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50')">
+                                    <span class="text-xs font-black font-mono">%90</span>
+                                    <span class="text-[10px] opacity-80 leading-tight">FHD Laptop (1080p)</span>
+                                </button>
+
+                                <!-- 7. %100 Tam Boyut -->
+                                <button type="button"
+                                        @click="setZoom(100, true)"
+                                        class="p-3 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                                        :class="zoomMode === 'manual' && zoomLevel === 100 ? 'ring-2 ring-sky-500 border-sky-500 font-extrabold bg-sky-600 text-white' : (isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50')">
+                                    <span class="text-xs font-black font-mono">%100</span>
+                                    <span class="text-[10px] opacity-80 leading-tight">Tam Boy (Büyük Monitör)</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Bilgilendirme ve Tarayıcı Uyumluluk Kutusu -->
+                        <div class="p-4 rounded-xl border flex items-start gap-3 transition"
+                             :class="isDarkMode ? 'bg-slate-950/70 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'">
+                            <div class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-500 flex items-center justify-center shrink-0 mt-0.5">
+                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                            </div>
+                            <div class="text-xs space-y-1.5">
+                                <div class="font-bold flex items-center gap-2">
+                                    <span :class="isDarkMode ? 'text-white' : 'text-slate-900'">Akıllı En-Boy Ölçekleme Nasıl Çalışır?</span>
+                                    <span class="text-[10px] font-mono px-2 py-0.2 rounded bg-sky-500/10 text-sky-500 font-bold">Otomatik & Manuel</span>
+                                </div>
+                                <p class="text-slate-400 leading-relaxed text-[11.5px]">
+                                    <b>• Neden Çözünürlük Düşünce Her Şey Büyür?</b> 1366x768 gibi çözünürlüklerde veya Windows ekran ölçeği %125/%150 olan laptoplarda ekrandaki piksel alanı azaldığı için menüler ve kutucuklar devasa görünür.<br>
+                                    <b>• Çözüm:</b> Bu sistem, sol menüyü, üst çubuğu, kutucukları, butonları ve yazıları <b>en ve boy olarak orantılı küçülterek</b> 1366x768 ekranlarda dahi 1080p geniş masaüstü ekranı ferahlığı sağlar. Google Chrome, Microsoft Edge, Opera ve Internet Explorer motorları ile %100 uyumludur, gözü yormaz. Tercihiniz bu bilgisayar için otomatik hatırlanır.
                                 </p>
                             </div>
                         </div>
