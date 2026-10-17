@@ -170,11 +170,139 @@ window.__texflowApp = createApp({
             isDarkMode.value = !isDarkMode.value;
             localStorage.setItem('texflow_dark_mode', isDarkMode.value);
             applyThemeStyles(themeName.value);
+            applyUserFontPrefs();
             refreshIcons();
         };
 
         // Run immediately on page initialization
         applyThemeStyles(themeName.value);
+
+        // ==========================================
+        // KİŞİSEL YAZI TİPİ, BÜYÜKLÜĞÜ VE RENK ÖZELLEŞTİRME (localStorage)
+        // ==========================================
+        const availableFonts = [
+            { id: 'inter', name: 'Inter', family: "'Inter', sans-serif", note: 'Tavsiye Edilen - Modern & Çok Okunaklı' },
+            { id: 'segoe', name: 'Segoe UI', family: "'Segoe UI', -apple-system, sans-serif", note: 'Windows Standart - Temiz & Net' },
+            { id: 'jakarta', name: 'Plus Jakarta Sans', family: "'Plus Jakarta Sans', sans-serif", note: 'Kurumsal & Dinamik' },
+            { id: 'roboto', name: 'Roboto', family: "'Roboto', sans-serif", note: 'Google Standart' },
+            { id: 'poppins', name: 'Poppins', family: "'Poppins', sans-serif", note: 'Yuvarlak Hatlı Modern' },
+            { id: 'montserrat', name: 'Montserrat', family: "'Montserrat', sans-serif", note: 'Geometrik & Şık' },
+            { id: 'opensans', name: 'Open Sans', family: "'Open Sans', sans-serif", note: 'Dengeli & Yumuşak' },
+            { id: 'jetbrains', name: 'JetBrains Mono', family: "'JetBrains Mono', 'Consolas', monospace", note: 'Monospace / Tablo & Rakam Uyumlu' },
+            { id: 'consolas', name: 'Consolas', family: "'Consolas', monospace", note: 'Windows Monospace' },
+            { id: 'arial', name: 'Arial', family: "Arial, sans-serif", note: 'Klasik & Evrensel' },
+            { id: 'verdana', name: 'Verdana', family: "Verdana, sans-serif", note: 'Geniş & Rahat' },
+            { id: 'tahoma', name: 'Tahoma', family: "Tahoma, sans-serif", note: 'Kompakt Standart' }
+        ];
+
+        const fontSizesList = [
+            { size: '11px', label: '11px (Çok Küçük)' },
+            { size: '12px', label: '12px (Standart / Kompakt)' },
+            { size: '13px', label: '13px (Okunaklı / Dengeli)' },
+            { size: '14px', label: '14px (Orta / Rahat)' },
+            { size: '15px', label: '15px (Büyük)' },
+            { size: '16px', label: '16px (Ekstra Büyük)' }
+        ];
+
+        const defaultFontPrefs = {
+            fontFamily: "'Inter', sans-serif",
+            fontSize: '12px',
+            fontColorLight: '#0f172a',
+            fontColorDark: '#f8fafc'
+        };
+
+        const loadSavedFontPrefs = () => {
+            try {
+                const saved = localStorage.getItem('texflow_user_font_pref');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    return {
+                        fontFamily: parsed.fontFamily || defaultFontPrefs.fontFamily,
+                        fontSize: parsed.fontSize || defaultFontPrefs.fontSize,
+                        fontColorLight: parsed.fontColorLight || defaultFontPrefs.fontColorLight,
+                        fontColorDark: parsed.fontColorDark || defaultFontPrefs.fontColorDark
+                    };
+                }
+            } catch (e) {
+                console.warn('Font tercihleri okunamadı:', e);
+            }
+            return { ...defaultFontPrefs };
+        };
+
+        const userFontPrefs = ref(loadSavedFontPrefs());
+
+        const applyUserFontPrefs = () => {
+            const root = document.documentElement;
+            if (!root) return;
+            const prefs = userFontPrefs.value;
+            root.style.setProperty('--user-font-family', prefs.fontFamily);
+            root.style.setProperty('--user-font-size', prefs.fontSize);
+            root.style.setProperty('--user-font-color', prefs.fontColorLight);
+            root.style.setProperty('--user-font-color-dark', prefs.fontColorDark);
+
+            let styleTag = document.getElementById('texflow-dynamic-font-style');
+            if (!styleTag) {
+                styleTag = document.createElement('style');
+                styleTag.id = 'texflow-dynamic-font-style';
+                document.head.appendChild(styleTag);
+            }
+            styleTag.textContent = `
+                :root {
+                    --user-font-family: ${prefs.fontFamily};
+                    --user-font-size: ${prefs.fontSize};
+                    --user-font-color: ${prefs.fontColorLight};
+                    --user-font-color-dark: ${prefs.fontColorDark};
+                }
+                body, input, select, textarea, button {
+                    font-family: ${prefs.fontFamily} !important;
+                }
+                .master-table,
+                .master-table thead th,
+                .master-table thead th *,
+                .master-table tbody td,
+                .master-table tbody td *:not(.image-badge):not(.image-action-text),
+                .master-table tbody input,
+                .master-table tbody select,
+                .master-table tbody textarea,
+                .master-table tbody span:not(.image-badge):not(.image-action-text),
+                .master-table tbody div:not(.image-badge):not(.image-action-text) {
+                    font-family: ${prefs.fontFamily} !important;
+                    font-size: calc(${prefs.fontSize} * var(--table-font-scale, 1)) !important;
+                }
+                html:not(.dark) .master-table tbody td,
+                html:not(.dark) .master-table tbody input:not(.text-theme):not(.text-amber-500):not(.text-emerald-600):not(.text-rose-500),
+                html:not(.dark) .master-table tbody span:not(.text-theme):not(.text-amber-500):not(.text-emerald-600):not(.text-rose-500):not(.badge),
+                html:not(.dark) .master-table tbody div:not(.badge) {
+                    color: ${prefs.fontColorLight} !important;
+                }
+                html.dark .master-table tbody td,
+                html.dark .master-table tbody input:not(.text-theme):not(.text-amber-500):not(.text-emerald-400):not(.text-rose-400),
+                html.dark .master-table tbody span:not(.text-theme):not(.text-amber-500):not(.text-emerald-400):not(.text-rose-400):not(.badge),
+                html.dark .master-table tbody div:not(.badge) {
+                    color: ${prefs.fontColorDark} !important;
+                }
+            `;
+        };
+
+        const saveUserFontPrefs = () => {
+            try {
+                localStorage.setItem('texflow_user_font_pref', JSON.stringify(userFontPrefs.value));
+                applyUserFontPrefs();
+                showToast('Yazı tipi, boyutu ve renk tercihleri bu bilgisayar için başarıyla kaydedildi!', 'success');
+            } catch (e) {
+                console.error('Font ayarları kaydedilemedi:', e);
+                showToast('Font ayarları kaydedilirken hata oluştu.', 'error');
+            }
+        };
+
+        const resetUserFontPrefs = () => {
+            userFontPrefs.value = { ...defaultFontPrefs };
+            saveUserFontPrefs();
+            showToast('Yazı tipi ve renk tercihleri varsayılan ayarlara döndürüldü.', 'info');
+        };
+
+        // Run immediately on page initialization
+        applyUserFontPrefs();
 
         // Login Form
         const loginForm = ref({ username: '', password: '' });
@@ -11668,7 +11796,13 @@ window.__texflowApp = createApp({
             printCustomBrand,
             formatCartonSizeQty,
             getCartonSizeHeaders,
-            isStockCarton
+            isStockCarton,
+            availableFonts,
+            fontSizesList,
+            userFontPrefs,
+            saveUserFontPrefs,
+            resetUserFontPrefs,
+            applyUserFontPrefs
         };
 
 
