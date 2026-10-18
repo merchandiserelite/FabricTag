@@ -323,84 +323,90 @@ def init_db():
     # Default Seed Data for Carton Templates if empty
     cursor.execute("SELECT COUNT(*) FROM carton_label_templates")
     if cursor.fetchone()[0] == 0:
-        default_anna_layout = json.dumps({
-            "header_title": "Anna Van Toor",
-            "address_line1": "Energieweg 35",
-            "address_line2": "4231 DJ Meerkerk",
-            "address_line3": "The Netherlands",
-            "brand": "BRAND: ANNA",
-            "measurements": "60X40X30",
-            "poka_badge_enabled": True,
-            "dual_variant_enabled": True,
+        default_clean_layout = json.dumps({
+            "header_title": "",
+            "address_line1": "",
+            "address_line2": "",
+            "address_line3": "",
+            "brand": "",
+            "show_brand": False,
+            "measurements": "",
+            "poka_badge_enabled": False,
+            "dual_variant_enabled": False,
             "show_barcode": False,
-            "fields": [
-                {"id": "header", "label": "Müşteri & Adres Başlığı", "key": "header_block", "visible": True},
-                {"id": "brand", "label": "Marka Bilgisi", "key": "brand", "visible": True},
-                {"id": "size_table", "label": "Beden & Adet Tablosu (x2)", "key": "size_table", "visible": True},
-                {"id": "channel", "label": "Kanal Bilgisi (CARTON NO Üstü)", "key": "channel", "visible": True},
-                {"id": "carton_no", "label": "Koli Numarası (CARTON NO ... OF ...)", "key": "carton_no", "visible": True},
-                {"id": "gross_weight", "label": "Brüt Ağırlık (GROSS WEIGHT)", "key": "gross_weight", "visible": True},
-                {"id": "measurements", "label": "Koli Ebatları (MEASUREMENTS - GROSS WEIGHT Altı)", "key": "measurements", "visible": True},
-                {"id": "poka_badge", "label": "Poka-Yoke Renk Rozeti (102mm Çap)", "key": "poka_badge", "visible": True}
-            ]
+            "barcode_type": "CODE128",
+            "barcode_field": "carton_no",
+            "sticker_format": "A4_2up",
+            "element_offsets": {
+                "header": {"x": 0, "y": 0},
+                "address": {"x": 0, "y": 0},
+                "brand": {"x": 0, "y": 0},
+                "size_table": {"x": 0, "y": 0},
+                "divider_line": {"x": 0, "y": 0},
+                "channel": {"x": 0, "y": 0},
+                "carton_no": {"x": 0, "y": 0},
+                "gross_weight": {"x": 0, "y": 0},
+                "measurements": {"x": 0, "y": 0},
+                "barcode": {"x": 0, "y": 0},
+                "poka_badge": {"x": 0, "y": 0}
+            }
+        }, ensure_ascii=False)
+
+        default_6up_layout = json.dumps({
+            "header_title": "",
+            "address_line1": "",
+            "address_line2": "",
+            "address_line3": "",
+            "brand": "",
+            "show_brand": False,
+            "measurements": "",
+            "poka_badge_enabled": False,
+            "dual_variant_enabled": False,
+            "show_barcode": False,
+            "barcode_type": "CODE128",
+            "barcode_field": "carton_no",
+            "sticker_format": "A4_6up",
+            "grid_cols": 2,
+            "grid_rows": 3,
+            "sticker_width_mm": 105,
+            "sticker_height_mm": 99,
+            "element_offsets": {}
         }, ensure_ascii=False)
 
         default_argox_layout = json.dumps({
-            "header_title": "STANDART LOJİSTİK KOLİ ETİKETİ",
+            "header_title": "",
             "address_line1": "",
             "address_line2": "",
             "address_line3": "",
             "brand": "",
-            "measurements": "60X40X30",
-            "poka_badge_enabled": True,
+            "show_brand": False,
+            "measurements": "",
+            "poka_badge_enabled": False,
             "dual_variant_enabled": False,
             "show_barcode": True,
-            "fields": [
-                {"id": "header", "label": "Müşteri & Başlık", "key": "header_block", "visible": True},
-                {"id": "channel", "label": "Kanal / Sevkiyat Hedefi", "key": "channel_badge", "visible": True},
-                {"id": "size_table", "label": "Beden & Adet Dağılımı", "key": "size_table", "visible": True},
-                {"id": "carton_no", "label": "Koli No", "key": "carton_no", "visible": True},
-                {"id": "gross_weight", "label": "Brüt Ağırlık", "key": "gross_weight", "visible": True},
-                {"id": "barcode", "label": "Koli Barkodu", "key": "barcode", "visible": True}
-            ]
-        }, ensure_ascii=False)
-
-        default_a5_layout = json.dumps({
-            "header_title": "A5 LOJİSTİK KOLİ ETİKETİ",
-            "address_line1": "",
-            "address_line2": "",
-            "address_line3": "",
-            "brand": "",
-            "measurements": "60X40X30",
-            "poka_badge_enabled": True,
-            "dual_variant_enabled": False,
-            "show_barcode": True,
-            "fields": [
-                {"id": "header", "label": "Müşteri & Başlık", "key": "header_block", "visible": True},
-                {"id": "channel", "label": "Sevkiyat Kanalı", "key": "channel_badge", "visible": True},
-                {"id": "size_table", "label": "Beden Tablosu", "key": "size_table", "visible": True},
-                {"id": "carton_no", "label": "Koli No", "key": "carton_no", "visible": True},
-                {"id": "gross_weight", "label": "Ağırlık", "key": "gross_weight", "visible": True}
-            ]
+            "barcode_type": "CODE128",
+            "barcode_field": "carton_no",
+            "sticker_format": "Argox_100x150",
+            "element_offsets": {}
         }, ensure_ascii=False)
 
         cursor.execute("""
         INSERT INTO carton_label_templates 
         (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
-        VALUES (1, 'Anna van Toor B.V.', 'Anna Van Toor A4 Yatay (x2 Çiftli)', 'A4', 'landscape', 297, 210, 2, 'solid', 2, 1, 6, 1.0, ?, 1)
-        """, (default_anna_layout,))
+        VALUES (1, 'Standart / Genel', 'A4 Yatay Koli Üstü Şablonu (2\'li)', 'A4', 'landscape', 297, 210, 2, 'solid', 2, 1, 6, 1.0, ?, 1)
+        """, (default_clean_layout,))
 
         cursor.execute("""
         INSERT INTO carton_label_templates 
         (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
-        VALUES (1, 'Standart / Genel', 'Argox / Termal Rulo 100x150 mm', 'Argox_100x150', 'portrait', 100, 150, 1, 'solid', 1, 1, 3, 0.95, ?, 1)
+        VALUES (1, 'Standart / Genel', 'A4 6\'lı Sticker (2x3 Tabaka)', 'A4', 'portrait', 210, 297, 6, 'solid', 1, 1, 4, 0.85, ?, 0)
+        """, (default_6up_layout,))
+
+        cursor.execute("""
+        INSERT INTO carton_label_templates 
+        (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
+        VALUES (1, 'Standart / Genel', 'Argox / Termal Rulo 100x150 mm', 'Argox_100x150', 'portrait', 100, 150, 1, 'solid', 1, 1, 3, 0.95, ?, 0)
         """, (default_argox_layout,))
-
-        cursor.execute("""
-        INSERT INTO carton_label_templates 
-        (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
-        VALUES (1, 'Standart / Genel', 'A5 Dikey Lojistik Koli Etiketi', 'A5', 'portrait', 148, 210, 1, 'solid', 1, 1, 5, 1.0, ?, 0)
-        """, (default_a5_layout,))
 
     # Safe migrations for cut and shipping tracking
     cursor.execute("PRAGMA table_info(styles)")

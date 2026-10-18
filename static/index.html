@@ -701,6 +701,104 @@
                 color-adjust: exact !important;
             }
 
+            /* =========================================================================
+               KOLİ ÜSTÜ ETİKET & ŞABLON TASARIMCISI GELİŞMİŞ STİLLERİ
+               ========================================================================= */
+            .carton-size-table {
+                table-layout: fixed !important;
+                width: 100% !important;
+            }
+            .carton-size-table th.col-style,
+            .carton-size-table td.col-style {
+                width: 26% !important;
+                max-width: 26% !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                white-space: nowrap !important;
+            }
+            .carton-size-table th.col-color,
+            .carton-size-table td.col-color {
+                width: 24% !important;
+                max-width: 24% !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                white-space: nowrap !important;
+            }
+            .carton-size-table th.col-size,
+            .carton-size-table td.col-size {
+                width: auto !important;
+                text-align: center !important;
+                padding-left: 2px !important;
+                padding-right: 2px !important;
+            }
+            .carton-size-table th.col-total,
+            .carton-size-table td.col-total {
+                width: 12% !important;
+                max-width: 12% !important;
+                text-align: center !important;
+            }
+
+            /* FabricTag / Kumaştag tarzı serbest sürükleme ve tıklama görsel efektleri */
+            .interactive-canvas-elem {
+                cursor: grab;
+                user-select: none;
+                transition: box-shadow 0.15s ease, outline 0.15s ease, background-color 0.15s ease;
+                border-radius: 4px;
+                padding: 1px 3px;
+                position: relative;
+            }
+            .interactive-canvas-elem:hover {
+                outline: 1.5px dashed #8b5cf6 !important;
+                background-color: rgba(139, 92, 246, 0.06);
+            }
+            .interactive-canvas-elem.is-selected {
+                outline: 2px solid #8b5cf6 !important;
+                background-color: rgba(139, 92, 246, 0.1) !important;
+                box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25) !important;
+            }
+            .interactive-canvas-elem:active {
+                cursor: grabbing !important;
+            }
+
+            /* Çoklu Etiket / Sticker Tabaka Baskı Izgaraları (A4 6'lı, 4'lü, 8'li) */
+            .koli-a4-sheet-page {
+                box-sizing: border-box !important;
+                margin-left: auto !important;
+                margin-right: auto !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                background: #ffffff !important;
+            }
+            .koli-a4-6up-grid {
+                display: grid !important;
+                grid-template-columns: repeat(2, 1fr) !important;
+                grid-template-rows: repeat(3, 1fr) !important;
+                gap: 5mm !important;
+                width: 200mm !important;
+                min-height: 285mm !important;
+                box-sizing: border-box !important;
+            }
+            .koli-a4-4up-grid {
+                display: grid !important;
+                grid-template-columns: repeat(2, 1fr) !important;
+                grid-template-rows: repeat(2, 1fr) !important;
+                gap: 6mm !important;
+                width: 200mm !important;
+                min-height: 285mm !important;
+                box-sizing: border-box !important;
+            }
+            .koli-a4-8up-grid {
+                display: grid !important;
+                grid-template-columns: repeat(2, 1fr) !important;
+                grid-template-rows: repeat(4, 1fr) !important;
+                gap: 4mm !important;
+                width: 200mm !important;
+                min-height: 285mm !important;
+                box-sizing: border-box !important;
+            }
+
             .no-print,
             .no-print *,
             #kumas-bilgi-print-modal .no-print,
@@ -5570,20 +5668,29 @@
                                         <h3 class="text-sm font-bold flex items-center gap-2" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
                                             <span>Koli Üstü Şablon Tasarımcısı & Sayfa Entegrasyonu</span>
                                             <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                                {{ designerTemplate.customer_name || 'Özel Format' }}
+                                                {{ designerTemplate.customer_name || 'Temiz / Boş Şablon' }}
                                             </span>
                                         </h3>
                                         <p class="text-xs text-slate-400">
-                                            Kağıt ebatlarını (A4, A5, Argox Termal), kenarlıkları, hücre çizgilerini ve etiket alanlarını canlı olarak yapılandırın.
+                                            A4 6'lı sticker, Argox termal rulo, kenarlık, hücre çizgileri ve serbest taşınabilir öğeleri yapılandırın.
                                         </p>
                                     </div>
                                 </div>
 
                                 <div class="flex items-center gap-2">
+                                    <!-- FORM SIFIRLA / BOŞ EKRAN BUTONU -->
+                                    <button @click="resetDesignerToBlank"
+                                            class="px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer"
+                                            :class="isDarkMode ? 'border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20' : 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100'"
+                                            title="Ekrandaki tüm verileri temizleyip sıfır, boş bir tuvalden başlayın">
+                                        <i data-lucide="sparkles" class="w-4 h-4 text-amber-400"></i>
+                                        <span>✨ Formu Sıfırla (Boş Ekran)</span>
+                                    </button>
+
                                     <button @click="saveDesignerTemplate"
                                             class="px-4 py-2 rounded-xl text-xs font-bold btn-theme shadow-md flex items-center gap-1.5 transition cursor-pointer hover:scale-105 active:scale-95">
                                         <i data-lucide="save" class="w-4 h-4"></i>
-                                        <span>💾 Sayfa Yapısını & Şablonu Kaydet</span>
+                                        <span>💾 Şablonu Kaydet</span>
                                     </button>
                                     <button @click="closeTemplateDesigner"
                                             class="p-2 rounded-xl border transition cursor-pointer"
@@ -5613,78 +5720,91 @@
                                                 <input type="text" v-model="designerTemplate.customer_name"
                                                        class="w-full px-3 py-1.5 text-xs rounded-lg border font-semibold"
                                                        :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
-                                                       placeholder="Örn: Anna van Toor B.V., Sarto Fashion...">
+                                                       placeholder="Firma / Müşteri Adı girin (Örn: ABC Tekstil)">
                                             </div>
                                             <div>
                                                 <label class="block text-[11px] font-semibold text-slate-400 mb-1">Şablon Başlığı:</label>
                                                 <input type="text" v-model="designerTemplate.template_name"
                                                        class="w-full px-3 py-1.5 text-xs rounded-lg border"
                                                        :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
-                                                       placeholder="Örn: Standart Koli Üstü Etiketi">
+                                                       placeholder="Şablon Başlığı (Örn: A4 6'lı Sticker Koli Üstü)">
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- 2. Kağıt Boyutu, Cihaz & Sayfa Geometrisi -->
+                                    <!-- 2. Sticker & Kağıt Boyutu Formatı (A4 6'lı Sticker, Argox, Özel vb.) -->
                                     <div class="p-4 rounded-xl border space-y-3"
                                          :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-white border-slate-200 shadow-sm'">
-                                        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                            <i data-lucide="printer" class="w-3.5 h-3.5 text-purple-500"></i>
-                                            <span>Yazıcı Cihazı & Kağıt Boyutu (Argox / A4 / A5)</span>
+                                        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                                            <div class="flex items-center gap-1.5">
+                                                <i data-lucide="printer" class="w-3.5 h-3.5 text-purple-500"></i>
+                                                <span>Sticker Formatı & Kağıt Düzeni</span>
+                                            </div>
+                                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                                                {{ designerTemplate.items_per_page }} Koli / Sayfa
+                                            </span>
                                         </div>
                                         
                                         <div class="space-y-2.5">
                                             <div>
-                                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">Hedef Kağıt / Cihaz Formatı:</label>
-                                                <select :value="designerTemplate.paper_size"
-                                                        @change="onDesignerPaperSizeChange($event.target.value)"
+                                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">Sticker / Kağıt Boyutu Standardı:</label>
+                                                <select :value="designerTemplate.sticker_format || designerTemplate.paper_size"
+                                                        @change="onDesignerStickerFormatChange($event.target.value)"
                                                         class="w-full px-3 py-2 text-xs font-bold rounded-lg border focus:ring-1 focus:ring-purple-500 cursor-pointer"
                                                         :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
-                                                    <option value="A4">A4 Yatay (297 x 210 mm) - 2'li Yan Yana (x2)</option>
-                                                    <option value="A4_portrait">A4 Dikey (210 x 297 mm) - Tek Koli</option>
-                                                    <option value="A5">A5 Dikey (148 x 210 mm) - Lojistik Koli</option>
-                                                    <option value="A5_landscape">A5 Yatay (210 x 148 mm)</option>
-                                                    <option value="Argox_100x150">Argox / Termal Rulo (100 x 150 mm Standart Koli)</option>
-                                                    <option value="Argox_100x100">Argox / Termal Rulo (100 x 100 mm Kare Koli)</option>
-                                                    <option value="Argox_80x50">Argox / Termal Rulo (80 x 50 mm Kompakt)</option>
-                                                    <option value="custom">Özel Boyut (Genişlik & Yükseklik mm)</option>
+                                                    <option v-for="fmt in stickerFormatOptions" :key="fmt.id" :value="fmt.id">
+                                                        {{ fmt.name }}
+                                                    </option>
                                                 </select>
                                             </div>
 
-                                            <!-- Özel Boyut mm Girişi -->
-                                            <div v-if="designerTemplate.paper_size === 'custom'" class="grid grid-cols-2 gap-2 pt-1">
-                                                <div>
-                                                    <label class="block text-[10px] text-slate-400 mb-0.5">Genişlik (mm):</label>
-                                                    <input type="number" v-model.number="designerTemplate.width_mm"
-                                                           class="w-full px-2.5 py-1 text-xs rounded border"
-                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <!-- Özel Sticker Ölçüleri (Kullanıcı İstediği Ebadı Girebilir) -->
+                                            <div v-if="designerTemplate.sticker_format === 'custom'" class="p-2.5 rounded-lg border border-purple-500/30 bg-purple-500/5 space-y-2">
+                                                <div class="text-[11px] font-bold text-purple-400 flex items-center gap-1">
+                                                    <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+                                                    <span>Özel Sticker Ölçüleri & Izgara Yapılandırması</span>
                                                 </div>
-                                                <div>
-                                                    <label class="block text-[10px] text-slate-400 mb-0.5">Yükseklik (mm):</label>
-                                                    <input type="number" v-model.number="designerTemplate.height_mm"
-                                                           class="w-full px-2.5 py-1 text-xs rounded border"
-                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                <div class="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label class="block text-[10px] text-slate-400 mb-0.5">Genişlik (mm):</label>
+                                                        <input type="number" v-model.number="designerTemplate.width_mm"
+                                                               class="w-full px-2.5 py-1 text-xs rounded border font-mono"
+                                                               :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] text-slate-400 mb-0.5">Yükseklik (mm):</label>
+                                                        <input type="number" v-model.number="designerTemplate.height_mm"
+                                                               class="w-full px-2.5 py-1 text-xs rounded border font-mono"
+                                                               :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'">
+                                                    </div>
+                                                </div>
+                                                <div class="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label class="block text-[10px] text-slate-400 mb-0.5">Sayfa Başına Adet:</label>
+                                                        <input type="number" v-model.number="designerTemplate.items_per_page" min="1" max="16"
+                                                               class="w-full px-2.5 py-1 text-xs rounded border font-mono"
+                                                               :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] text-slate-400 mb-0.5">Yön (Orientation):</label>
+                                                        <select v-model="designerTemplate.orientation"
+                                                                class="w-full px-2.5 py-1 text-xs rounded border font-semibold"
+                                                                :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'">
+                                                            <option value="landscape">Yatay (Landscape)</option>
+                                                            <option value="portrait">Dikey (Portrait)</option>
+                                                        </select>
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            <div class="grid grid-cols-2 gap-2 pt-1">
-                                                <div>
-                                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Sayfa Başına Koli:</label>
-                                                    <select v-model.number="designerTemplate.items_per_page"
-                                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
-                                                            :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
-                                                        <option :value="2">2 Koli (x2 Çiftli)</option>
-                                                        <option :value="1">1 Koli (Tekli)</option>
-                                                    </select>
+                                            <div v-else class="grid grid-cols-2 gap-2 pt-1 text-xs text-slate-400">
+                                                <div class="p-2 rounded border" :class="isDarkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                                    <span class="block text-[10px] text-slate-500">Sayfa Başına Etiket:</span>
+                                                    <strong class="font-mono text-purple-400">{{ designerTemplate.items_per_page }} Adet</strong>
                                                 </div>
-                                                <div>
-                                                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Yön:</label>
-                                                    <select v-model="designerTemplate.orientation"
-                                                            class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
-                                                            :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
-                                                        <option value="landscape">Yatay (Landscape)</option>
-                                                        <option value="portrait">Dikey (Portrait)</option>
-                                                    </select>
+                                                <div class="p-2 rounded border" :class="isDarkMode ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                                    <span class="block text-[10px] text-slate-500">Yön:</span>
+                                                    <strong class="capitalize" :class="isDarkMode ? 'text-white' : 'text-slate-800'">{{ designerTemplate.orientation === 'landscape' ? 'Yatay (Landscape)' : 'Dikey (Portrait)' }}</strong>
                                                 </div>
                                             </div>
                                         </div>
@@ -5742,7 +5862,8 @@
                                                             class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
                                                             :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
                                                         <option :value="0">0 mm (Sıfır Pay)</option>
-                                                        <option :value="3">3 mm (Kompakt)</option>
+                                                        <option :value="2">2 mm (Ultra Dar)</option>
+                                                        <option :value="4">4 mm (Kompakt)</option>
                                                         <option :value="6">6 mm (Standart)</option>
                                                         <option :value="10">10 mm (Geniş Pay)</option>
                                                     </select>
@@ -5752,8 +5873,9 @@
                                                     <select v-model.number="designerTemplate.font_scale"
                                                             class="w-full px-2.5 py-1.5 text-xs rounded-lg border font-semibold"
                                                             :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
-                                                        <option :value="0.80">%80 (Çok Küçük)</option>
-                                                        <option :value="0.90">%90 (Kompakt)</option>
+                                                        <option :value="0.70">%70 (Çok Küçük)</option>
+                                                        <option :value="0.80">%80 (Kompakt)</option>
+                                                        <option :value="0.90">%90 (Orta)</option>
                                                         <option :value="1.0">%100 (Standart)</option>
                                                         <option :value="1.15">%115 (Büyük)</option>
                                                     </select>
@@ -5762,49 +5884,107 @@
                                         </div>
                                     </div>
 
-                                    <!-- 4. İçerik ve Alan Detayları -->
+                                    <!-- 4. İçerik ve Alan Detayları: Başlık, Adres, Marka & Barkod -->
                                     <div class="p-4 rounded-xl border space-y-3"
                                          :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-white border-slate-200 shadow-sm'">
                                         <div class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                                             <i data-lucide="file-text" class="w-3.5 h-3.5 text-emerald-500"></i>
-                                            <span>Müşteri Başlığı & Adres Bilgileri</span>
+                                            <span>Müşteri Başlığı, Adres, Marka & Barkod</span>
                                         </div>
 
-                                        <div class="space-y-2">
+                                        <div class="space-y-2.5">
                                             <div>
-                                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">Başlık Metni:</label>
+                                                <label class="block text-[11px] font-semibold text-slate-400 mb-1">Üst Başlık Metni:</label>
                                                 <input type="text" v-model="designerTemplate.layout_json.header_title"
                                                        class="w-full px-3 py-1.5 text-xs rounded-lg border font-bold"
                                                        :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
-                                                       placeholder="Örn: Anna Van Toor">
+                                                       placeholder="Müşteri / Üst Başlık Metni (Boş ise müşteri adı basılır)">
                                             </div>
+
                                             <div class="grid grid-cols-2 gap-2">
                                                 <div>
                                                     <label class="block text-[10px] text-slate-400 mb-0.5">Adres Satır 1:</label>
                                                     <input type="text" v-model="designerTemplate.layout_json.address_line1"
                                                            class="w-full px-2 py-1 text-xs rounded border"
-                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
+                                                           placeholder="Cadde / Sokak">
                                                 </div>
                                                 <div>
                                                     <label class="block text-[10px] text-slate-400 mb-0.5">Adres Satır 2:</label>
                                                     <input type="text" v-model="designerTemplate.layout_json.address_line2"
                                                            class="w-full px-2 py-1 text-xs rounded border"
-                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
+                                                           placeholder="Posta Kodu / Şehir">
                                                 </div>
                                             </div>
-                                            <div class="grid grid-cols-2 gap-2">
-                                                <div>
+
+                                            <!-- MARKA (BRAND) ALANI - İSTEĞE BAĞLI / AÇ-KAPA (BAZI MÜŞTERİLERDE BRAND YOKTUR) -->
+                                            <div class="p-2.5 rounded-lg border space-y-2"
+                                                 :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                                <label class="flex items-center justify-between cursor-pointer select-none">
+                                                    <div>
+                                                        <span class="text-xs font-bold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">Marka (Brand) Alanı</span>
+                                                        <p class="text-[10px] text-slate-400">Bazı müşterilerde marka yoktur, sadece müşteri adı yeterlidir</p>
+                                                    </div>
+                                                    <input type="checkbox" v-model="designerTemplate.brand_enabled" class="w-4 h-4 accent-purple-600 rounded">
+                                                </label>
+                                                <div v-if="designerTemplate.brand_enabled" class="pt-1">
                                                     <label class="block text-[10px] text-slate-400 mb-0.5">Marka Metni:</label>
                                                     <input type="text" v-model="designerTemplate.layout_json.brand"
-                                                           class="w-full px-2 py-1 text-xs rounded border"
-                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                                           class="w-full px-2.5 py-1 text-xs rounded border font-bold uppercase"
+                                                           :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'"
+                                                           placeholder="Marka Adı (Boş ise BRAND etiketi basılmaz)">
                                                 </div>
-                                                <div>
-                                                    <label class="block text-[10px] text-slate-400 mb-0.5">Koli Ebatları:</label>
-                                                    <input type="text" v-model="designerTemplate.layout_json.measurements"
-                                                           class="w-full px-2 py-1 text-xs rounded border font-mono"
-                                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
-                                                           placeholder="60X40X30">
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-[10px] text-slate-400 mb-0.5">Koli Ebatları (Measurements):</label>
+                                                <input type="text" v-model="designerTemplate.layout_json.measurements"
+                                                       class="w-full px-2 py-1 text-xs rounded border font-mono"
+                                                       :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"
+                                                       placeholder="60X40X30">
+                                            </div>
+
+                                            <!-- BARKOD YAPILANDIRMASI & BARKOD TİPLERİ -->
+                                            <div class="p-2.5 rounded-lg border space-y-2"
+                                                 :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                                <label class="flex items-center justify-between cursor-pointer select-none">
+                                                    <div>
+                                                        <span class="text-xs font-bold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">Barkod Alanı</span>
+                                                        <p class="text-[10px] text-slate-400">Koli üstünde 1D/2D barkod veya QR kod etiketi</p>
+                                                    </div>
+                                                    <input type="checkbox" v-model="designerTemplate.layout_json.show_barcode" class="w-4 h-4 accent-purple-600 rounded">
+                                                </label>
+                                                <div v-if="designerTemplate.layout_json.show_barcode" class="space-y-2 pt-1">
+                                                    <div class="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <label class="block text-[10px] text-slate-400 mb-0.5">Barkod Türü:</label>
+                                                            <select v-model="designerTemplate.layout_json.barcode_type"
+                                                                    class="w-full px-2 py-1 text-xs rounded border font-semibold"
+                                                                    :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'">
+                                                                <option v-for="b in barcodeTypeOptions" :key="b.id" :value="b.id">
+                                                                    {{ b.name }}
+                                                                </option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-[10px] text-slate-400 mb-0.5">Barkod İçeriği:</label>
+                                                            <select v-model="designerTemplate.layout_json.barcode_field"
+                                                                    class="w-full px-2 py-1 text-xs rounded border font-semibold"
+                                                                    :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'">
+                                                                <option value="carton_no">Koli No (CARTON-001)</option>
+                                                                <option value="po_carton">PO + Koli No (PO-C01)</option>
+                                                                <option value="style_no">Model / Style Kodu</option>
+                                                                <option value="custom">Özel Sabit Metin</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div v-if="designerTemplate.layout_json.barcode_field === 'custom'">
+                                                        <input type="text" v-model="designerTemplate.layout_json.barcode_custom_val"
+                                                               class="w-full px-2 py-1 text-xs rounded border font-mono"
+                                                               :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'"
+                                                               placeholder="Özel barkod metni girin">
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -5817,10 +5997,6 @@
                                                     <input type="checkbox" v-model="designerTemplate.layout_json.dual_variant_enabled" class="accent-purple-600 rounded">
                                                     <span>x2 Çift Varyant Tablosu</span>
                                                 </label>
-                                                <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-                                                    <input type="checkbox" v-model="designerTemplate.layout_json.show_barcode" class="accent-purple-600 rounded">
-                                                    <span>Barkod Alanı</span>
-                                                </label>
                                             </div>
                                         </div>
                                     </div>
@@ -5832,22 +6008,61 @@
                                     <div class="w-full flex items-center justify-between mb-2">
                                         <div class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                                             <i data-lucide="eye" class="w-3.5 h-3.5 text-purple-400"></i>
-                                            <span>Canlı Tasarım Önizlemesi ({{ designerTemplate.paper_size }})</span>
+                                            <span>Canlı Tasarım Tuvali ({{ designerTemplate.sticker_format || designerTemplate.paper_size }})</span>
                                         </div>
-                                        <span class="text-[11px] font-mono font-bold text-slate-400">
-                                            {{ designerTemplate.width_mm }} x {{ designerTemplate.height_mm }} mm ({{ designerTemplate.orientation }})
-                                        </span>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-[11px] font-mono font-bold text-slate-400">
+                                                {{ designerTemplate.width_mm }} x {{ designerTemplate.height_mm }} mm ({{ designerTemplate.orientation }})
+                                            </span>
+                                            <button @click="resetAllDesignerOffsets"
+                                                    class="px-2 py-0.5 rounded text-[10px] font-bold border transition cursor-pointer"
+                                                    :class="isDarkMode ? 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white' : 'border-slate-300 bg-white text-slate-600 hover:text-slate-900'"
+                                                    title="Kaydırılmış tüm öğeleri orijinal (0,0) konumlarına geri döndürün">
+                                                🔄 Konumları Sıfırla
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- KUMAŞTAG TARZI HASSAS KAYDIRMA & TAŞIMA ARAÇ ÇUBUĞU (NUDGE TOOLBAR) -->
+                                    <div class="w-full mb-3 p-2.5 rounded-xl border flex flex-wrap items-center justify-between gap-2 shadow-sm transition"
+                                         :class="isDarkMode ? 'bg-slate-950/90 border-slate-800' : 'bg-white border-slate-200'">
+                                        <div class="flex items-center gap-2">
+                                            <div class="p-1 rounded bg-purple-500/20 text-purple-400">
+                                                <i data-lucide="move" class="w-4 h-4"></i>
+                                            </div>
+                                            <div v-if="selectedDesignerElem" class="text-xs">
+                                                <span class="font-bold text-purple-400">Seçili Öğe:</span>
+                                                <strong class="ml-1" :class="isDarkMode ? 'text-white' : 'text-slate-900'">{{ getElemLabel(selectedDesignerElem) }}</strong>
+                                                <span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-300 border border-purple-500/30">
+                                                    X: {{ getElemOffset(selectedDesignerElem).x > 0 ? '+' : '' }}{{ getElemOffset(selectedDesignerElem).x }}mm, 
+                                                    Y: {{ getElemOffset(selectedDesignerElem).y > 0 ? '+' : '' }}{{ getElemOffset(selectedDesignerElem).y }}mm
+                                                </span>
+                                            </div>
+                                            <div v-else class="text-xs text-slate-400">
+                                                💡 <em>Tuvaldeki herhangi bir öğeye (başlık, tablo, barkod) tıklayıp fareyle sürükleyebilir veya yön tuşlarıyla kaydırabilirsiniz.</em>
+                                            </div>
+                                        </div>
+                                        <div v-if="selectedDesignerElem" class="flex items-center gap-1">
+                                            <button @click="nudgeDesignerElem(selectedDesignerElem, -0.5, 0)" class="p-1.5 rounded border text-xs font-bold hover:bg-purple-600 hover:text-white transition cursor-pointer" title="Sola 0.5mm (Sol Ok)">⬅️</button>
+                                            <button @click="nudgeDesignerElem(selectedDesignerElem, 0.5, 0)" class="p-1.5 rounded border text-xs font-bold hover:bg-purple-600 hover:text-white transition cursor-pointer" title="Sağa 0.5mm (Sağ Ok)">➡️</button>
+                                            <button @click="nudgeDesignerElem(selectedDesignerElem, 0, -0.5)" class="p-1.5 rounded border text-xs font-bold hover:bg-purple-600 hover:text-white transition cursor-pointer" title="Yukarı 0.5mm (Yukarı Ok)">⬆️</button>
+                                            <button @click="nudgeDesignerElem(selectedDesignerElem, 0, 0.5)" class="p-1.5 rounded border text-xs font-bold hover:bg-purple-600 hover:text-white transition cursor-pointer" title="Aşağı 0.5mm (Aşağı Ok)">⬇️</button>
+                                            <button @click="resetDesignerElemOffset(selectedDesignerElem)" class="px-2 py-1 rounded border text-[11px] font-semibold text-slate-400 hover:text-white transition cursor-pointer" title="Seçili öğe konumunu sıfırla">
+                                                0,0 Sıfırla
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <!-- CANLI ETİKET TUVALİ (REAL-TIME REACTIVE CANVAS) -->
                                     <div class="w-full flex-1 p-4 md:p-6 rounded-2xl border flex items-center justify-center overflow-auto shadow-inner"
                                          :class="isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-200/60 border-slate-300'">
                                         
-                                        <!-- ÖRNEK BASKI ALANI KAPSAYICISI -->
-                                        <div class="bg-white text-black shadow-2xl p-4 rounded transition-all"
+                                        <!-- ÖRNEK BASKI ALANI KAPSAYICISI (CANVAS KART) -->
+                                        <div id="designer-active-sticker-card"
+                                             class="bg-white text-black shadow-2xl p-4 rounded transition-all select-none"
                                              :style="{
-                                                 width: (designerTemplate.paper_size.includes('Argox') ? '92mm' : (designerTemplate.paper_size.includes('A5') ? '135mm' : '230mm')),
-                                                 minHeight: (designerTemplate.paper_size.includes('Argox') ? '135mm' : (designerTemplate.paper_size.includes('A5') ? '185mm' : '150mm')),
+                                                 width: (designerTemplate.sticker_format === 'A4_6up' ? '105mm' : (designerTemplate.sticker_format === 'A4_4up' ? '120mm' : (designerTemplate.paper_size.includes('Argox') ? '92mm' : (designerTemplate.paper_size.includes('A5') ? '135mm' : '230mm')))),
+                                                 minHeight: (designerTemplate.sticker_format === 'A4_6up' ? '99mm' : (designerTemplate.sticker_format === 'A4_4up' ? '135mm' : (designerTemplate.paper_size.includes('Argox') ? '135mm' : (designerTemplate.paper_size.includes('A5') ? '185mm' : '150mm')))),
                                                  maxWidth: '100%',
                                                  padding: designerTemplate.margin_mm + 'mm',
                                                  fontFamily: 'Arial, sans-serif',
@@ -5860,91 +6075,228 @@
                                                      designerTemplate.border_width === 1 ? 'border border-black' : (designerTemplate.border_width === 3 ? 'border-4 border-black' : 'border-2 border-black')
                                                  ]">
                                                 
-                                                <!-- 1. ÜST: MÜŞTERİ, ADRES VE MARKA -->
+                                                <!-- 1. ÜST: MÜŞTERİ, ADRES VE MARKA (SERBEST KAYDIRILABİLİR ÖĞELER) -->
                                                 <div class="flex items-start justify-between">
                                                     <div>
-                                                        <div class="text-sm font-extrabold leading-tight">{{ designerTemplate.layout_json.header_title || designerTemplate.customer_name }}</div>
-                                                        <div v-if="designerTemplate.layout_json.address_line1" class="text-[11px] leading-tight text-gray-700">{{ designerTemplate.layout_json.address_line1 }}</div>
-                                                        <div v-if="designerTemplate.layout_json.address_line2" class="text-[11px] leading-tight text-gray-700">{{ designerTemplate.layout_json.address_line2 }}</div>
-                                                        <div v-if="designerTemplate.layout_json.brand" class="mt-1 text-xs font-black tracking-wide">{{ designerTemplate.layout_json.brand }}</div>
+                                                        <!-- Müşteri Başlığı (Draggable) -->
+                                                        <div class="interactive-canvas-elem text-sm font-extrabold leading-tight inline-block"
+                                                             :class="{ 'is-selected': selectedDesignerElem === 'header' }"
+                                                             @mousedown="startCanvasElemDrag($event, 'header')"
+                                                             :style="{ transform: 'translate(' + getElemOffset('header').x + 'mm, ' + getElemOffset('header').y + 'mm)' }"
+                                                             title="Tıklayıp sürükleyin veya yön tuşlarıyla kaydırın">
+                                                            {{ designerTemplate.layout_json.header_title || designerTemplate.customer_name || '(Müşteri Firma Başlığı)' }}
+                                                        </div>
+
+                                                        <!-- Adres Alanı (Draggable) -->
+                                                        <div v-if="designerTemplate.layout_json.address_line1 || designerTemplate.layout_json.address_line2"
+                                                             class="interactive-canvas-elem inline-block"
+                                                             :class="{ 'is-selected': selectedDesignerElem === 'address' }"
+                                                             @mousedown="startCanvasElemDrag($event, 'address')"
+                                                             :style="{ transform: 'translate(' + getElemOffset('address').x + 'mm, ' + getElemOffset('address').y + 'mm)' }"
+                                                             title="Tıklayıp sürükleyin veya yön tuşlarıyla kaydırın">
+                                                            <div v-if="designerTemplate.layout_json.address_line1" class="text-[11px] leading-tight text-gray-700">{{ designerTemplate.layout_json.address_line1 }}</div>
+                                                            <div v-if="designerTemplate.layout_json.address_line2" class="text-[11px] leading-tight text-gray-700">{{ designerTemplate.layout_json.address_line2 }}</div>
+                                                        </div>
+
+                                                        <!-- Marka Alanı (İsteğe Bağlı, Draggable - Brand Yoksa Basılmaz) -->
+                                                        <div v-if="designerTemplate.brand_enabled && designerTemplate.layout_json.brand"
+                                                             class="interactive-canvas-elem mt-1 inline-block"
+                                                             :class="{ 'is-selected': selectedDesignerElem === 'brand' }"
+                                                             @mousedown="startCanvasElemDrag($event, 'brand')"
+                                                             :style="{ transform: 'translate(' + getElemOffset('brand').x + 'mm, ' + getElemOffset('brand').y + 'mm)' }"
+                                                             title="Tıklayıp sürükleyin veya yön tuşlarıyla kaydırın">
+                                                            <div class="text-xs font-black tracking-wide">{{ formatBrandDisplay(designerTemplate.layout_json.brand) }}</div>
+                                                        </div>
                                                     </div>
                                                 </div>
 
-                                                <!-- 2. ORTA: BEDEN VE ADET TABLOSU -->
-                                                <div class="my-2.5">
-                                                    <table class="w-full text-center border-collapse text-[11px]"
+                                                <!-- 2. ORTA: BEDEN VE ADET TABLOSU (EŞİT GENİŞLİKTE SÜTUNLAR, DRAGGABLE) -->
+                                                <div class="interactive-canvas-elem my-2"
+                                                     :class="{ 'is-selected': selectedDesignerElem === 'size_table' }"
+                                                     @mousedown="startCanvasElemDrag($event, 'size_table')"
+                                                     :style="{ transform: 'translate(' + getElemOffset('size_table').x + 'mm, ' + getElemOffset('size_table').y + 'mm)' }"
+                                                     title="Beden Tablosunu sürükleyin veya yön tuşlarıyla kaydırın">
+                                                    
+                                                    <table class="carton-size-table text-center border-collapse text-[11px]"
                                                            :class="[designerTemplate.show_grid_lines ? 'border border-black' : 'border-0']">
                                                         <thead>
                                                             <tr class="font-bold bg-gray-100"
                                                                 :class="[designerTemplate.show_grid_lines ? 'border-b border-black' : 'border-b border-transparent']">
-                                                                <th class="p-1 text-left" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Style</th>
-                                                                <th class="p-1 text-left" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Colour</th>
-                                                                <th v-for="sz in getCartonSizeHeaders(null)" :key="'dt-sz-'+sz" class="p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">{{ sz }}</th>
-                                                                <th class="p-1 font-black">Total</th>
+                                                                <th class="col-style p-1 text-left" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Style</th>
+                                                                <th class="col-color p-1 text-left" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Colour</th>
+                                                                <th v-for="sz in ['XS', 'S', 'M', 'L', 'XL', 'XXL']" :key="'dt-sz-'+sz" class="col-size p-0.5" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">{{ sz }}</th>
+                                                                <th class="col-total p-1 font-black">Total</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            <!-- 1. Ürün -->
+                                                            <!-- 1. Örnek Ürün Satırı -->
                                                             <tr class="font-semibold"
                                                                 :class="[designerTemplate.show_grid_lines ? 'border-b border-black' : 'border-b border-transparent']">
-                                                                <td class="p-1 text-left font-mono font-bold" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">43A05-03830D</td>
-                                                                <td class="p-1 text-left text-[10px]" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">444-2 Cinnamon</td>
-                                                                <td v-for="(sz, idx) in getCartonSizeHeaders(null)" :key="'dt-r0-'+sz" class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">
-                                                                    {{ [5, 8, 12, 10, 5, 4, 3][idx] || 5 }}
+                                                                <td class="col-style p-1 text-left font-mono font-bold" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">ST-2024</td>
+                                                                <td class="col-color p-1 text-left text-[10px]" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Renk-01</td>
+                                                                <td v-for="(sz, idx) in ['XS', 'S', 'M', 'L', 'XL', 'XXL']" :key="'dt-r0-'+sz" class="col-size p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">
+                                                                    {{ [4, 8, 12, 10, 6, 2][idx] }}
                                                                 </td>
-                                                                <td class="p-1 font-mono font-black text-xs">40</td>
+                                                                <td class="col-total p-1 font-mono font-black text-xs">42</td>
                                                             </tr>
-                                                            <!-- 2. Ürün Varyantı (x2) -->
+                                                            <!-- 2. Örnek Ürün Varyantı (x2) -->
                                                             <tr v-if="designerTemplate.layout_json.dual_variant_enabled" class="font-semibold"
                                                                 :class="[designerTemplate.show_grid_lines ? 'border-b border-black' : 'border-b border-transparent']">
-                                                                <td class="p-1 text-left font-mono font-bold" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">43A05-03830D</td>
-                                                                <td class="p-1 text-left text-[10px]" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">200-1 Dark Blue</td>
-                                                                <td v-for="(sz, idx) in getCartonSizeHeaders(null)" :key="'dt-r1-'+sz" class="p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">
-                                                                    {{ [2, 4, 6, 4, 2, 1, 1][idx] || 2 }}
+                                                                <td class="col-style p-1 text-left font-mono font-bold" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">ST-2024</td>
+                                                                <td class="col-color p-1 text-left text-[10px]" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">Renk-02</td>
+                                                                <td v-for="(sz, idx) in ['XS', 'S', 'M', 'L', 'XL', 'XXL']" :key="'dt-r1-'+sz" class="col-size p-0.5 font-mono" :class="[designerTemplate.show_grid_lines ? 'border-r border-black' : '']">
+                                                                    {{ [2, 4, 6, 4, 2, 0][idx] }}
                                                                 </td>
-                                                                <td class="p-1 font-mono font-black text-xs">18</td>
+                                                                <td class="col-total p-1 font-mono font-black text-xs">18</td>
                                                             </tr>
                                                         </tbody>
                                                     </table>
                                                 </div>
 
-                                                <!-- 3. ALT: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
-                                                <div class="pt-2 border-t-2 border-black flex items-center justify-between gap-2">
-                                                    <div class="space-y-0.5">
-                                                        <!-- KANAL BİLGİSİ (CARTON NO ÜSTÜNDE VE AYNI FONT BÜYÜKLÜĞÜNDE) -->
-                                                        <div class="text-sm font-black uppercase tracking-wide text-black">STOCK AVT</div>
-                                                        
-                                                        <!-- CARTON NO -->
-                                                        <div class="text-sm font-black tracking-wide text-black">CARTON NO: 1 OF 13</div>
+                                                <!-- ORTA AYIRICI ÇİZGİ (DRAGGABLE & NUDGEABLE) -->
+                                                <div class="interactive-canvas-elem my-2 cursor-ns-resize py-1"
+                                                     :class="{ 'is-selected': selectedDesignerElem === 'divider_line' }"
+                                                     @mousedown="startCanvasElemDrag($event, 'divider_line')"
+                                                     :style="{ transform: 'translate(' + getElemOffset('divider_line').x + 'mm, ' + getElemOffset('divider_line').y + 'mm)' }"
+                                                     title="Orta ayırıcı çizgiyi tıklayıp yukarı/aşağı sürükleyin veya yön tuşlarıyla kaydırın">
+                                                    <div class="w-full border-t-2 border-black" style="min-height: 2px;"></div>
+                                                </div>
 
-                                                        <!-- GROSS WEIGHT -->
-                                                        <div class="text-xs font-bold text-black">
-                                                            GROSS WEIGHT: <strong class="font-black">12.5 kg</strong>
+                                                <!-- 3. ALT: KANAL, CARTON NO, GROSS WEIGHT, MEASUREMENTS, BARKOD VE POKA-YOKE ROZETİ -->
+                                                <div class="pt-1 flex items-center justify-between gap-2">
+                                                    
+                                                    <!-- Lojistik & Koli Bilgileri (Her Biri Bağımsız Taşınabilir) -->
+                                                    <div class="flex flex-col gap-1">
+                                                        
+                                                        <!-- KANAL / DEPO (Draggable) -->
+                                                        <div class="interactive-canvas-elem inline-block"
+                                                             :class="{ 'is-selected': selectedDesignerElem === 'channel' }"
+                                                             @mousedown="startCanvasElemDrag($event, 'channel')"
+                                                             :style="{ transform: 'translate(' + getElemOffset('channel').x + 'mm, ' + getElemOffset('channel').y + 'mm)' }"
+                                                             title="Kanal / Depo bilgisini tıklayıp sürükleyin veya yön tuşlarıyla kaydırın">
+                                                            <div class="text-sm font-black uppercase tracking-wide text-black leading-tight">KANAL / DEPO</div>
                                                         </div>
 
-                                                        <!-- MEASUREMENTS (GROSS WEIGHT ALTINDA VE AYNI FONT BÜYÜKLÜĞÜNDE) -->
-                                                        <div class="text-xs font-bold text-black tracking-wider">
-                                                            MEASUREMENTS: {{ designerTemplate.layout_json.measurements || '60X40X30' }}
+                                                        <!-- CARTON NO (Draggable) -->
+                                                        <div class="interactive-canvas-elem inline-block"
+                                                             :class="{ 'is-selected': selectedDesignerElem === 'carton_no' }"
+                                                             @mousedown="startCanvasElemDrag($event, 'carton_no')"
+                                                             :style="{ transform: 'translate(' + getElemOffset('carton_no').x + 'mm, ' + getElemOffset('carton_no').y + 'mm)' }"
+                                                             title="Koli Numarasını tıklayıp sürükleyin veya yön tuşlarıyla kaydırın">
+                                                            <div class="text-sm font-black tracking-wide text-black leading-tight">CARTON NO: 1 OF 10</div>
                                                         </div>
-                                                        
-                                                        <!-- Barkod Simülasyonu -->
-                                                        <div v-if="designerTemplate.layout_json.show_barcode" class="pt-1">
-                                                            <div class="h-6 w-32 bg-repeat-x flex items-center justify-center font-mono text-[8px] tracking-widest bg-gray-200 border border-gray-400">
-                                                                ||||| | |||| || |||||||
+
+                                                        <!-- GROSS WEIGHT (Draggable) -->
+                                                        <div class="interactive-canvas-elem inline-block"
+                                                             :class="{ 'is-selected': selectedDesignerElem === 'gross_weight' }"
+                                                             @mousedown="startCanvasElemDrag($event, 'gross_weight')"
+                                                             :style="{ transform: 'translate(' + getElemOffset('gross_weight').x + 'mm, ' + getElemOffset('gross_weight').y + 'mm)' }"
+                                                             title="Brüt Ağırlık bilgisini tıklayıp sürükleyin veya yön tuşlarıyla kaydırın">
+                                                            <div class="text-xs font-bold text-black leading-tight">
+                                                                GROSS WEIGHT: <strong class="font-black">12.5 kg</strong>
                                                             </div>
-                                                            <div class="font-mono text-[8px] text-gray-600 mt-0.5">8690012345678</div>
+                                                        </div>
+
+                                                        <!-- MEASUREMENTS (Draggable) -->
+                                                        <div class="interactive-canvas-elem inline-block"
+                                                             :class="{ 'is-selected': selectedDesignerElem === 'measurements' }"
+                                                             @mousedown="startCanvasElemDrag($event, 'measurements')"
+                                                             :style="{ transform: 'translate(' + getElemOffset('measurements').x + 'mm, ' + getElemOffset('measurements').y + 'mm)' }"
+                                                             title="Koli Ebatları bilgisini tıklayıp sürükleyin veya yön tuşlarıyla kaydırın">
+                                                            <div class="text-xs font-bold text-black tracking-wider leading-tight">
+                                                                MEASUREMENTS: {{ designerTemplate.layout_json.measurements || '60X40X30' }}
+                                                            </div>
+                                                        </div>
+
+                                                    </div>
+
+                                                    <!-- Barkod Alanı (Seçilen Tür: Code 128 / EAN13 / ITF14 / Code 39 / QR, Draggable) -->
+                                                    <div v-if="designerTemplate.layout_json.show_barcode"
+                                                         class="interactive-canvas-elem shrink-0 flex flex-col items-center justify-center p-1"
+                                                         :class="{ 'is-selected': selectedDesignerElem === 'barcode' }"
+                                                         @mousedown="startCanvasElemDrag($event, 'barcode')"
+                                                         :style="{ transform: 'translate(' + getElemOffset('barcode').x + 'mm, ' + getElemOffset('barcode').y + 'mm)' }"
+                                                         title="Barkod alanını sürükleyin veya yön tuşlarıyla kaydırın">
+                                                        
+                                                        <!-- QR Kod Önizleme -->
+                                                        <div v-if="designerTemplate.layout_json.barcode_type === 'QR'" class="flex flex-col items-center">
+                                                            <svg viewBox="0 0 100 100" class="w-12 h-12 block border border-black bg-white p-0.5">
+                                                                <rect x="10" y="10" width="25" height="25" fill="#000" />
+                                                                <rect x="15" y="15" width="15" height="15" fill="#fff" />
+                                                                <rect x="19" y="19" width="7" height="7" fill="#000" />
+                                                                <rect x="65" y="10" width="25" height="25" fill="#000" />
+                                                                <rect x="70" y="15" width="15" height="15" fill="#fff" />
+                                                                <rect x="74" y="19" width="7" height="7" fill="#000" />
+                                                                <rect x="10" y="65" width="25" height="25" fill="#000" />
+                                                                <rect x="15" y="70" width="15" height="15" fill="#fff" />
+                                                                <rect x="19" y="74" width="7" height="7" fill="#000" />
+                                                                <rect x="42" y="12" width="6" height="6" fill="#000" />
+                                                                <rect x="42" y="30" width="16" height="6" fill="#000" />
+                                                                <rect x="45" y="45" width="10" height="10" fill="#000" />
+                                                                <rect x="65" y="65" width="12" height="12" fill="#000" />
+                                                                <rect x="80" y="80" width="10" height="10" fill="#000" />
+                                                            </svg>
+                                                            <div class="font-mono text-[7px] text-black font-bold mt-0.5">QR: {{ getCartonBarcodeValue(null, designerTemplate) }}</div>
+                                                        </div>
+
+                                                        <!-- 1D Çizgi Barkod Önizleme (Code 128 / EAN / ITF) -->
+                                                        <div v-else class="flex flex-col items-center">
+                                                            <svg viewBox="0 0 120 30" class="w-28 h-6 block">
+                                                                <rect x="2" y="0" width="2" height="30" fill="#000"/>
+                                                                <rect x="6" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="9" y="0" width="3" height="30" fill="#000"/>
+                                                                <rect x="14" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="17" y="0" width="2" height="30" fill="#000"/>
+                                                                <rect x="21" y="0" width="4" height="30" fill="#000"/>
+                                                                <rect x="27" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="30" y="0" width="2" height="30" fill="#000"/>
+                                                                <rect x="34" y="0" width="3" height="30" fill="#000"/>
+                                                                <rect x="39" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="42" y="0" width="4" height="30" fill="#000"/>
+                                                                <rect x="48" y="0" width="2" height="30" fill="#000"/>
+                                                                <rect x="52" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="55" y="0" width="3" height="30" fill="#000"/>
+                                                                <rect x="60" y="0" width="2" height="30" fill="#000"/>
+                                                                <rect x="64" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="67" y="0" width="4" height="30" fill="#000"/>
+                                                                <rect x="73" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="76" y="0" width="2" height="30" fill="#000"/>
+                                                                <rect x="80" y="0" width="3" height="30" fill="#000"/>
+                                                                <rect x="85" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="88" y="0" width="4" height="30" fill="#000"/>
+                                                                <rect x="94" y="0" width="2" height="30" fill="#000"/>
+                                                                <rect x="98" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="101" y="0" width="3" height="30" fill="#000"/>
+                                                                <rect x="106" y="0" width="2" height="30" fill="#000"/>
+                                                                <rect x="110" y="0" width="1" height="30" fill="#000"/>
+                                                                <rect x="113" y="0" width="2" height="30" fill="#000"/>
+                                                            </svg>
+                                                            <div class="font-mono text-[7px] text-black font-bold tracking-wider mt-0.5">
+                                                                {{ designerTemplate.layout_json.barcode_type || 'CODE128' }}: {{ getCartonBarcodeValue(null, designerTemplate) }}
+                                                            </div>
                                                         </div>
                                                     </div>
 
-                                                    <!-- Poka-Yoke Renk Rozeti (3.5 cm / 35 mm Çap) -->
-                                                    <div v-if="designerTemplate.layout_json.poka_badge_enabled" class="shrink-0 flex items-center justify-center poka-yoke-badge"
-                                                         style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
+                                                    <!-- Poka-Yoke Renk Rozeti (Draggable) -->
+                                                    <div v-if="designerTemplate.layout_json.poka_badge_enabled"
+                                                         class="interactive-canvas-elem shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                         :class="{ 'is-selected': selectedDesignerElem === 'poka_badge' }"
+                                                         @mousedown="startCanvasElemDrag($event, 'poka_badge')"
+                                                         :style="{
+                                                             transform: 'translate(' + getElemOffset('poka_badge').x + 'mm, ' + getElemOffset('poka_badge').y + 'mm)',
+                                                             width: '32mm',
+                                                             height: '32mm',
+                                                             minWidth: '32mm',
+                                                             minHeight: '32mm'
+                                                         }"
+                                                         title="Renk Rozetini sürükleyin veya yön tuşlarıyla kaydırın">
                                                         <svg viewBox="0 0 100 100" class="w-full h-full block"
-                                                             style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
-                                                            <circle cx="50" cy="50" r="46" fill="#6b248a" stroke="#000000" stroke-width="5"
+                                                             style="width: 32mm; height: 32mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
+                                                            <circle cx="50" cy="50" r="46" fill="#6b248a" stroke="#000000" stroke-width="4"
                                                                     style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
                                                         </svg>
                                                     </div>
+
                                                 </div>
 
                                             </div>
@@ -5961,7 +6313,7 @@
                             <div class="p-3 px-5 border-t flex items-center justify-between gap-3 shrink-0"
                                  :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'">
                                 <div class="text-xs text-slate-400">
-                                    💡 <strong>İpucu:</strong> Kaydettiğiniz sayfa ve kenarlık yapısı, çeki listesi yüklendiğinde ve yazdırıldığında bu müşteri için otomatik uygulanır.
+                                    💡 <strong>İpucu:</strong> Tüm alanları tıklayıp sürükleyebilir veya yön tuşlarıyla 0.5mm hassasiyetle konumlandırabilirsiniz. Kaydedilen şablon bu müşteri için otomatik uygulanır.
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <button @click="closeTemplateDesigner"
@@ -6001,37 +6353,64 @@
                                         </span>
                                     </h3>
                                     <p class="text-[11px] text-slate-400">
-                                        {{ printPaperSize }} {{ printOrientation === 'landscape' ? 'Yatay' : 'Dikey' }} ({{ printItemsPerPage === 2 ? '2\'li Yan Yana x2' : 'Tekli Etiket' }})
+                                        {{ printPaperSize }} {{ printOrientation === 'landscape' ? 'Yatay' : 'Dikey' }} ({{ printItemsPerPage === 6 ? 'A4 6\'lı Sticker (2x3)' : (printItemsPerPage === 4 ? 'A4 4\'lü Sticker (2x2)' : (printItemsPerPage === 2 ? '2\'li Yan Yana x2' : 'Tekli')) }})
                                     </p>
                                 </div>
                             </div>
 
                             <div class="flex flex-wrap items-center gap-2">
-                                <!-- 1. KAĞIT / CİHAZ SEÇİCİ (A4, A5, ARGOX TERMAL) -->
+                                <!-- 1. KAĞIT / CİHAZ SEÇİCİ (A4 6'lı, 4'lü, 2'li, Argox, vb.) -->
                                 <select :value="printPaperSize" @change="onPrintPaperSizeChange($event.target.value)"
                                         class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 border border-slate-700 text-white cursor-pointer focus:ring-1 focus:ring-purple-500"
                                         title="Yazıcı veya kağıt boyutu formatı seçin">
-                                    <option value="A4">A4 Yatay (297x210 mm) - 2'li (x2)</option>
-                                    <option value="A4_portrait">A4 Dikey (210x297 mm)</option>
+                                    <option value="A4">A4 Yatay (297x210 mm) - 2'li Yan Yana (x2)</option>
+                                    <option value="A4_6up">A4 6'lı Sticker (2 Sütun x 3 Satır, 105x99 mm)</option>
+                                    <option value="A4_4up">A4 4'lü Sticker (2 Sütun x 2 Satır, 105x148 mm)</option>
+                                    <option value="A4_8up">A4 8'li Sticker (2 Sütun x 4 Satır, 105x74 mm)</option>
+                                    <option value="A4_portrait">A4 Dikey (210x297 mm) - Tek Koli</option>
                                     <option value="A5">A5 Dikey (148x210 mm)</option>
                                     <option value="A5_landscape">A5 Yatay (210x148 mm)</option>
-                                    <option value="Argox_100x150">Argox / Termal (100x150 mm)</option>
-                                    <option value="Argox_100x100">Argox / Termal (100x100 mm)</option>
-                                    <option value="Argox_80x50">Argox / Termal (80x50 mm)</option>
+                                    <option value="Argox_100x150">Argox / Termal Rulo (100x150 mm)</option>
+                                    <option value="Argox_100x100">Argox / Termal Rulo (100x100 mm)</option>
+                                    <option value="Argox_80x50">Argox / Termal Rulo (80x50 mm)</option>
                                 </select>
 
-                                <!-- 2. DÜZEN: 2'Lİ vs TEKLİ -->
+                                <!-- 2. DÜZEN DÜĞMELERİ: 2'Lİ, 6'LI STICKER, 4'LÜ STICKER, TEKLİ -->
                                 <div class="flex items-center gap-1 bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs">
                                     <button @click="cartonPrintLayout = '2up'; printItemsPerPage = 2"
                                             class="px-2 py-1 rounded font-semibold transition cursor-pointer"
                                             :class="cartonPrintLayout === '2up' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'">
                                         2'li (x2)
                                     </button>
+                                    <button @click="onPrintPaperSizeChange('A4_6up')"
+                                            class="px-2 py-1 rounded font-semibold transition cursor-pointer"
+                                            :class="cartonPrintLayout === '6up' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'"
+                                            title="A4 tabakada 2x3 grid şeklinde 6 adet sticker">
+                                        6'lı Sticker
+                                    </button>
+                                    <button @click="onPrintPaperSizeChange('A4_4up')"
+                                            class="px-2 py-1 rounded font-semibold transition cursor-pointer"
+                                            :class="cartonPrintLayout === '4up' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'"
+                                            title="A4 tabakada 2x2 grid şeklinde 4 adet sticker">
+                                        4'lü Sticker
+                                    </button>
                                     <button @click="cartonPrintLayout = '1up'; printItemsPerPage = 1"
                                             class="px-2 py-1 rounded font-semibold transition cursor-pointer"
                                             :class="cartonPrintLayout === '1up' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'">
                                         Tekli
                                     </button>
+                                </div>
+
+                                <!-- KOLİ DAĞILIMI (6'LI AYRI/TEKRAR, 2'Lİ AYNI ÇİFT BASKI) -->
+                                <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700 text-xs">
+                                    <span class="text-slate-400 font-bold whitespace-nowrap">Koli Dağılımı:</span>
+                                    <select v-model="cartonRepeatMode"
+                                            class="bg-slate-900 border border-slate-600 rounded px-2 py-0.5 text-white font-semibold text-xs focus:outline-none focus:border-purple-400 cursor-pointer"
+                                            title="Her etikete ayrı koli mi, yoksa aynı koliden çift/sayfa tekrarı mı basılacağını seçin">
+                                        <option value="distinct">🏷️ Her Stickera Ayrı Koli (Sıralı 1, 2, 3...)</option>
+                                        <option value="duplicate_2x">👥 Çift Baskı (Sayfadaki Etiketler Aynı Koli - 1&1, 2&2...)</option>
+                                        <option value="sheet_repeat">📑 Tüm Sayfa Aynı Koli (Tabaka Dolu Kopya)</option>
+                                    </select>
                                 </div>
 
                                 <!-- 3. HÜCRE ÇİZGİLERİ (AÇIK / KAPALI) -->
@@ -6050,7 +6429,7 @@
                                     <span>🎨 Renk Rozeti: {{ printShowPokaBadge ? 'Açık' : 'Kapalı (Silindi)' }}</span>
                                 </button>
 
-                                <!-- 4. KENARLIK STİLİ -->
+                                <!-- 5. KENARLIK STİLİ -->
                                 <select v-model="printBorderStyle"
                                         class="px-2 py-1 rounded-lg text-xs font-semibold bg-slate-800 border border-slate-700 text-white cursor-pointer"
                                         title="Kenarlık stili">
@@ -6060,15 +6439,15 @@
                                     <option value="none">Kenarlıksız</option>
                                 </select>
 
-                                <!-- MARKA / BRAND ALANI -->
+                                <!-- MARKA / BRAND ALANI (İSTEĞE BAĞLI - BOŞSA BASILMAZ) -->
                                 <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded-lg border border-slate-700 text-xs">
                                     <span class="text-slate-400 font-bold">Marka:</span>
-                                    <input v-model="printCustomBrand" type="text" placeholder="ANNA / MOSCOW"
+                                    <input v-model="printCustomBrand" type="text" placeholder="(Marka yoksa boş)"
                                            class="w-28 bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-white font-bold uppercase text-[11px] focus:outline-none focus:border-purple-400"
-                                           title="Koli üstü etiketindeki marka metnini değiştirin">
+                                           title="Marka metnini girin veya boş bırakın (boş bırakıldığında BRAND alanı basılmaz)">
                                 </div>
 
-                                <!-- 5. SAYFA YAPISINI KAYDET DÜĞMESİ -->
+                                <!-- 6. SAYFA YAPISINI KAYDET DÜĞMESİ -->
                                 <button @click="saveCurrentPrintPageLayout"
                                         class="px-3 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30"
                                         title="Bu müşteri için seçtiğiniz sayfa ve kenarlık yapısını kalıcı olarak kaydedin">
@@ -6076,14 +6455,14 @@
                                     <span>Sayfa Yapısını Kaydet</span>
                                 </button>
 
-                                <!-- 6. YAZDIR BUTONU -->
+                                <!-- 7. YAZDIR BUTONU -->
                                 <button @click="printCartonLabels"
                                         class="px-4 py-1.5 btn-theme text-xs font-bold rounded-lg shadow-lg flex items-center gap-1.5 hover:scale-105 active:scale-95 transition cursor-pointer">
                                     <i data-lucide="printer" class="w-3.5 h-3.5"></i>
                                     <span>Yazdır ({{ printPaperSize }})</span>
                                 </button>
 
-                                <!-- 7. KAPAT BUTONU -->
+                                <!-- 8. KAPAT BUTONU -->
                                 <button @click="closeCartonPrintModal"
                                         class="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition cursor-pointer"
                                         title="Önizlemeyi Kapat (Esc)">
@@ -6111,7 +6490,8 @@
                                     margin: 0 !important;
                                     box-shadow: none !important;
                                 }
-                                .koli-a4-landscape-page {
+                                .koli-a4-landscape-page,
+                                .koli-a4-sheet-page {
                                     background: #ffffff !important;
                                     background-color: #ffffff !important;
                                     box-shadow: none !important;
@@ -6126,8 +6506,8 @@
                                     box-shadow: none !important;
                                     -webkit-box-shadow: none !important;
                                 }
-                                .koli-a4-landscape-page table thead tr,
-                                .koli-a4-landscape-page table thead th {
+                                .carton-size-table thead tr,
+                                .carton-size-table thead th {
                                     background: #ffffff !important;
                                     background-color: #ffffff !important;
                                 }
@@ -6141,11 +6521,187 @@
                             }
                         </component>
 
-                        <!-- ETİKET BASKI ÖNİZLEME ALANI (A4 YATAY) -->
+                        <!-- ETİKET BASKI ÖNİZLEME ALANI -->
                         <div class="flex-1 p-4 md:p-8 overflow-y-auto bg-slate-800/50 flex flex-col items-center">
                             
-                            <!-- SAYFA BAŞINA 2'Lİ KOLİ ETİKETİ DÜZENİ (x2 YAN YANA) -->
-                            <template v-if="cartonPrintLayout === '2up'">
+                            <!-- 1. DÜZEN: A4 6'LI STICKER TABAKA (2 SÜTUN x 3 SATIR) -->
+                            <template v-if="cartonPrintLayout === '6up'">
+                                <div v-for="(chunk, chunkIdx) in getPrintCartonChunks(6)" :key="'chunk6-'+chunkIdx"
+                                     class="koli-a4-sheet-page koli-a4-6up-grid bg-white text-black shadow-2xl p-4 mb-8 rounded-lg print:shadow-none print:p-0 print:m-0 print:rounded-none"
+                                     style="width: 200mm; min-height: 285mm; max-width: 100%; box-sizing: border-box; margin-left: auto; margin-right: auto; page-break-after: always; break-after: page;">
+                                    
+                                    <div v-for="(c, cIdx) in chunk" :key="'stk6-'+chunkIdx+'-'+cIdx"
+                                         class="p-2 flex flex-col justify-between relative bg-white koli-etiket-card-box rounded"
+                                         :class="[
+                                             printBorderStyle === 'none' ? 'border-0' : (printBorderStyle === 'dashed' ? 'border border-dashed border-black' : (printBorderStyle === 'double' ? 'border-2 border-double border-black' : 'border border-black'))
+                                         ]"
+                                         style="min-height: 90mm; font-family: Arial, Helvetica, sans-serif; font-size: 10px;">
+                                        
+                                        <!-- ÜST: MÜŞTERİ BAŞLIĞI, ADRES VE MARKA -->
+                                        <div class="leading-tight">
+                                            <div class="text-[12px] font-extrabold truncate" :style="{ transform: getPrintElemTransform('header') }">{{ getCartonHeaderTitle(c) }}</div>
+                                            <div v-if="getCartonAddress1(c)" class="text-[9px] text-gray-700 truncate" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress1(c) }}</div>
+                                            <div v-if="getCartonAddress2(c)" class="text-[9px] text-gray-700 truncate" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress2(c) }}</div>
+                                            <!-- Brand Alanı (İsteğe Bağlı) -->
+                                            <div v-if="(activeCartonTemplate?.brand_enabled !== false) && (printCustomBrand || getCartonBrand(c))"
+                                                 class="text-[10px] font-black tracking-wide mt-0.5"
+                                                 :style="{ transform: getPrintElemTransform('brand') }">
+                                                {{ formatBrandDisplay(printCustomBrand || getCartonBrand(c)) }}
+                                            </div>
+                                        </div>
+
+                                        <!-- ORTA: BEDEN VE ADET TABLOSU (EŞİT GENİŞLİKTE SÜTUNLAR) -->
+                                        <div class="my-1" :style="{ transform: getPrintElemTransform('size_table') }">
+                                            <table class="carton-size-table text-center border-collapse text-[9px]"
+                                                   :class="[printShowGridLines ? 'border border-black' : 'border-0']">
+                                                <thead>
+                                                    <tr class="font-bold bg-white"
+                                                        :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                        <th class="col-style p-0.5 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Style</th>
+                                                        <th class="col-color p-0.5 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Colour</th>
+                                                        <th v-for="sz in getCartonSizeHeaders(c)" :key="'sz-h6-'+sz" class="col-size p-0.5" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ sz }}</th>
+                                                        <th class="col-total p-0.5 font-black">Tot</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr class="font-semibold h-5"
+                                                        :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                        <td class="col-style p-0.5 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[0] ? c.items[0].model : '-' }}</td>
+                                                        <td class="col-color p-0.5 text-left text-[8px] truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-r6-0-'+sz" class="col-size p-0.5 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                            {{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes ? c.items[0].sizes[sz] : '', c) }}
+                                                        </td>
+                                                        <td class="col-total p-0.5 font-mono font-black">{{ c.items && c.items[0] ? formatCartonSizeQty(c.items[0].total_qty, c) : '' }}</td>
+                                                    </tr>
+                                                    <tr v-if="c.items && c.items.length > 1" class="font-semibold h-5"
+                                                        :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                        <td class="col-style p-0.5 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items[1].model }}</td>
+                                                        <td class="col-color p-0.5 text-left text-[8px] truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items[1].color }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-r6-1-'+sz" class="col-size p-0.5 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                            {{ formatCartonSizeQty(c.items[1].sizes ? c.items[1].sizes[sz] : '', c) }}
+                                                        </td>
+                                                        <td class="col-total p-0.5 font-mono font-black">{{ formatCartonSizeQty(c.items[1].total_qty, c) }}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        <!-- ORTA AYIRICI ÇİZGİ (AYRI TAŞINABİLİR) -->
+                                        <div class="my-0.5 w-full" :style="{ transform: getPrintElemTransform('divider_line') }">
+                                            <div class="w-full border-t border-black"></div>
+                                        </div>
+
+                                        <!-- ALT: KANAL, CARTON NO, AĞIRLIK VE BARKOD / POKA-YOKE -->
+                                        <div class="pt-0.5 flex items-center justify-between gap-1 text-[10px]">
+                                            <div class="leading-tight">
+                                                <div class="font-black uppercase text-black text-[11px] truncate" :style="{ transform: getPrintElemTransform('channel') }">{{ c.channel }}</div>
+                                                <div class="font-black text-black" :style="{ transform: getPrintElemTransform('carton_no') }">{{ c.carton_label_text || ('CARTON: ' + c.carton_no + ' / ' + c.group_count) }}</div>
+                                                <div class="text-[9px] font-bold text-black" :style="{ transform: getPrintElemTransform('gross_weight') }">GW: {{ c.gross_weight }} kg</div>
+                                                <div class="text-[9px] font-bold text-black" :style="{ transform: getPrintElemTransform('measurements') }">{{ c.measurements || '60X40X30' }}</div>
+                                            </div>
+                                            
+                                            <!-- Poka-Yoke Renk Rozeti -->
+                                            <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                 :style="{ transform: getPrintElemTransform('poka_badge'), width: '18mm', height: '18mm', minWidth: '18mm', minHeight: '18mm' }">
+                                                <svg viewBox="0 0 100 100" class="w-full h-full block">
+                                                    <circle cx="50" cy="50" r="46" :fill="c.channel_color || '#000000'" stroke="none" />
+                                                </svg>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- 2. DÜZEN: A4 4'LÜ STICKER TABAKA (2 SÜTUN x 2 SATIR) -->
+                            <template v-else-if="cartonPrintLayout === '4up'">
+                                <div v-for="(chunk, chunkIdx) in getPrintCartonChunks(4)" :key="'chunk4-'+chunkIdx"
+                                     class="koli-a4-sheet-page koli-a4-4up-grid bg-white text-black shadow-2xl p-5 mb-8 rounded-lg print:shadow-none print:p-0 print:m-0 print:rounded-none"
+                                     style="width: 200mm; min-height: 285mm; max-width: 100%; box-sizing: border-box; margin-left: auto; margin-right: auto; page-break-after: always; break-after: page;">
+                                    
+                                    <div v-for="(c, cIdx) in chunk" :key="'stk4-'+chunkIdx+'-'+cIdx"
+                                         class="p-4 flex flex-col justify-between relative bg-white koli-etiket-card-box rounded"
+                                         :class="[
+                                             printBorderStyle === 'none' ? 'border-0' : (printBorderStyle === 'dashed' ? 'border-2 border-dashed border-black' : (printBorderStyle === 'double' ? 'border-2 border-double border-black' : 'border-2 border-black'))
+                                         ]"
+                                         style="min-height: 130mm; font-family: Arial, Helvetica, sans-serif;">
+                                        
+                                        <!-- ÜST: MÜŞTERİ, ADRES VE MARKA -->
+                                        <div>
+                                            <div class="text-[14px] font-extrabold leading-tight" :style="{ transform: getPrintElemTransform('header') }">{{ getCartonHeaderTitle(c) }}</div>
+                                            <div v-if="getCartonAddress1(c)" class="text-[11px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress1(c) }}</div>
+                                            <div v-if="getCartonAddress2(c)" class="text-[11px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress2(c) }}</div>
+                                            <div v-if="(activeCartonTemplate?.brand_enabled !== false) && (printCustomBrand || getCartonBrand(c))"
+                                                 class="mt-1 text-[12px] font-black tracking-wide"
+                                                 :style="{ transform: getPrintElemTransform('brand') }">
+                                                {{ formatBrandDisplay(printCustomBrand || getCartonBrand(c)) }}
+                                            </div>
+                                        </div>
+
+                                        <!-- ORTA: BEDEN VE ADET TABLOSU (EŞİT GENİŞLİKTE SÜTUNLAR) -->
+                                        <div class="my-2" :style="{ transform: getPrintElemTransform('size_table') }">
+                                            <table class="carton-size-table text-center border-collapse text-xs"
+                                                   :class="[printShowGridLines ? 'border border-black' : 'border-0']">
+                                                <thead>
+                                                    <tr class="font-bold bg-white"
+                                                        :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                        <th class="col-style p-1 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Style</th>
+                                                        <th class="col-color p-1 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Colour</th>
+                                                        <th v-for="sz in getCartonSizeHeaders(c)" :key="'sz-h4-'+sz" class="col-size p-0.5" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ sz }}</th>
+                                                        <th class="col-total p-1 font-black">Total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr class="font-semibold h-7"
+                                                        :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                        <td class="col-style p-1 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[0] ? c.items[0].model : '-' }}</td>
+                                                        <td class="col-color p-1 text-left text-[10px] truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-r4-0-'+sz" class="col-size p-0.5 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                            {{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes ? c.items[0].sizes[sz] : '', c) }}
+                                                        </td>
+                                                        <td class="col-total p-1 font-mono font-black text-xs">{{ c.items && c.items[0] ? formatCartonSizeQty(c.items[0].total_qty, c) : '' }}</td>
+                                                    </tr>
+                                                    <tr v-if="c.items && c.items.length > 1" class="font-semibold h-7"
+                                                        :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                        <td class="col-style p-1 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items[1].model }}</td>
+                                                        <td class="col-color p-1 text-left text-[10px] truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items[1].color }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-r4-1-'+sz" class="col-size p-0.5 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                            {{ formatCartonSizeQty(c.items[1].sizes ? c.items[1].sizes[sz] : '', c) }}
+                                                        </td>
+                                                        <td class="col-total p-1 font-mono font-black text-xs">{{ formatCartonSizeQty(c.items[1].total_qty, c) }}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        <!-- ORTA AYIRICI ÇİZGİ (AYRI TAŞINABİLİR) -->
+                                        <div class="my-1.5 w-full" :style="{ transform: getPrintElemTransform('divider_line') }">
+                                            <div class="w-full border-t-2 border-black"></div>
+                                        </div>
+
+                                        <!-- ALT: KANAL, CARTON NO, AĞIRLIK VE POKA-YOKE -->
+                                        <div class="pt-1 flex items-center justify-between gap-2">
+                                            <div class="space-y-0.5">
+                                                <div class="text-[13px] font-black uppercase tracking-wider text-black" :style="{ transform: getPrintElemTransform('channel') }">{{ c.channel }}</div>
+                                                <div class="text-[13px] font-black tracking-wide text-black" :style="{ transform: getPrintElemTransform('carton_no') }">{{ c.carton_label_text || ('CARTON NO: ' + c.carton_no + ' OF ' + c.group_count) }}</div>
+                                                <div class="text-[11px] font-bold text-black" :style="{ transform: getPrintElemTransform('gross_weight') }">GROSS WEIGHT: <span class="font-black">{{ c.gross_weight }} kg</span></div>
+                                                <div class="text-[11px] font-bold text-black" :style="{ transform: getPrintElemTransform('measurements') }">MEASUREMENTS: {{ c.measurements || '60X40X30' }}</div>
+                                            </div>
+
+                                            <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                 :style="{ transform: getPrintElemTransform('poka_badge'), width: '25mm', height: '25mm', minWidth: '25mm', minHeight: '25mm' }">
+                                                <svg viewBox="0 0 100 100" class="w-full h-full block">
+                                                    <circle cx="50" cy="50" r="46" :fill="c.channel_color || '#000000'" stroke="none" />
+                                                </svg>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- 3. DÜZEN: SAYFA BAŞINA 2'Lİ KOLİ ETİKETİ DÜZENİ (A4 YATAY x2 YAN YANA) -->
+                            <template v-else-if="cartonPrintLayout === '2up'">
                                 <div v-for="(pair, pairIdx) in getPrintCartonPairs()" :key="'pair-'+pairIdx"
                                      class="koli-a4-landscape-page bg-white text-black shadow-2xl p-6 mb-8 rounded-lg flex flex-col justify-between print:shadow-none print:p-0 print:m-0 print:rounded-none"
                                      style="width: 280mm; min-height: 195mm; max-width: 100%; box-sizing: border-box; margin-left: auto; margin-right: auto; page-break-after: always; break-after: page;">
@@ -6153,86 +6709,96 @@
                                     <div class="grid grid-cols-2 gap-8 h-full flex-1">
                                         
                                         <!-- 1. ETİKET (SOL) -->
-                                        <div v-if="pair[0]" class="border-2 border-black p-5 flex flex-col justify-between relative bg-white koli-etiket-card-box"
+                                        <div v-if="pair[0]" class="p-5 flex flex-col justify-between relative bg-white koli-etiket-card-box"
+                                             :class="[
+                                                 printBorderStyle === 'none' ? 'border-0' : (printBorderStyle === 'dashed' ? 'border-2 border-dashed border-black' : (printBorderStyle === 'double' ? 'border-2 border-double border-black' : 'border-2 border-black'))
+                                             ]"
                                              style="min-height: 175mm; font-family: Arial, Helvetica, sans-serif;">
                                             
-                                            <!-- ÜST ADRES VE MARKA -->
+                                            <!-- ÜST ADRES VE MARKA (DİNAMİK, MARKA İSTEĞE BAĞLI) -->
                                             <div>
-                                                <div class="text-[15px] font-bold leading-tight">Anna Van Toor</div>
-                                                <div class="text-[13px] leading-tight text-gray-800">Energieweg 35</div>
-                                                <div class="text-[13px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
-                                                <div class="text-[13px] leading-tight text-gray-800">The Netherlands</div>
-                                                <div class="mt-2 text-[14px] font-black tracking-wide">BRAND: {{ (printCustomBrand || pair[0].brand || activeCartonTemplate?.layout_json?.brand || 'ANNA').toUpperCase() }}</div>
+                                                <div class="text-[15px] font-bold leading-tight" :style="{ transform: getPrintElemTransform('header') }">{{ getCartonHeaderTitle(pair[0]) }}</div>
+                                                <div v-if="getCartonAddress1(pair[0])" class="text-[13px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress1(pair[0]) }}</div>
+                                                <div v-if="getCartonAddress2(pair[0])" class="text-[13px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress2(pair[0]) }}</div>
+                                                <div v-if="getCartonAddress3(pair[0])" class="text-[13px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress3(pair[0]) }}</div>
+                                                <div v-if="(activeCartonTemplate?.brand_enabled !== false) && (printCustomBrand || getCartonBrand(pair[0]))"
+                                                     class="mt-2 text-[14px] font-black tracking-wide"
+                                                     :style="{ transform: getPrintElemTransform('brand') }">
+                                                    {{ formatBrandDisplay(printCustomBrand || getCartonBrand(pair[0])) }}
+                                                </div>
                                             </div>
 
-                                            <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL -->
-                                            <div class="my-4">
-                                                <table class="w-full text-center border-collapse border border-black text-xs">
+                                            <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL (EŞİT GENİŞLİKTE SÜTUNLAR) -->
+                                            <div class="my-4" :style="{ transform: getPrintElemTransform('size_table') }">
+                                                <table class="carton-size-table text-center border-collapse text-xs"
+                                                       :class="[printShowGridLines ? 'border border-black' : 'border-0']">
                                                     <thead>
-                                                        <tr class="border-b border-black font-bold text-[11px] bg-white">
-                                                            <th class="border-r border-black p-1 text-left w-24">Style</th>
-                                                            <th class="border-r border-black p-1 text-left w-28">Colour</th>
-                                                            <th v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-h0-'+sz" class="border-r border-black p-1">{{ sz }}</th>
-                                                            <th class="p-1 font-black">Total</th>
+                                                        <tr class="font-bold text-[11px] bg-white"
+                                                            :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                            <th class="col-style p-1 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Style</th>
+                                                            <th class="col-color p-1 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Colour</th>
+                                                            <th v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-h0-'+sz" class="col-size p-0.5" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ sz }}</th>
+                                                            <th class="col-total p-1 font-black">Total</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         <!-- 1. Ürün Satırı -->
-                                                        <tr class="border-b border-black text-[12px] font-semibold h-8">
-                                                            <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].model : '-' }}</td>
-                                                            <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].color : '-' }}</td>
-                                                            <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-0-'+sz" class="border-r border-black p-1 font-mono">
+                                                        <tr class="text-[12px] font-semibold h-8"
+                                                            :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                            <td class="col-style p-1 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].model : '-' }}</td>
+                                                            <td class="col-color p-1 text-left text-[11px] truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].color : '-' }}</td>
+                                                            <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-0-'+sz" class="col-size p-0.5 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
                                                                 {{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes ? pair[0].items[0].sizes[sz] : '', pair[0]) }}
                                                             </td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[0] ? formatCartonSizeQty(pair[0].items[0].total_qty, pair[0]) : '' }}</td>
+                                                            <td class="col-total p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[0] ? formatCartonSizeQty(pair[0].items[0].total_qty, pair[0]) : '' }}</td>
                                                         </tr>
                                                         <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
-                                                        <tr class="border-b border-black text-[12px] font-semibold h-8"
-                                                            :class="{'opacity-20': !pair[0].items || pair[0].items.length < 2}">
-                                                            <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].model : '' }}</td>
-                                                            <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].color : '' }}</td>
-                                                            <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-1-'+sz" class="border-r border-black p-1 font-mono">
+                                                        <tr class="text-[12px] font-semibold h-8"
+                                                            :class="[
+                                                                printShowGridLines ? 'border-b border-black' : 'border-b border-transparent',
+                                                                {'opacity-20': !pair[0].items || pair[0].items.length < 2}
+                                                            ]">
+                                                            <td class="col-style p-1 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].model : '' }}</td>
+                                                            <td class="col-color p-1 text-left text-[11px] truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].color : '' }}</td>
+                                                            <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-1-'+sz" class="col-size p-0.5 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
                                                                 {{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes ? pair[0].items[1].sizes[sz] : '', pair[0]) }}
                                                             </td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[1] ? formatCartonSizeQty(pair[0].items[1].total_qty, pair[0]) : '' }}</td>
+                                                            <td class="col-total p-1 font-mono font-black text-sm">{{ pair[0].items && pair[0].items[1] ? formatCartonSizeQty(pair[0].items[1].total_qty, pair[0]) : '' }}</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
                                             </div>
 
+                                            <!-- ORTA AYIRICI ÇİZGİ (AYRI TAŞINABİLİR) -->
+                                            <div class="my-2 w-full" :style="{ transform: getPrintElemTransform('divider_line') }">
+                                                <div class="w-full border-t-2 border-black"></div>
+                                            </div>
+
                                             <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
-                                            <div class="pt-3 border-t-2 border-black flex items-center justify-between gap-2">
+                                            <div class="pt-1 flex items-center justify-between gap-2">
                                                 <div class="space-y-1">
-                                                    <!-- 1. KANAL BİLGİSİ (CARTON NO ÜSTÜNDE VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 12) -->
-                                                    <div class="text-[17px] font-black uppercase tracking-wider text-black">
+                                                    <div class="text-[17px] font-black uppercase tracking-wider text-black" :style="{ transform: getPrintElemTransform('channel') }">
                                                         {{ pair[0].channel }}
                                                     </div>
-
-                                                    <!-- 2. CARTON NO (EXCEL SATIR 13) -->
-                                                    <div class="text-[17px] font-black tracking-wide text-black">
+                                                    <div class="text-[17px] font-black tracking-wide text-black" :style="{ transform: getPrintElemTransform('carton_no') }">
                                                         {{ pair[0].carton_label_text || ('CARTON NO: ' + pair[0].carton_no + ' OF ' + pair[0].group_count) }}
                                                     </div>
-
-                                                    <!-- 3. GROSS WEIGHT (EXCEL SATIR 14) -->
-                                                    <div class="text-[14px] font-bold text-black">
+                                                    <div class="text-[14px] font-bold text-black" :style="{ transform: getPrintElemTransform('gross_weight') }">
                                                         GROSS WEIGHT: <span class="font-black">{{ pair[0].gross_weight }} kg</span>
                                                     </div>
-
-                                                    <!-- 4. MEASUREMENTS (GROSS WEIGHT ALTINDA VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 15) -->
-                                                    <div class="text-[14px] font-bold text-black tracking-wider">
+                                                    <div class="text-[14px] font-bold text-black tracking-wider" :style="{ transform: getPrintElemTransform('measurements') }">
                                                         MEASUREMENTS: {{ pair[0].measurements || '60X40X30' }}
                                                     </div>
                                                 </div>
 
-                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 3.5 cm / 35 mm Çap) -->
+                                                <!-- Poka-Yoke Renk Rozeti (3.5 cm / 35 mm Çap) -->
                                                 <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
-                                                     style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
+                                                     :style="{ transform: getPrintElemTransform('poka_badge'), width: '35mm', height: '35mm', minWidth: '35mm', minHeight: '35mm' }">
                                                     <svg viewBox="0 0 100 100" class="w-full h-full block"
                                                          style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
                                                         <circle cx="50" cy="50" r="48"
                                                                 :fill="pair[0].channel_color || '#000000'"
                                                                 stroke="none"
-                                                                stroke-width="0"
                                                                 style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
                                                     </svg>
                                                 </div>
@@ -6241,86 +6807,96 @@
                                         </div>
 
                                         <!-- 2. ETİKET (SAĞ) -->
-                                        <div v-if="pair[1]" class="border-2 border-black p-5 flex flex-col justify-between relative bg-white koli-etiket-card-box"
+                                        <div v-if="pair[1]" class="p-5 flex flex-col justify-between relative bg-white koli-etiket-card-box"
+                                             :class="[
+                                                 printBorderStyle === 'none' ? 'border-0' : (printBorderStyle === 'dashed' ? 'border-2 border-dashed border-black' : (printBorderStyle === 'double' ? 'border-2 border-double border-black' : 'border-2 border-black'))
+                                             ]"
                                              style="min-height: 175mm; font-family: Arial, Helvetica, sans-serif;">
                                             
-                                            <!-- ÜST ADRES VE MARKA -->
+                                            <!-- ÜST ADRES VE MARKA (DİNAMİK, MARKA İSTEĞE BAĞLI) -->
                                             <div>
-                                                <div class="text-[15px] font-bold leading-tight">Anna Van Toor</div>
-                                                <div class="text-[13px] leading-tight text-gray-800">Energieweg 35</div>
-                                                <div class="text-[13px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
-                                                <div class="text-[13px] leading-tight text-gray-800">The Netherlands</div>
-                                                <div class="mt-2 text-[14px] font-black tracking-wide">BRAND: {{ (printCustomBrand || pair[1].brand || activeCartonTemplate?.layout_json?.brand || 'ANNA').toUpperCase() }}</div>
+                                                <div class="text-[15px] font-bold leading-tight" :style="{ transform: getPrintElemTransform('header') }">{{ getCartonHeaderTitle(pair[1]) }}</div>
+                                                <div v-if="getCartonAddress1(pair[1])" class="text-[13px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress1(pair[1]) }}</div>
+                                                <div v-if="getCartonAddress2(pair[1])" class="text-[13px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress2(pair[1]) }}</div>
+                                                <div v-if="getCartonAddress3(pair[1])" class="text-[13px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress3(pair[1]) }}</div>
+                                                <div v-if="(activeCartonTemplate?.brand_enabled !== false) && (printCustomBrand || getCartonBrand(pair[1]))"
+                                                     class="mt-2 text-[14px] font-black tracking-wide"
+                                                     :style="{ transform: getPrintElemTransform('brand') }">
+                                                    {{ formatBrandDisplay(printCustomBrand || getCartonBrand(pair[1])) }}
+                                                </div>
                                             </div>
 
-                                            <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL -->
-                                            <div class="my-4">
-                                                <table class="w-full text-center border-collapse border border-black text-xs">
+                                            <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL (EŞİT GENİŞLİKTE SÜTUNLAR) -->
+                                            <div class="my-4" :style="{ transform: getPrintElemTransform('size_table') }">
+                                                <table class="carton-size-table text-center border-collapse text-xs"
+                                                       :class="[printShowGridLines ? 'border border-black' : 'border-0']">
                                                     <thead>
-                                                        <tr class="border-b border-black font-bold text-[11px] bg-white">
-                                                            <th class="border-r border-black p-1 text-left w-24">Style</th>
-                                                            <th class="border-r border-black p-1 text-left w-28">Colour</th>
-                                                            <th v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-h1-'+sz" class="border-r border-black p-1">{{ sz }}</th>
-                                                            <th class="p-1 font-black">Total</th>
+                                                        <tr class="font-bold text-[11px] bg-white"
+                                                            :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                            <th class="col-style p-1 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Style</th>
+                                                            <th class="col-color p-1 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Colour</th>
+                                                            <th v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-h1-'+sz" class="col-size p-0.5" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ sz }}</th>
+                                                            <th class="col-total p-1 font-black">Total</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         <!-- 1. Ürün Satırı -->
-                                                        <tr class="border-b border-black text-[12px] font-semibold h-8">
-                                                            <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].model : '-' }}</td>
-                                                            <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].color : '-' }}</td>
-                                                            <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-0-'+sz" class="border-r border-black p-1 font-mono">
+                                                        <tr class="text-[12px] font-semibold h-8"
+                                                            :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                            <td class="col-style p-1 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].model : '-' }}</td>
+                                                            <td class="col-color p-1 text-left text-[11px] truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].color : '-' }}</td>
+                                                            <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-0-'+sz" class="col-size p-0.5 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
                                                                 {{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes ? pair[1].items[0].sizes[sz] : '', pair[1]) }}
                                                             </td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[0] ? formatCartonSizeQty(pair[1].items[0].total_qty, pair[1]) : '' }}</td>
+                                                            <td class="col-total p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[0] ? formatCartonSizeQty(pair[1].items[0].total_qty, pair[1]) : '' }}</td>
                                                         </tr>
                                                         <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
-                                                        <tr class="border-b border-black text-[12px] font-semibold h-8"
-                                                            :class="{'opacity-20': !pair[1].items || pair[1].items.length < 2}">
-                                                            <td class="border-r border-black p-1 text-left font-mono font-bold">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].model : '' }}</td>
-                                                            <td class="border-r border-black p-1 text-left text-[11px] truncate max-w-[90px]">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].color : '' }}</td>
-                                                            <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-1-'+sz" class="border-r border-black p-1 font-mono">
+                                                        <tr class="text-[12px] font-semibold h-8"
+                                                            :class="[
+                                                                printShowGridLines ? 'border-b border-black' : 'border-b border-transparent',
+                                                                {'opacity-20': !pair[1].items || pair[1].items.length < 2}
+                                                            ]">
+                                                            <td class="col-style p-1 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].model : '' }}</td>
+                                                            <td class="col-color p-1 text-left text-[11px] truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].color : '' }}</td>
+                                                            <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-1-'+sz" class="col-size p-0.5 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
                                                                 {{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes ? pair[1].items[1].sizes[sz] : '', pair[1]) }}
                                                             </td>
-                                                            <td class="p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[1] ? formatCartonSizeQty(pair[1].items[1].total_qty, pair[1]) : '' }}</td>
+                                                            <td class="col-total p-1 font-mono font-black text-sm">{{ pair[1].items && pair[1].items[1] ? formatCartonSizeQty(pair[1].items[1].total_qty, pair[1]) : '' }}</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
                                             </div>
 
+                                            <!-- ORTA AYIRICI ÇİZGİ (AYRI TAŞINABİLİR) -->
+                                            <div class="my-2 w-full" :style="{ transform: getPrintElemTransform('divider_line') }">
+                                                <div class="w-full border-t-2 border-black"></div>
+                                            </div>
+
                                             <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
-                                            <div class="pt-3 border-t-2 border-black flex items-center justify-between gap-2">
+                                            <div class="pt-1 flex items-center justify-between gap-2">
                                                 <div class="space-y-1">
-                                                    <!-- 1. KANAL BİLGİSİ (CARTON NO ÜSTÜNDE VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 12) -->
-                                                    <div class="text-[17px] font-black uppercase tracking-wider text-black">
+                                                    <div class="text-[17px] font-black uppercase tracking-wider text-black" :style="{ transform: getPrintElemTransform('channel') }">
                                                         {{ pair[1].channel }}
                                                     </div>
-
-                                                    <!-- 2. CARTON NO (EXCEL SATIR 13) -->
-                                                    <div class="text-[17px] font-black tracking-wide text-black">
+                                                    <div class="text-[17px] font-black tracking-wide text-black" :style="{ transform: getPrintElemTransform('carton_no') }">
                                                         {{ pair[1].carton_label_text || ('CARTON NO: ' + pair[1].carton_no + ' OF ' + pair[1].group_count) }}
                                                     </div>
-
-                                                    <!-- 3. GROSS WEIGHT (EXCEL SATIR 14) -->
-                                                    <div class="text-[14px] font-bold text-black">
+                                                    <div class="text-[14px] font-bold text-black" :style="{ transform: getPrintElemTransform('gross_weight') }">
                                                         GROSS WEIGHT: <span class="font-black">{{ pair[1].gross_weight }} kg</span>
                                                     </div>
-
-                                                    <!-- 4. MEASUREMENTS (GROSS WEIGHT ALTINDA VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 15) -->
-                                                    <div class="text-[14px] font-bold text-black tracking-wider">
+                                                    <div class="text-[14px] font-bold text-black tracking-wider" :style="{ transform: getPrintElemTransform('measurements') }">
                                                         MEASUREMENTS: {{ pair[1].measurements || '60X40X30' }}
                                                     </div>
                                                 </div>
 
-                                                <!-- Kusursuz Vektörel Yuvarlak Renk Rozeti (Poka-Yoke: 3.5 cm / 35 mm Çap) -->
+                                                <!-- Poka-Yoke Renk Rozeti (3.5 cm / 35 mm Çap) -->
                                                 <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
-                                                     style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
+                                                     :style="{ transform: getPrintElemTransform('poka_badge'), width: '35mm', height: '35mm', minWidth: '35mm', minHeight: '35mm' }">
                                                     <svg viewBox="0 0 100 100" class="w-full h-full block"
                                                          style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
                                                         <circle cx="50" cy="50" r="48"
                                                                 :fill="pair[1].channel_color || '#000000'"
                                                                 stroke="none"
-                                                                stroke-width="0"
                                                                 style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
                                                     </svg>
                                                 </div>
@@ -6338,93 +6914,103 @@
                                 </div>
                             </template>
 
-                            <!-- SAYFA BAŞINA TEKLİ ORTA HİZALI KOLİ ETİKETİ DÜZENİ -->
+                            <!-- 4. DÜZEN: SAYFA BAŞINA TEKLİ ORTA HİZALI KOLİ ETİKETİ DÜZENİ -->
                             <template v-else>
                                 <div v-for="c in getPrintCartonsList()" :key="'single-prn-'+c.carton_id"
                                      class="koli-a4-landscape-page bg-white text-black shadow-2xl p-8 mb-8 rounded-lg flex flex-col justify-between print:shadow-none print:p-0 print:m-0 print:rounded-none"
                                      style="width: 250mm; min-height: 180mm; max-width: 100%; box-sizing: border-box; margin-left: auto; margin-right: auto; page-break-after: always; break-after: page;">
                                     
-                                    <div class="border-2 border-black p-8 flex flex-col justify-between relative bg-white h-full koli-etiket-card-box"
+                                    <div class="p-8 flex flex-col justify-between relative bg-white h-full koli-etiket-card-box"
+                                         :class="[
+                                             printBorderStyle === 'none' ? 'border-0' : (printBorderStyle === 'dashed' ? 'border-2 border-dashed border-black' : (printBorderStyle === 'double' ? 'border-2 border-double border-black' : 'border-2 border-black'))
+                                         ]"
                                          style="font-family: Arial, Helvetica, sans-serif;">
                                         
-                                        <!-- ÜST ADRES VE MARKA -->
+                                        <!-- ÜST ADRES VE MARKA (DİNAMİK, MARKA İSTEĞE BAĞLI) -->
                                         <div class="flex items-start justify-between">
                                             <div>
-                                                <div class="text-[18px] font-bold leading-tight">Anna Van Toor</div>
-                                                <div class="text-[14px] leading-tight text-gray-800">Energieweg 35</div>
-                                                <div class="text-[14px] leading-tight text-gray-800">4231 DJ Meerkerk</div>
-                                                <div class="text-[14px] leading-tight text-gray-800">The Netherlands</div>
-                                                <div class="mt-3 text-[16px] font-black tracking-wide">BRAND: {{ (printCustomBrand || c.brand || activeCartonTemplate?.layout_json?.brand || 'ANNA').toUpperCase() }}</div>
+                                                <div class="text-[18px] font-bold leading-tight" :style="{ transform: getPrintElemTransform('header') }">{{ getCartonHeaderTitle(c) }}</div>
+                                                <div v-if="getCartonAddress1(c)" class="text-[14px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress1(c) }}</div>
+                                                <div v-if="getCartonAddress2(c)" class="text-[14px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress2(c) }}</div>
+                                                <div v-if="getCartonAddress3(c)" class="text-[14px] leading-tight text-gray-800" :style="{ transform: getPrintElemTransform('address') }">{{ getCartonAddress3(c) }}</div>
+                                                <div v-if="(activeCartonTemplate?.brand_enabled !== false) && (printCustomBrand || getCartonBrand(c))"
+                                                     class="mt-3 text-[16px] font-black tracking-wide"
+                                                     :style="{ transform: getPrintElemTransform('brand') }">
+                                                    {{ formatBrandDisplay(printCustomBrand || getCartonBrand(c)) }}
+                                                </div>
                                             </div>
                                         </div>
 
-                                        <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL -->
-                                        <div class="my-6">
-                                            <table class="w-full text-center border-collapse border border-black text-sm">
+                                        <!-- TABLO: STYLE, COLOUR, BEDENLER, TOTAL (EŞİT GENİŞLİKTE SÜTUNLAR) -->
+                                        <div class="my-6" :style="{ transform: getPrintElemTransform('size_table') }">
+                                            <table class="carton-size-table text-center border-collapse text-sm"
+                                                   :class="[printShowGridLines ? 'border border-black' : 'border-0']">
                                                 <thead>
-                                                    <tr class="border-b border-black font-bold text-xs bg-white">
-                                                        <th class="border-r border-black p-2 text-left w-36">Style</th>
-                                                        <th class="border-r border-black p-2 text-left w-44">Colour</th>
-                                                        <th v-for="sz in getCartonSizeHeaders(c)" :key="'sz-hc-'+sz" class="border-r border-black p-2">{{ sz }}</th>
-                                                        <th class="p-2 font-black">Total</th>
+                                                    <tr class="font-bold text-xs bg-white"
+                                                        :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                        <th class="col-style p-2 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Style</th>
+                                                        <th class="col-color p-2 text-left" :class="[printShowGridLines ? 'border-r border-black' : '']">Colour</th>
+                                                        <th v-for="sz in getCartonSizeHeaders(c)" :key="'sz-hc-'+sz" class="col-size p-1" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ sz }}</th>
+                                                        <th class="col-total p-2 font-black">Total</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <tr class="border-b border-black text-sm font-semibold h-10">
-                                                        <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[0] ? c.items[0].model : '-' }}</td>
-                                                        <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
-                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-0-'+sz" class="border-r border-black p-2 font-mono">
+                                                    <tr class="text-sm font-semibold h-10"
+                                                        :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
+                                                        <td class="col-style p-2 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[0] ? c.items[0].model : '-' }}</td>
+                                                        <td class="col-color p-2 text-left text-xs truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-0-'+sz" class="col-size p-1 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
                                                             {{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes ? c.items[0].sizes[sz] : '', c) }}
                                                         </td>
-                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[0] ? formatCartonSizeQty(c.items[0].total_qty, c) : '' }}</td>
+                                                        <td class="col-total p-2 font-mono font-black text-base">{{ c.items && c.items[0] ? formatCartonSizeQty(c.items[0].total_qty, c) : '' }}</td>
                                                     </tr>
                                                     <!-- 2. Ürün Satırı -->
-                                                    <tr class="border-b border-black text-sm font-semibold h-10"
-                                                        :class="{'opacity-20': !c.items || c.items.length < 2}">
-                                                        <td class="border-r border-black p-2 text-left font-mono font-bold">{{ c.items && c.items[1] ? c.items[1].model : '' }}</td>
-                                                        <td class="border-r border-black p-2 text-left text-xs">{{ c.items && c.items[1] ? c.items[1].color : '' }}</td>
-                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-1-'+sz" class="border-r border-black p-2 font-mono">
+                                                    <tr class="text-sm font-semibold h-10"
+                                                        :class="[
+                                                            printShowGridLines ? 'border-b border-black' : 'border-b border-transparent',
+                                                            {'opacity-20': !c.items || c.items.length < 2}
+                                                        ]">
+                                                        <td class="col-style p-2 text-left font-mono font-bold truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[1] ? c.items[1].model : '' }}</td>
+                                                        <td class="col-color p-2 text-left text-xs truncate" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[1] ? c.items[1].color : '' }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-1-'+sz" class="col-size p-1 font-mono" :class="[printShowGridLines ? 'border-r border-black' : '']">
                                                             {{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes ? c.items[1].sizes[sz] : '', c) }}
                                                         </td>
-                                                        <td class="p-2 font-mono font-black text-base">{{ c.items && c.items[1] ? formatCartonSizeQty(c.items[1].total_qty, c) : '' }}</td>
+                                                        <td class="col-total p-2 font-mono font-black text-base">{{ c.items && c.items[1] ? formatCartonSizeQty(c.items[1].total_qty, c) : '' }}</td>
                                                     </tr>
                                                 </tbody>
                                             </table>
                                         </div>
 
-                                        <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE EXCEL ÇAPI İLE POKA-YOKE ROZETİ -->
-                                        <div class="pt-4 border-t-2 border-black flex items-center justify-between gap-4">
+                                        <!-- ORTA AYIRICI ÇİZGİ (AYRI TAŞINABİLİR) -->
+                                        <div class="my-3 w-full" :style="{ transform: getPrintElemTransform('divider_line') }">
+                                            <div class="w-full border-t-2 border-black"></div>
+                                        </div>
+
+                                        <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
+                                        <div class="pt-2 flex items-center justify-between gap-4">
                                             <div class="space-y-2">
-                                                <!-- 1. KANAL BİLGİSİ (CARTON NO'NUN ÜSTÜNDE VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 12) -->
-                                                <div class="text-[22px] font-black uppercase tracking-wider text-black">
+                                                <div class="text-[22px] font-black uppercase tracking-wider text-black" :style="{ transform: getPrintElemTransform('channel') }">
                                                     {{ c.channel }}
                                                 </div>
-
-                                                <!-- 2. CARTON NO (EXCEL SATIR 13) -->
-                                                <div class="text-[22px] font-black tracking-wide text-black">
+                                                <div class="text-[22px] font-black tracking-wide text-black" :style="{ transform: getPrintElemTransform('carton_no') }">
                                                     {{ c.carton_label_text || ('CARTON NO: ' + c.carton_no + ' OF ' + c.group_count) }}
                                                 </div>
-
-                                                <!-- 3. GROSS WEIGHT (EXCEL SATIR 14) -->
-                                                <div class="text-[18px] font-bold text-black">
+                                                <div class="text-[18px] font-bold text-black" :style="{ transform: getPrintElemTransform('gross_weight') }">
                                                     GROSS WEIGHT: <span class="font-black">{{ c.gross_weight }} kg</span>
                                                 </div>
-
-                                                <!-- 4. MEASUREMENTS (GROSS WEIGHT'İN ALTINDA VE AYNI FONT BÜYÜKLÜĞÜNDE - EXCEL SATIR 15) -->
-                                                <div class="text-[18px] font-bold text-black tracking-wider">
+                                                <div class="text-[18px] font-bold text-black tracking-wider" :style="{ transform: getPrintElemTransform('measurements') }">
                                                     MEASUREMENTS: {{ c.measurements || '60X40X30' }}
                                                 </div>
                                             </div>
 
-                                            <!-- POKA-YOKE RENK ROZETİ (3.5 CM / 35 MM ÇAP - KESİN RENKLİ VE VEKTÖREL BASKI) -->
+                                            <!-- POKA-YOKE RENK ROZETİ (3.5 CM / 35 MM ÇAP) -->
                                             <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
-                                                 style="width: 35mm; height: 35mm; min-width: 35mm; min-height: 35mm;">
+                                                 :style="{ transform: getPrintElemTransform('poka_badge'), width: '35mm', height: '35mm', minWidth: '35mm', minHeight: '35mm' }">
                                                 <svg viewBox="0 0 100 100" class="w-full h-full block"
                                                      style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
                                                     <circle cx="50" cy="50" r="48"
                                                             :fill="c.channel_color || '#000000'"
                                                             stroke="none"
-                                                            stroke-width="0"
                                                             style="-webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;" />
                                                 </svg>
                                             </div>

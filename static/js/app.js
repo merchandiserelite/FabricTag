@@ -10606,13 +10606,14 @@ window.__texflowApp = createApp({
         const templateDesignerModalOpen = ref(false);
         const isAnalyzingTemplate = ref(false);
 
-        // Active Designer State
-        const designerTemplate = ref({
+        // Active Designer State - Blank & Clean by Default
+        const getCleanBlankTemplate = () => ({
             id: null,
             customer_name: '',
             template_name: '',
             paper_size: 'A4',
             orientation: 'landscape',
+            sticker_format: 'A4_2up_landscape',
             width_mm: 297,
             height_mm: 210,
             items_per_page: 2,
@@ -10628,13 +10629,234 @@ window.__texflowApp = createApp({
                 address_line2: '',
                 address_line3: '',
                 brand: '',
-                measurements: '60X40X30',
-                poka_badge_enabled: true,
-                dual_variant_enabled: true,
+                show_brand: false,
+                measurements: '',
+                poka_badge_enabled: false,
+                dual_variant_enabled: false,
                 show_barcode: false,
-                fields: []
+                barcode_type: 'CODE128',
+                barcode_field: 'carton_no',
+                barcode_custom_val: '',
+                grid_cols: 2,
+                grid_rows: 1,
+                sticker_width_mm: 140,
+                sticker_height_mm: 195,
+                margin_top_mm: 6,
+                margin_left_mm: 6,
+                gap_x_mm: 6,
+                gap_y_mm: 6,
+                element_offsets: {
+                    header: { x: 0, y: 0 },
+                    address: { x: 0, y: 0 },
+                    brand: { x: 0, y: 0 },
+                    size_table: { x: 0, y: 0 },
+                    divider_line: { x: 0, y: 0 },
+                    channel: { x: 0, y: 0 },
+                    carton_no: { x: 0, y: 0 },
+                    gross_weight: { x: 0, y: 0 },
+                    measurements: { x: 0, y: 0 },
+                    barcode: { x: 0, y: 0 },
+                    poka_badge: { x: 0, y: 0 }
+                }
             }
         });
+
+        const designerTemplate = ref(getCleanBlankTemplate());
+        const designerPreviewMode = ref('single'); // 'single' or 'sheet'
+
+        // Interactive Drag & Nudge State (Kumaştag / FabricTag style)
+        const selectedDesignerElem = ref(null);
+        const isDraggingCanvasElem = ref(false);
+        let dragCanvasElemId = null;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let initialElemX = 0;
+        let initialElemY = 0;
+
+        const selectDesignerElem = (elemId) => {
+            selectedDesignerElem.value = elemId;
+        };
+
+        const getElemOffset = (elemId) => {
+            if (!designerTemplate.value) return { x: 0, y: 0 };
+            if (!designerTemplate.value.layout_json) designerTemplate.value.layout_json = {};
+            if (!designerTemplate.value.layout_json.element_offsets) designerTemplate.value.layout_json.element_offsets = {};
+            if (!designerTemplate.value.layout_json.element_offsets[elemId]) {
+                designerTemplate.value.layout_json.element_offsets[elemId] = { x: 0, y: 0 };
+            }
+            return designerTemplate.value.layout_json.element_offsets[elemId];
+        };
+
+        const nudgeDesignerElem = (elemId, dx, dy) => {
+            if (!elemId) return;
+            const off = getElemOffset(elemId);
+            let newX = Math.round((off.x + dx) * 2) / 2;
+            let newY = Math.round((off.y + dy) * 2) / 2;
+            if (newX < -70) newX = -70;
+            if (newX > 70) newX = 70;
+            if (newY < -70) newY = -70;
+            if (newY > 70) newY = 70;
+            off.x = newX;
+            off.y = newY;
+        };
+
+        const resetDesignerElemOffset = (elemId) => {
+            if (!elemId) return;
+            const off = getElemOffset(elemId);
+            off.x = 0;
+            off.y = 0;
+        };
+
+        const resetAllDesignerOffsets = () => {
+            if (designerTemplate.value && designerTemplate.value.layout_json) {
+                designerTemplate.value.layout_json.element_offsets = {
+                    header: { x: 0, y: 0 },
+                    address: { x: 0, y: 0 },
+                    brand: { x: 0, y: 0 },
+                    size_table: { x: 0, y: 0 },
+                    divider_line: { x: 0, y: 0 },
+                    channel: { x: 0, y: 0 },
+                    carton_no: { x: 0, y: 0 },
+                    gross_weight: { x: 0, y: 0 },
+                    measurements: { x: 0, y: 0 },
+                    barcode: { x: 0, y: 0 },
+                    poka_badge: { x: 0, y: 0 }
+                };
+            }
+            showToast('info', 'Tüm alan konumları sıfırlandı.');
+        };
+
+        const getElemLabel = (elemId) => {
+            switch(elemId) {
+                case 'header': return 'Müşteri Adı / Başlık';
+                case 'address': return 'Adres Bilgileri';
+                case 'brand': return 'Marka (Brand)';
+                case 'size_table': return 'Beden & Adet Tablosu';
+                case 'divider_line': return 'Orta Ayırıcı Çizgi';
+                case 'channel': return 'Kanal / Depo Bilgisi';
+                case 'carton_no': return 'Koli Numarası (Carton No)';
+                case 'gross_weight': return 'Brüt Ağırlık (Gross Weight)';
+                case 'measurements': return 'Koli Ebatları (Measurements)';
+                case 'barcode': return 'Barkod Alanı';
+                case 'poka_badge': return 'Poka-Yoke Renk Rozeti';
+                default: return 'Öğe';
+            }
+        };
+
+        const startCanvasElemDrag = (e, elemId) => {
+            e.preventDefault();
+            selectDesignerElem(elemId);
+            isDraggingCanvasElem.value = true;
+            dragCanvasElemId = elemId;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            const off = getElemOffset(elemId);
+            initialElemX = off.x;
+            initialElemY = off.y;
+            document.body.style.cursor = 'grabbing';
+        };
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDraggingCanvasElem.value || !dragCanvasElemId) return;
+            const container = document.getElementById('designer-active-sticker-card');
+            const widthMm = (designerTemplate.value.layout_json && designerTemplate.value.layout_json.sticker_width_mm) || 
+                            (designerTemplate.value.paper_size.includes('Argox') ? 100 : (designerTemplate.value.paper_size === 'A4' && designerTemplate.value.items_per_page === 2 ? 140 : 200));
+            const pxPerMm = container ? (container.offsetWidth / widthMm) : 3.78;
+            if (!pxPerMm || pxPerMm <= 0) return;
+
+            const deltaX = (e.clientX - dragStartX) / pxPerMm;
+            const deltaY = (e.clientY - dragStartY) / pxPerMm;
+            let newX = Math.round((initialElemX + deltaX) * 2) / 2;
+            let newY = Math.round((initialElemY + deltaY) * 2) / 2;
+            if (newX < -70) newX = -70;
+            if (newX > 70) newX = 70;
+            if (newY < -70) newY = -70;
+            if (newY > 70) newY = 70;
+
+            const off = getElemOffset(dragCanvasElemId);
+            off.x = newX;
+            off.y = newY;
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDraggingCanvasElem.value) {
+                isDraggingCanvasElem.value = false;
+                dragCanvasElemId = null;
+                document.body.style.cursor = '';
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (!templateDesignerModalOpen.value || !selectedDesignerElem.value) return;
+            const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            if (['input', 'textarea', 'select'].includes(tag)) return;
+            const step = e.shiftKey ? 1.5 : 0.5;
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                nudgeDesignerElem(selectedDesignerElem.value, 0, -step);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                nudgeDesignerElem(selectedDesignerElem.value, 0, step);
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                nudgeDesignerElem(selectedDesignerElem.value, -step, 0);
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                nudgeDesignerElem(selectedDesignerElem.value, step, 0);
+            }
+        });
+
+        // Sticker Format Options (A4 6'lı sticker, Argox, Özel vb.)
+        const stickerFormatOptions = [
+            { id: 'A4_6up', name: 'A4 6\'lı Sticker (2 Sütun x 3 Satır, 105 x 99 mm)', paper: 'A4', orientation: 'portrait', items: 6, cols: 2, rows: 3, w: 105, h: 99, scale: 0.85 },
+            { id: 'A4_4up', name: 'A4 4\'lü Sticker (2 Sütun x 2 Satır, 105 x 148 mm)', paper: 'A4', orientation: 'portrait', items: 4, cols: 2, rows: 2, w: 105, h: 148, scale: 0.90 },
+            { id: 'A4_8up', name: 'A4 8\'li Sticker (2 Sütun x 4 Satır, 105 x 74 mm)', paper: 'A4', orientation: 'portrait', items: 8, cols: 2, rows: 4, w: 105, h: 74, scale: 0.75 },
+            { id: 'A4_2up_landscape', name: 'A4 Yatay 2\'li (2 Sütun x 1 Satır - Yan Yana)', paper: 'A4', orientation: 'landscape', items: 2, cols: 2, rows: 1, w: 140, h: 195, scale: 1.0 },
+            { id: 'A4_2up_portrait', name: 'A4 Dikey 2\'li (1 Sütun x 2 Satır - Alt Alta)', paper: 'A4', orientation: 'portrait', items: 2, cols: 1, rows: 2, w: 200, h: 140, scale: 0.95 },
+            { id: 'A4_1up', name: 'A4 Tek Koli (1x1 Tam Sayfa, 210 x 297 mm)', paper: 'A4', orientation: 'portrait', items: 1, cols: 1, rows: 1, w: 200, h: 280, scale: 1.15 },
+            { id: 'A5_1up', name: 'A5 Dikey Tekli (148 x 210 mm)', paper: 'A5', orientation: 'portrait', items: 1, cols: 1, rows: 1, w: 138, h: 195, scale: 0.95 },
+            { id: 'A5_landscape', name: 'A5 Yatay Tekli (210 x 148 mm)', paper: 'A5', orientation: 'landscape', items: 1, cols: 1, rows: 1, w: 195, h: 138, scale: 0.95 },
+            { id: 'Argox_100x150', name: 'Argox / Termal Rulo (100 x 150 mm Standart Koli)', paper: 'Argox_100x150', orientation: 'portrait', items: 1, cols: 1, rows: 1, w: 100, h: 150, scale: 0.90 },
+            { id: 'Argox_100x100', name: 'Argox / Termal Rulo (100 x 100 mm Kare)', paper: 'Argox_100x100', orientation: 'portrait', items: 1, cols: 1, rows: 1, w: 100, h: 100, scale: 0.82 },
+            { id: 'Argox_100x80', name: 'Argox / Termal Rulo (100 x 80 mm)', paper: 'Argox_100x80', orientation: 'landscape', items: 1, cols: 1, rows: 1, w: 100, h: 80, scale: 0.78 },
+            { id: 'Argox_80x50', name: 'Argox / Termal Rulo (80 x 50 mm Kompakt)', paper: 'Argox_80x50', orientation: 'landscape', items: 1, cols: 1, rows: 1, w: 80, h: 50, scale: 0.70 },
+            { id: 'custom', name: 'Özel Sticker & Sayfa Ölçüsü (Özel mm / Izgara)', paper: 'custom', orientation: 'custom', items: 1, cols: 1, rows: 1, w: 100, h: 100, scale: 1.0 }
+        ];
+
+        // Barcode Type Options
+        const barcodeTypeOptions = [
+            { id: 'CODE128', name: 'Code 128 (Lojistik & GS1 Koli Barkodu)' },
+            { id: 'EAN13', name: 'EAN-13 (Perakende / Kutu Standardı)' },
+            { id: 'ITF14', name: 'ITF-14 (Koli Dış Ambalaj Standardı)' },
+            { id: 'CODE39', name: 'Code 39 (Alfanümerik Koli Kodu)' },
+            { id: 'QR', name: 'QR Kod (2D Karekod)' }
+        ];
+
+        const formatBrandDisplay = (brand) => {
+            if (!brand || !brand.trim()) return '';
+            const b = brand.trim();
+            if (/^brand\s*:/i.test(b) || /^marka\s*:/i.test(b)) return b.toUpperCase();
+            return `BRAND: ${b.toUpperCase()}`;
+        };
+
+        const getCartonBarcodeValue = (carton = null, template = null) => {
+            const tpl = template || activeCartonTemplate.value || designerTemplate.value;
+            const field = tpl?.layout_json?.barcode_field || 'carton_no';
+            if (field === 'custom' && tpl?.layout_json?.barcode_custom_val) {
+                return tpl.layout_json.barcode_custom_val;
+            }
+            if (carton) {
+                if (field === 'po_carton') {
+                    const po = (matchedPackingStyle.value && matchedPackingStyle.value.po_number) || 'PO';
+                    return `${po}-C${String(carton.carton_no || 1).padStart(2, '0')}`;
+                }
+                if (field === 'style_no') {
+                    return (carton.items && carton.items[0] && carton.items[0].model) || (packingData.value && packingData.value.style_no) || 'STYLE-01';
+                }
+                return `CARTON-${String(carton.carton_no || 1).padStart(3, '0')}`;
+            }
+            return 'CARTON-001';
+        };
 
         // Print Preview Configuration (Can be changed live & saved for customer)
         const printPaperSize = ref('A4');
@@ -10710,6 +10932,7 @@ window.__texflowApp = createApp({
         const cartonPrintMode = ref('all'); // 'all' or 'single'
         const selectedSingleCarton = ref(null);
         const cartonPrintLayout = ref('2up'); // '2up' (x2 A4 landscape) or '1up'
+        const cartonRepeatMode = ref('distinct'); // 'distinct', 'duplicate_2x', 'sheet_repeat'
 
         const filteredCandidateStyles = computed(() => {
             if (!packingStyleSearch.value) return candidatePackingStyles.value;
@@ -10766,7 +10989,19 @@ window.__texflowApp = createApp({
             printMarginMm.value = tpl.margin_mm || 6;
             printCustomWidth.value = tpl.width_mm || 297;
             printCustomHeight.value = tpl.height_mm || 210;
-            cartonPrintLayout.value = printItemsPerPage.value === 2 ? '2up' : '1up';
+            
+            if (printItemsPerPage.value === 6) {
+                cartonPrintLayout.value = '6up';
+            } else if (printItemsPerPage.value === 4) {
+                cartonPrintLayout.value = '4up';
+            } else if (printItemsPerPage.value === 8) {
+                cartonPrintLayout.value = '8up';
+            } else if (printItemsPerPage.value === 2) {
+                cartonPrintLayout.value = '2up';
+            } else {
+                cartonPrintLayout.value = '1up';
+            }
+
             if (tpl.layout_json && tpl.layout_json.poka_badge_enabled !== undefined) {
                 printShowPokaBadge.value = !!tpl.layout_json.poka_badge_enabled;
             } else if (tpl.poka_badge_enabled !== undefined) {
@@ -10774,14 +11009,42 @@ window.__texflowApp = createApp({
             } else {
                 printShowPokaBadge.value = false;
             }
-            if (tpl.layout_json && tpl.layout_json.brand) {
+            if (tpl.layout_json && tpl.layout_json.show_brand && tpl.layout_json.brand) {
                 printCustomBrand.value = String(tpl.layout_json.brand).replace(/^BRAND\s*:\s*/i, '').trim();
+            } else if (tpl.layout_json && tpl.layout_json.brand && tpl.layout_json.show_brand !== false) {
+                printCustomBrand.value = String(tpl.layout_json.brand).replace(/^BRAND\s*:\s*/i, '').trim();
+            } else {
+                printCustomBrand.value = '';
             }
         };
 
         const onPrintPaperSizeChange = (newSize) => {
             printPaperSize.value = newSize;
-            if (newSize === 'A4' || newSize === 'A4_landscape') {
+            if (newSize === 'A4_6up') {
+                printOrientation.value = 'portrait';
+                printCustomWidth.value = 210;
+                printCustomHeight.value = 297;
+                printItemsPerPage.value = 6;
+                cartonPrintLayout.value = '6up';
+                printMarginMm.value = 4;
+                printFontScale.value = 0.85;
+            } else if (newSize === 'A4_4up') {
+                printOrientation.value = 'portrait';
+                printCustomWidth.value = 210;
+                printCustomHeight.value = 297;
+                printItemsPerPage.value = 4;
+                cartonPrintLayout.value = '4up';
+                printMarginMm.value = 5;
+                printFontScale.value = 0.90;
+            } else if (newSize === 'A4_8up') {
+                printOrientation.value = 'portrait';
+                printCustomWidth.value = 210;
+                printCustomHeight.value = 297;
+                printItemsPerPage.value = 8;
+                cartonPrintLayout.value = '8up';
+                printMarginMm.value = 3;
+                printFontScale.value = 0.75;
+            } else if (newSize === 'A4' || newSize === 'A4_landscape') {
                 printOrientation.value = 'landscape';
                 printCustomWidth.value = 297;
                 printCustomHeight.value = 210;
@@ -10954,41 +11217,34 @@ window.__texflowApp = createApp({
             }
         };
 
+        const resetDesignerToBlank = () => {
+            designerTemplate.value = getCleanBlankTemplate();
+            selectedDesignerElem.value = null;
+            showToast('info', 'Tasarım ekranı sıfırlandı. Bilgileri dinamik olarak girebilirsiniz.');
+        };
+
         const openTemplateDesigner = (tpl = null) => {
+            selectedDesignerElem.value = null;
             if (tpl) {
                 designerTemplate.value = JSON.parse(JSON.stringify(tpl));
                 if (!designerTemplate.value.layout_json) {
                     designerTemplate.value.layout_json = {};
                 }
+                if (!designerTemplate.value.layout_json.element_offsets) {
+                    designerTemplate.value.layout_json.element_offsets = {};
+                }
+                if (!designerTemplate.value.sticker_format) {
+                    if (designerTemplate.value.items_per_page === 6) designerTemplate.value.sticker_format = 'A4_6up';
+                    else if (designerTemplate.value.items_per_page === 4) designerTemplate.value.sticker_format = 'A4_4up';
+                    else if (designerTemplate.value.paper_size.includes('Argox')) designerTemplate.value.sticker_format = designerTemplate.value.paper_size;
+                    else designerTemplate.value.sticker_format = 'A4_2up_landscape';
+                }
             } else {
-                designerTemplate.value = {
-                    id: null,
-                    customer_name: (packingData.value && packingData.value.customer) || 'Yeni Müşteri',
-                    template_name: 'Yeni Koli Üstü Şablonu',
-                    paper_size: 'A4',
-                    orientation: 'landscape',
-                    width_mm: 297,
-                    height_mm: 210,
-                    items_per_page: 2,
-                    border_style: 'solid',
-                    border_width: 2,
-                    show_grid_lines: true,
-                    margin_mm: 6,
-                    font_scale: 1.0,
-                    is_default: 1,
-                    layout_json: {
-                        header_title: (packingData.value && packingData.value.customer) || 'MÜŞTERİ ADI',
-                        address_line1: 'Adres Satırı 1',
-                        address_line2: 'Şehir / Ülke',
-                        address_line3: '',
-                        brand: 'BRAND: MARKA',
-                        measurements: '60X40X30',
-                        poka_badge_enabled: true,
-                        dual_variant_enabled: true,
-                        show_barcode: false,
-                        fields: []
-                    }
-                };
+                designerTemplate.value = getCleanBlankTemplate();
+                if (packingData.value && packingData.value.customer) {
+                    designerTemplate.value.customer_name = packingData.value.customer;
+                    designerTemplate.value.layout_json.header_title = packingData.value.customer;
+                }
             }
             templateDesignerModalOpen.value = true;
             refreshIcons();
@@ -10996,28 +11252,34 @@ window.__texflowApp = createApp({
 
         const closeTemplateDesigner = () => {
             templateDesignerModalOpen.value = false;
+            selectedDesignerElem.value = null;
         };
 
-        const saveDesignerTemplate = async () => {
-            if (!designerTemplate.value.customer_name || !designerTemplate.value.customer_name.trim()) {
-                showToast('error', 'Lütfen müşteri adını girin.');
-                return;
-            }
-            if (!designerTemplate.value.template_name || !designerTemplate.value.template_name.trim()) {
-                showToast('error', 'Lütfen şablon adını girin.');
-                return;
-            }
-
-            try {
-                const res = await apiFetch('/api/carton-templates/save', {
-                    method: 'POST',
-                    body: JSON.stringify(designerTemplate.value)
-                });
-                showToast('success', res.message || 'Şablon başarıyla kaydedildi.');
-                templateDesignerModalOpen.value = false;
-                await loadCartonTemplates(designerTemplate.value.customer_name);
-            } catch (err) {
-                showToast('error', err.message || 'Şablon kaydedilirken hata oluştu.');
+        const onDesignerStickerFormatChange = (fmtId) => {
+            const found = stickerFormatOptions.find(f => f.id === fmtId);
+            if (!found) return;
+            designerTemplate.value.sticker_format = fmtId;
+            if (fmtId !== 'custom') {
+                designerTemplate.value.paper_size = found.paper;
+                designerTemplate.value.orientation = found.orientation;
+                designerTemplate.value.items_per_page = found.items;
+                designerTemplate.value.font_scale = found.scale;
+                if (!designerTemplate.value.layout_json) designerTemplate.value.layout_json = {};
+                designerTemplate.value.layout_json.grid_cols = found.cols;
+                designerTemplate.value.layout_json.grid_rows = found.rows;
+                designerTemplate.value.layout_json.sticker_width_mm = found.w;
+                designerTemplate.value.layout_json.sticker_height_mm = found.h;
+                if (found.paper === 'A4') {
+                    designerTemplate.value.width_mm = found.orientation === 'landscape' ? 297 : 210;
+                    designerTemplate.value.height_mm = found.orientation === 'landscape' ? 210 : 297;
+                } else if (found.paper === 'A5') {
+                    designerTemplate.value.width_mm = found.orientation === 'landscape' ? 210 : 148;
+                    designerTemplate.value.height_mm = found.orientation === 'landscape' ? 148 : 210;
+                } else if (found.paper.startsWith('Argox')) {
+                    designerTemplate.value.width_mm = found.w;
+                    designerTemplate.value.height_mm = found.h;
+                    designerTemplate.value.layout_json.show_barcode = true;
+                }
             }
         };
 
@@ -11075,6 +11337,29 @@ window.__texflowApp = createApp({
                 designerTemplate.value.margin_mm = 2;
                 designerTemplate.value.font_scale = 0.70;
                 if (designerTemplate.value.layout_json) designerTemplate.value.layout_json.show_barcode = true;
+            }
+        };
+
+        const saveDesignerTemplate = async () => {
+            if (!designerTemplate.value.customer_name || !designerTemplate.value.customer_name.trim()) {
+                showToast('error', 'Lütfen müşteri adını girin.');
+                return;
+            }
+            if (!designerTemplate.value.template_name || !designerTemplate.value.template_name.trim()) {
+                showToast('error', 'Lütfen şablon adını girin.');
+                return;
+            }
+
+            try {
+                const res = await apiFetch('/api/carton-templates/save', {
+                    method: 'POST',
+                    body: JSON.stringify(designerTemplate.value)
+                });
+                showToast('success', res.message || 'Şablon başarıyla kaydedildi.');
+                templateDesignerModalOpen.value = false;
+                await loadCartonTemplates(designerTemplate.value.customer_name);
+            } catch (err) {
+                showToast('error', err.message || 'Şablon kaydedilirken hata oluştu.');
             }
         };
 
@@ -11245,11 +11530,94 @@ window.__texflowApp = createApp({
             if (cartonPrintLayout.value === '1up' || printItemsPerPage.value === 1) {
                 return list.map(c => [c]);
             }
+            if (cartonRepeatMode.value === 'duplicate_2x' || cartonRepeatMode.value === 'sheet_repeat') {
+                return list.map(c => [c, c]);
+            }
             const pairs = [];
             for (let i = 0; i < list.length; i += 2) {
                 pairs.push([list[i], list[i + 1] || null]);
             }
             return pairs;
+        };
+
+        const getPrintCartonChunks = (chunkSize = null) => {
+            const list = getPrintCartonsList();
+            let size = chunkSize;
+            if (!size) {
+                if (cartonPrintLayout.value === '6up' || printItemsPerPage.value === 6) size = 6;
+                else if (cartonPrintLayout.value === '4up' || printItemsPerPage.value === 4) size = 4;
+                else if (cartonPrintLayout.value === '8up' || printItemsPerPage.value === 8) size = 8;
+                else if (cartonPrintLayout.value === '2up' || printItemsPerPage.value === 2) size = 2;
+                else size = 1;
+            }
+            if (size <= 1) {
+                return list.map(c => [c]);
+            }
+            let expandedList = [];
+            if (cartonRepeatMode.value === 'duplicate_2x') {
+                list.forEach(c => {
+                    expandedList.push(c, c);
+                });
+            } else if (cartonRepeatMode.value === 'sheet_repeat') {
+                list.forEach(c => {
+                    for (let k = 0; k < size; k++) {
+                        expandedList.push(c);
+                    }
+                });
+            } else {
+                expandedList = list;
+            }
+            const chunks = [];
+            for (let i = 0; i < expandedList.length; i += size) {
+                const group = [];
+                for (let j = 0; j < size; j++) {
+                    group.push(expandedList[i + j] || null);
+                }
+                chunks.push(group);
+            }
+            return chunks;
+        };
+
+        const getPrintElemOffset = (elemId) => {
+            const tpl = activeCartonTemplate.value;
+            if (!tpl || !tpl.layout_json || !tpl.layout_json.element_offsets) return { x: 0, y: 0 };
+            return tpl.layout_json.element_offsets[elemId] || { x: 0, y: 0 };
+        };
+
+        const getPrintElemTransform = (elemId) => {
+            const off = getPrintElemOffset(elemId);
+            if (!off.x && !off.y) return 'none';
+            return `translate(${off.x}mm, ${off.y}mm)`;
+        };
+
+        const getCartonHeaderTitle = (carton = null) => {
+            return (activeCartonTemplate.value && activeCartonTemplate.value.layout_json && activeCartonTemplate.value.layout_json.header_title) ||
+                   (activeCartonTemplate.value && activeCartonTemplate.value.customer_name && activeCartonTemplate.value.customer_name !== 'Standart / Genel' && activeCartonTemplate.value.customer_name) ||
+                   (carton && carton.customer) ||
+                   (packingData.value && packingData.value.customer) ||
+                   '';
+        };
+
+        const getCartonAddress1 = (carton = null) => {
+            return (activeCartonTemplate.value && activeCartonTemplate.value.layout_json && activeCartonTemplate.value.layout_json.address_line1) || '';
+        };
+
+        const getCartonAddress2 = (carton = null) => {
+            return (activeCartonTemplate.value && activeCartonTemplate.value.layout_json && activeCartonTemplate.value.layout_json.address_line2) || '';
+        };
+
+        const getCartonAddress3 = (carton = null) => {
+            return (activeCartonTemplate.value && activeCartonTemplate.value.layout_json && activeCartonTemplate.value.layout_json.address_line3) || '';
+        };
+
+        const getCartonBrand = (carton = null) => {
+            const tpl = activeCartonTemplate.value;
+            const isBrandEnabled = tpl && tpl.layout_json && tpl.layout_json.show_brand !== undefined ? tpl.layout_json.show_brand : (tpl ? !!tpl.layout_json?.brand : true);
+            if (!isBrandEnabled) return '';
+            const raw = (printCustomBrand.value || (carton && carton.brand) || (tpl && tpl.layout_json && tpl.layout_json.brand) || '').trim();
+            if (!raw) return '';
+            if (/^brand\s*:/i.test(raw) || /^marka\s*:/i.test(raw)) return raw.toUpperCase();
+            return `BRAND: ${raw.toUpperCase()}`;
         };
 
 
@@ -11902,10 +12270,32 @@ window.__texflowApp = createApp({
             getPrintPageCssSize,
             saveCurrentPrintPageLayout,
             handleTemplateExcelUpload,
+            resetDesignerToBlank,
             openTemplateDesigner,
             closeTemplateDesigner,
             saveDesignerTemplate,
             onDesignerPaperSizeChange,
+            onDesignerStickerFormatChange,
+            stickerFormatOptions,
+            barcodeTypeOptions,
+            selectedDesignerElem,
+            isDraggingCanvasElem,
+            selectDesignerElem,
+            getElemOffset,
+            nudgeDesignerElem,
+            resetDesignerElemOffset,
+            resetAllDesignerOffsets,
+            getElemLabel,
+            startCanvasElemDrag,
+            formatBrandDisplay,
+            getCartonBarcodeValue,
+            designerPreviewMode,
+            getPrintCartonChunks,
+            getCartonHeaderTitle,
+            getCartonAddress1,
+            getCartonAddress2,
+            getCartonAddress3,
+            getCartonBrand,
             isProcessingPacking,
             packingProcessSuccess,
             packingProcessSuccessMsg,
@@ -11913,6 +12303,9 @@ window.__texflowApp = createApp({
             cartonPrintMode,
             selectedSingleCarton,
             cartonPrintLayout,
+            cartonRepeatMode,
+            getPrintElemOffset,
+            getPrintElemTransform,
             handlePackingFileDrop,
             handlePackingFileSelect,
             uploadPackingFile,

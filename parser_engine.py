@@ -1954,7 +1954,7 @@ Critical Rules:
             raise ValueError("Çeki listesi sayfası boş veya okunamadı.")
 
         # 2. Check for Brand, Style No & Customer in header area (top 15 rows)
-        detected_customer = "Anna van Toor B.V."
+        detected_customer = ""
         detected_brand = ""
         detected_style = ""
         for r in rows[:15]:
@@ -1980,7 +1980,7 @@ Critical Rules:
                     detected_customer = "Anna van Toor B.V."
 
         if not detected_brand:
-            detected_brand = "ANNA"
+            detected_brand = ""
 
         # 3. Header row detection
         header_idx = -1
@@ -2311,7 +2311,7 @@ Critical Rules:
                     'color': col,
                     'model': mod,
                     'customer': item.get('customer') or detected_customer,
-                    'brand': item.get('brand') or detected_brand or 'ANNA',
+                    'brand': item.get('brand') or detected_brand or '',
                     'group_count': grp_cnt,
                     'gross_weight': calc_gw,
                     'net_weight': item.get('net_weight') or 0.0,
@@ -2366,7 +2366,7 @@ Critical Rules:
             "success": True,
             "source_type": "EXCEL",
             "customer": detected_customer,
-            "brand": detected_brand or "ANNA",
+            "brand": detected_brand or "",
             "style_no": detected_style or (list(model_set)[0] if model_set else ""),
             "models": list(model_set) or ([detected_style] if detected_style else []),
             "color": list(color_set)[0] if color_set else "",
@@ -2637,7 +2637,7 @@ Do not include markdown code block formatting or explanations, output only raw J
             "address_line1": address_1,
             "address_line2": address_2,
             "address_line3": address_3,
-            "brand": detected_brand or "BRAND: ANNA",
+            "brand": (f"BRAND: {detected_brand}" if detected_brand else ""),
             "measurements": measurements,
             "poka_badge_enabled": True,
             "dual_variant_enabled": (items_per_page == 2),
