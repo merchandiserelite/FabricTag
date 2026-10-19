@@ -1,11 +1,11 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 title FabricTag - GitHub Bulut Yedekleme
 echo ============================================================
 echo        FabricTag - GitHub Bulut Yedekleme Baslatiliyor
 echo ============================================================
 echo.
-cd /d "C:\Users\ASLI CELIK\.gemini\antigravity\scratch\fabric-label-system"
+cd /d "%~dp0"
 echo Kodlar GitHub ozel kasaniza gonderiliyor...
 echo (Eger ilk kez yukleme yapiyorsaniz acilacak tarayici penceresinde onay verin)
 echo.

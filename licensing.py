@@ -109,6 +109,7 @@ def get_license_status() -> dict:
     
     is_licensed = False
     license_info = None
+    active_hw_id = hw_id
 
     for p in get_persisted_license_paths():
         if os.path.exists(p):
@@ -116,9 +117,16 @@ def get_license_status() -> dict:
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     saved_key = data.get("license_key", "")
+                    saved_hw = data.get("hardware_id", "")
                     result = verify_license(saved_key, hw_id)
+                    if not result.get("valid") and saved_hw:
+                        fallback_res = verify_license(saved_key, saved_hw)
+                        if fallback_res.get("valid"):
+                            result = fallback_res
+                            active_hw_id = saved_hw
                     if result.get("valid"):
                         is_licensed = True
+                        active_hw_id = saved_hw or hw_id
                         license_info = {
                             "company": result.get("company", "LISANSLI MUSTERI"),
                             "type": result.get("type", "Omur Boyu Sinirsiz"),
@@ -140,7 +148,7 @@ def get_license_status() -> dict:
 
     return {
         "is_licensed": is_licensed,
-        "hardware_id": hw_id,
+        "hardware_id": active_hw_id,
         "records_count": records_count,
         "records_limit": FREE_RECORDS_LIMIT,
         "remaining_free_records": remaining_free,
@@ -152,6 +160,22 @@ def activate_license(key: str, company: str = "COMMERCIAL") -> dict:
     hw_id = get_hardware_id()
     result = verify_license(key, hw_id)
     
+    if not result.get("valid"):
+        for p in get_persisted_license_paths():
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        saved_hw = data.get("hardware_id", "")
+                        if saved_hw:
+                            fb = verify_license(key, saved_hw)
+                            if fb.get("valid"):
+                                result = fb
+                                hw_id = saved_hw
+                                break
+                except Exception:
+                    pass
+
     if not result.get("valid"):
         return {"success": False, "message": result.get("reason", "Lisans dogrulanamadi.")}
 

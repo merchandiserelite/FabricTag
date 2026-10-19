@@ -438,20 +438,27 @@ body {
 
 /* Main Content Area */
 .main-content {
-    padding: 2rem 2.5rem;
+    padding: 1.5rem 1.5rem;
     max-height: 100vh;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: 100%;
 }
 
 .tab-content {
     display: none;
     animation: fadeIn 0.3s ease-out;
     width: 100%;
-    max-width: 1200px;
+    max-width: 1650px;
     margin: 0 auto;
+}
+
+#database-tab,
+#settings-tab {
+    max-width: 98% !important;
+    width: 98% !important;
 }
 
 .tab-content.active {
@@ -1403,7 +1410,7 @@ body {
         color: #000000;
         font-family: 'Outfit', Arial, sans-serif;
         box-sizing: border-box;
-        border: 1px dashed #cbd5e1;
+        border: none;
         padding: 2.5mm 3.5mm;
         display: flex;
         flex-direction: column;
@@ -2523,6 +2530,70 @@ html[dir="rtl"] .designer-layout-grid {
     outline: 2px solid #2563eb !important;
     background-color: rgba(37, 99, 235, 0.09) !important;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25) !important;
+}
+
+/* Floating Overlay Logo & Drag/Resize Handles */
+.print-logo {
+    height: 6mm;
+    width: auto;
+    max-width: 100%;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    object-fit: contain !important;
+    display: block;
+}
+
+.floating-logo-wrapper {
+    position: absolute;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    user-select: none;
+}
+
+.floating-logo-wrapper .print-logo {
+    height: 100% !important;
+    width: auto !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    object-fit: contain !important;
+}
+
+.interactive-designer-elem.floating-logo-wrapper {
+    min-height: 0 !important;
+    min-width: 0 !important;
+    cursor: grab;
+}
+
+.interactive-designer-elem.floating-logo-wrapper.dragging {
+    cursor: grabbing;
+    opacity: 0.88;
+}
+
+.interactive-designer-elem.floating-logo-wrapper.selected-element {
+    outline: 2px solid #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25) !important;
+}
+
+.logo-resize-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #2563eb;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    cursor: nwse-resize;
+    z-index: 35;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    transition: transform 0.1s ease;
+}
+
+.logo-resize-handle:hover {
+    transform: scale(1.35);
+    background: #1d4ed8;
 }
 
 .preview-nudge-toolbar {

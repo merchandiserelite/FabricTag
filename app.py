@@ -5,8 +5,9 @@ import logging
 import uuid
 import threading
 import time
+from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -22,10 +23,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Point pyngrok to existing ngrok binary if available
-existing_ngrok_path = r"C:\Users\ASLI CELIK\AppData\Local\Microsoft\WindowsApps\ngrok.exe"
-if os.path.exists(existing_ngrok_path):
+ngrok_bin = shutil.which("ngrok")
+if ngrok_bin:
     try:
-        conf.get_default().ngrok_path = existing_ngrok_path
+        conf.get_default().ngrok_path = ngrok_bin
     except Exception as e:
         logger.warning(f"Could not set custom ngrok path: {e}")
 
@@ -102,6 +103,9 @@ def get_ngrok_url():
         return None
 
 class SettingsRequest(BaseModel):
+    class Config:
+        extra = "allow"
+
     api_key: Optional[str] = None
     default_template: Optional[str] = None
     printer_type: Optional[str] = None
@@ -166,6 +170,20 @@ class FabricSaveRequest(BaseModel):
     weight: Optional[str] = ""
     composition: Optional[str] = ""
     barcode_or_qr: Optional[str] = ""
+
+class FabricUpdateRequest(BaseModel):
+    company_name: str
+    quality_code: str
+    quality_name: Optional[str] = ""
+    design_code: Optional[str] = ""
+    color: Optional[str] = ""
+    width: Optional[str] = ""
+    weight: Optional[str] = ""
+    composition: Optional[str] = ""
+    barcode_or_qr: Optional[str] = ""
+
+class FabricBatchDeleteRequest(BaseModel):
+    ids: List[int]
 
 class Base64ScanRequest(BaseModel):
     image: str
@@ -244,10 +262,24 @@ def load_settings():
                 default_config.update(data)
         except Exception:
             pass
+    if not default_config.get("api_key"):
+        api_key_file = Path(__file__).resolve().parent / ".api_key"
+        if api_key_file.exists():
+            try:
+                default_config["api_key"] = api_key_file.read_text(encoding="utf-8").strip()
+            except Exception:
+                pass
+    if not default_config.get("api_key"):
+        default_config["api_key"] = os.environ.get("GEMINI_API_KEY", "")
     return default_config
 
 def save_settings(settings_dict):
     import json
+    if "api_key" in settings_dict and settings_dict["api_key"]:
+        try:
+            (Path(__file__).resolve().parent / ".api_key").write_text(settings_dict["api_key"].strip(), encoding="utf-8")
+        except Exception:
+            pass
     existing = load_settings()
     existing.update(settings_dict)
     with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
@@ -339,105 +371,14 @@ def get_settings():
 
 @app.post("/api/settings")
 def update_settings(req: SettingsRequest):
-    new_settings = {}
-    if req.api_key is not None:
-        new_settings["api_key"] = req.api_key.strip()
-    if req.default_template:
-        new_settings["default_template"] = req.default_template
-    if req.printer_type:
-        new_settings["printer_type"] = req.printer_type
-    if req.label_width is not None:
-        new_settings["label_width"] = req.label_width
-    if req.label_height is not None:
-        new_settings["label_height"] = req.label_height
-    if req.col_gap is not None:
-        new_settings["col_gap"] = req.col_gap
-    if req.row_gap is not None:
-        new_settings["row_gap"] = req.row_gap
-    if req.margin_top is not None:
-        new_settings["margin_top"] = req.margin_top
-    if req.margin_left is not None:
-        new_settings["margin_left"] = req.margin_left
-        
-    # Visual Studio Design Attributes
-    if req.logo_visible is not None:
-        new_settings["logo_visible"] = req.logo_visible
-    if req.logo_height is not None:
-        new_settings["logo_height"] = req.logo_height
-    if req.logo_align is not None:
-        new_settings["logo_align"] = req.logo_align
-    if req.active_logo_url is not None:
-        new_settings["active_logo_url"] = req.active_logo_url
-    if req.font_family is not None:
-        new_settings["font_family"] = req.font_family
-    if req.use_fiber_abbreviations is not None:
-        new_settings["use_fiber_abbreviations"] = req.use_fiber_abbreviations
-    if req.font_size_header is not None:
-        new_settings["font_size_header"] = req.font_size_header
-    if req.font_size_company is not None:
-        new_settings["font_size_company"] = req.font_size_company
-    if req.font_size_quality_name is not None:
-        new_settings["font_size_quality_name"] = req.font_size_quality_name
-    if req.font_size_composition is not None:
-        new_settings["font_size_composition"] = req.font_size_composition
-    if req.font_size_weight is not None:
-        new_settings["font_size_weight"] = req.font_size_weight
-    if req.font_size_body is not None:
-        new_settings["font_size_body"] = req.font_size_body
-    if req.header_black_bar is not None:
-        new_settings["header_black_bar"] = req.header_black_bar
-    if req.barcode_height is not None:
-        new_settings["barcode_height"] = req.barcode_height
-    if req.barcode_visible is not None:
-        new_settings["barcode_visible"] = req.barcode_visible
-    if req.show_company is not None:
-        new_settings["show_company"] = req.show_company
-    if req.show_quality_name is not None:
-        new_settings["show_quality_name"] = req.show_quality_name
-    if req.show_quality_code is not None:
-        new_settings["show_quality_code"] = req.show_quality_code
-    if req.show_composition is not None:
-        new_settings["show_composition"] = req.show_composition
-    if req.show_weight is not None:
-        new_settings["show_weight"] = req.show_weight
-    if req.align_company is not None:
-        new_settings["align_company"] = req.align_company
-    if req.align_quality_name is not None:
-        new_settings["align_quality_name"] = req.align_quality_name
-    if req.align_quality_code is not None:
-        new_settings["align_quality_code"] = req.align_quality_code
-    if req.align_composition is not None:
-        new_settings["align_composition"] = req.align_composition
-    if req.align_weight is not None:
-        new_settings["align_weight"] = req.align_weight
-        
-    # Auto Backup
-    if req.auto_backup_enabled is not None:
-        new_settings["auto_backup_enabled"] = req.auto_backup_enabled
-    if req.auto_backup_frequency is not None:
-        new_settings["auto_backup_frequency"] = req.auto_backup_frequency
-    if req.auto_backup_time is not None:
-        new_settings["auto_backup_time"] = req.auto_backup_time
-    if req.custom_backup_dir is not None:
-        new_settings["custom_backup_dir"] = req.custom_backup_dir.strip()
-        
-    # Internal Code Format
-    if req.code_prefix_type is not None:
-        new_settings["code_prefix_type"] = req.code_prefix_type
-    if req.code_prefix_text is not None:
-        new_settings["code_prefix_text"] = req.code_prefix_text.strip().upper()
-    if req.code_separator is not None:
-        new_settings["code_separator"] = req.code_separator
-    if req.code_digits is not None:
-        new_settings["code_digits"] = req.code_digits
-    if req.code_start_number is not None:
-        new_settings["code_start_number"] = req.code_start_number
-
-    # Also save any extra visual studio keys
-    for k in ["bar_target", "show_field_prefixes", "font_size_quality_code_elem", "font_size_color", "prefix_quality_code_elem", "prefix_color", "element_offsets", "element_order", "label_bg_color", "label_border_style", "label_border_color", "bar_style", "bar_bg_color", "bar_text_color", "bar_border_radius"]:
-        if hasattr(req, k) and getattr(req, k) is not None:
-            new_settings[k] = getattr(req, k)
-    save_settings(new_settings)
+    req_dict = req.dict(exclude_unset=True) if hasattr(req, "dict") else req.model_dump(exclude_unset=True)
+    if "api_key" in req_dict and req_dict["api_key"] is not None:
+        req_dict["api_key"] = str(req_dict["api_key"]).strip()
+    if "code_prefix_text" in req_dict and req_dict["code_prefix_text"] is not None:
+        req_dict["code_prefix_text"] = str(req_dict["code_prefix_text"]).strip().upper()
+    if "custom_backup_dir" in req_dict and req_dict["custom_backup_dir"] is not None:
+        req_dict["custom_backup_dir"] = str(req_dict["custom_backup_dir"]).strip()
+    save_settings(req_dict)
     return {"success": True}
 
 APP_VERSION = "4.3.3"
@@ -612,8 +553,12 @@ async def scan_swatch(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Scan failed: {str(e)}")
         err_msg = str(e)
-        if "401" in err_msg or "UNAUTHENTICATED" in err_msg or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_msg:
+        if "401" in err_msg or "UNAUTHENTICATED" in err_msg or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_msg or "API_KEY_INVALID" in err_msg:
             err_msg = "API Anahtarı Doğrulanamadı! Lütfen Google AI Studio'dan aldığınız güncel API anahtarınızı '⚙️ Ayarlar & Tasarım' bölümüne kaydedin. (Yeni oluşturulan anahtarların Google'da aktifleşmesi 10-30 saniye sürebilir)."
+        elif "503" in err_msg or "UNAVAILABLE" in err_msg or "high demand" in err_msg.lower():
+            err_msg = "Google yapay zeka sunucularında anlık yoğunluk yaşanıyor (503). Lütfen 5-10 saniye sonra tekrar deneyin veya yeni bir API anahtarı girin."
+        elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            err_msg = "Google API ücretsiz kota sınırına ulaşıldı (429). Lütfen Google AI Studio'dan yeni bir API anahtarı alıp Ayarlar'a kaydedin."
         raise HTTPException(status_code=500, detail=f"Kartela okuma başarısız: {err_msg}")
     
     finally:
@@ -670,8 +615,12 @@ async def scan_kartela_base64(req: Base64ScanRequest):
     except Exception as e:
         logger.error(f"Base64 scan failed: {str(e)}")
         err_msg = str(e)
-        if "401" in err_msg or "UNAUTHENTICATED" in err_msg or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_msg:
+        if "401" in err_msg or "UNAUTHENTICATED" in err_msg or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_msg or "API_KEY_INVALID" in err_msg:
             err_msg = "API Anahtarı Doğrulanamadı! Lütfen Google AI Studio'dan aldığınız güncel API anahtarınızı '⚙️ Ayarlar & Tasarım' bölümüne kaydedin. (Yeni oluşturulan anahtarların Google'da aktifleşmesi 10-30 saniye sürebilir)."
+        elif "503" in err_msg or "UNAVAILABLE" in err_msg or "high demand" in err_msg.lower():
+            err_msg = "Google yapay zeka sunucularında anlık yoğunluk yaşanıyor (503). Lütfen 5-10 saniye sonra tekrar deneyin veya yeni bir API anahtarı girin."
+        elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            err_msg = "Google API ücretsiz kota sınırına ulaşıldı (429). Lütfen Google AI Studio'dan yeni bir API anahtarı alıp Ayarlar'a kaydedin."
         raise HTTPException(status_code=500, detail=f"Kartela okuma başarısız: {err_msg}")
 
 @app.post("/api/fabrics")
@@ -700,6 +649,22 @@ def save_fabric(req: FabricSaveRequest):
         logger.error(f"Save failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Veritabanına kaydetme başarısız: {str(e)}")
 
+@app.get("/api/fabrics/lookup")
+def lookup_fabric_endpoint(
+    company: Optional[str] = None,
+    quality_name: Optional[str] = None,
+    quality_code: Optional[str] = None,
+    color: Optional[str] = None
+):
+    try:
+        found = database.find_fabric_by_identity(company, quality_name, quality_code, color)
+        if found:
+            return {"found": True, "fabric": found}
+        return {"found": False}
+    except Exception as e:
+        logger.error(f"Lookup failed: {str(e)}")
+        return {"found": False, "error": str(e)}
+
 @app.get("/api/fabrics")
 def list_fabrics(
     search: Optional[str] = None,
@@ -711,6 +676,52 @@ def list_fabrics(
     except Exception as e:
         logger.error(f"List failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/fabrics/{fabric_id}")
+def update_fabric_endpoint(fabric_id: int, req: FabricUpdateRequest):
+    try:
+        updated = database.update_fabric(
+            fabric_id=fabric_id,
+            company_name=req.company_name,
+            quality_code=req.quality_code,
+            quality_name=req.quality_name,
+            design_code=req.design_code,
+            width=req.width,
+            weight=req.weight,
+            composition=req.composition,
+            barcode_or_qr=req.barcode_or_qr,
+            color=req.color
+        )
+        if not updated:
+            raise HTTPException(status_code=404, detail="Kumaş kaydı bulunamadı.")
+        return {"success": True, "fabric": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Kumaş güncellenemedi: {str(e)}")
+
+@app.delete("/api/fabrics/{fabric_id}")
+def delete_fabric_endpoint(fabric_id: int):
+    try:
+        deleted = database.delete_fabric(fabric_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Kumaş kaydı bulunamadı.")
+        return {"success": True, "deleted": deleted}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Kumaş silinemedi: {str(e)}")
+
+@app.post("/api/fabrics/batch-delete")
+def batch_delete_fabrics_endpoint(req: FabricBatchDeleteRequest):
+    try:
+        count = database.delete_fabrics_batch(req.ids)
+        return {"success": True, "deleted_count": count}
+    except Exception as e:
+        logger.error(f"Batch delete failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Toplu silme başarısız: {str(e)}")
 
 # Native Excel (.xlsx) Export Endpoint with Date/Time Range Support
 @app.get("/api/export-xlsx")

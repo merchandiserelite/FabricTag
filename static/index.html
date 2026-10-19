@@ -414,6 +414,9 @@
                             <button class="btn btn-primary" id="btn-batch-print">
                                 <i class="fa-solid fa-print"></i> <span data-i18n="btn_batch_print">Secilenleri Toplu Yazdir (A4)</span>
                             </button>
+                            <button class="btn btn-danger" id="btn-batch-delete" style="display: none; background: #ef4444; border-color: #ef4444; color: #fff; font-weight: 600;" title="İşaretlenen kumaşları kalıcı olarak sil">
+                                <i class="fa-solid fa-trash-can"></i> <span>Seçilenleri Sil (<span id="batch-delete-count">0</span>)</span>
+                            </button>
                             <button class="btn btn-secondary" id="btn-refresh-db" title="Yenile">
                                 <i class="fa-solid fa-arrows-rotate"></i>
                             </button>
@@ -495,12 +498,21 @@
                                     <span id="nudge-toolbar-val" style="font-weight: 700; color: #38bdf8; background: #1e293b; padding: 2px 6px; border-radius: 4px; margin-left: 4px;">0.0 mm</span>
                                 </div>
                                 <div class="nudge-toolbar-actions">
+                                    <button type="button" class="btn-tb-nudge" id="btn-tb-nudge-left" title="0.5mm Sola Kaydır (←)">◀</button>
                                     <button type="button" class="btn-tb-nudge" id="btn-tb-nudge-up" title="0.5mm Yukarı Kaydır (↑)">▲</button>
                                     <button type="button" class="btn-tb-nudge" id="btn-tb-nudge-down" title="0.5mm Aşağı Kaydır (↓)">▼</button>
+                                    <button type="button" class="btn-tb-nudge" id="btn-tb-nudge-right" title="0.5mm Sağa Kaydır (→)">▶</button>
                                     <button type="button" class="btn-tb-nudge" id="btn-tb-nudge-reset" title="Konumu Sıfırla" style="background: #475569;"><i class="fa-solid fa-rotate-left"></i></button>
                                 </div>
+                                <!-- Extra toolbar controls for Logo Size -->
+                                <div id="toolbar-logo-size-controls" style="display: none; align-items: center; gap: 5px; margin-left: 6px; border-left: 1px solid #334155; padding-left: 8px;">
+                                    <span style="font-size: 0.72rem; color: #94a3b8;"><i class="fa-solid fa-maximize"></i> Boyut:</span>
+                                    <button type="button" class="btn-tb-nudge" id="btn-tb-logo-shrink" title="Logoyu 0.5mm Küçült (-)" style="background: #334155; font-weight: bold; width: 24px; height: 24px; font-size: 13px;">−</button>
+                                    <span id="toolbar-logo-size-val" style="font-weight: 700; color: #a78bfa; background: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">6.0 mm</span>
+                                    <button type="button" class="btn-tb-nudge" id="btn-tb-logo-grow" title="Logoyu 0.5mm Büyüt (+)" style="background: #334155; font-weight: bold; width: 24px; height: 24px; font-size: 13px;">+</button>
+                                </div>
                                 <div class="nudge-toolbar-tip">
-                                    <i class="fa-solid fa-keyboard"></i> <kbd>↑</kbd> <kbd>↓</kbd> Tuşları
+                                    <i class="fa-solid fa-keyboard"></i> <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> <span id="toolbar-kbd-logo-tip" style="display:none;"><kbd>−</kbd><kbd>+</kbd></span>
                                 </div>
                             </div>
 
@@ -513,7 +525,7 @@
                                 </div>
                             </div>
                             <div class="boundary-help-text">
-                                <i class="fa-solid fa-hand-pointer" style="color: #4f46e5;"></i> <strong>Hassas Kaydırma:</strong> Etiketteki herhangi bir yazıya tıklayarak seçebilir, <strong>klavyedeki ↑ / ↓ ok tuşlarıyla</strong> milimetrik (0.5 mm) olarak dikey konumunu ayarlayabilirsiniz.
+                                <i class="fa-solid fa-up-down-left-right" style="color: #4f46e5;"></i> <strong>Canlı Boyutlandırma & Serbest Yerleşim:</strong> Logoya tıklayıp sağ alt köşesindeki mavi noktadan tutarak doğrudan büyütebilir/küçültebilir, logoyu fareyle etiket üzerinde istediğiniz yere serbestçe sürükleyebilirsiniz.
                             </div>
                         </div>
 
@@ -724,7 +736,11 @@
                                                     <span style="font-size: 0.75rem; color: #64748b;">Logo Boyutu:</span>
                                                     <strong id="val-logo-height" style="font-size: 0.78rem; color: #4f46e5;">6.0mm</strong>
                                                 </div>
-                                                <input type="range" id="des-logo-height" min="3" max="14" step="0.5" value="6.0" class="range-slider" style="width: 110px;">
+                                                <div style="display: flex; align-items: center; gap: 4px;">
+                                                    <button type="button" class="btn-nudge" id="btn-logo-h-minus" title="0.5mm Küçült" style="width: 22px; height: 22px; font-size: 13px; font-weight: bold; padding: 0; line-height: 1;">−</button>
+                                                    <input type="range" id="des-logo-height" min="2" max="35" step="0.5" value="6.0" class="range-slider" style="width: 80px;">
+                                                    <button type="button" class="btn-nudge" id="btn-logo-h-plus" title="0.5mm Büyüt" style="width: 22px; height: 22px; font-size: 13px; font-weight: bold; padding: 0; line-height: 1;">+</button>
+                                                </div>
                                             </div>
                                             <div class="modular-controls-row" style="border-top: 1px dashed #f1f5f9; padding-top: 4px;">
                                                 <label class="checkbox-pill" style="padding: 2px 4px; font-size: 0.75rem; border: none; background: transparent;">
@@ -1090,12 +1106,14 @@
 
                         <div class="form-row" style="margin-top: 1rem;">
                             <div class="form-group">
-                                <label for="pref-col-gap" data-i18n="lbl_col_gap">Sutun Arasi Bosluk (mm)</label>
-                                <input type="number" step="0.1" id="pref-col-gap" value="0.1">
+                                <label for="pref-col-gap" data-i18n="lbl_col_gap">Etiketler Arasi Mesafe (Sutun Boslugu) (mm)</label>
+                                <input type="number" step="0.1" id="pref-col-gap" value="2.5" placeholder="2.5">
+                                <small style="font-size: 0.78rem; color: #64748b; margin-top: 4px; display: block;" data-i18n="hint_col_gap">Sütunlar arasındaki yatay mesafe (63.5x46.6 sticker etiketlerde 2.5 mm)</small>
                             </div>
                             <div class="form-group">
-                                <label for="pref-row-gap" data-i18n="lbl_row_gap">Satir Arasi Bosluk (mm)</label>
-                                <input type="number" step="0.1" id="pref-row-gap" value="0.1">
+                                <label for="pref-row-gap" data-i18n="lbl_row_gap">Satirlar Arasi Bosluk (mm)</label>
+                                <input type="number" step="0.1" id="pref-row-gap" value="0.0" placeholder="0.0">
+                                <small style="font-size: 0.78rem; color: #64748b; margin-top: 4px; display: block;" data-i18n="hint_row_gap">Satırlar arasındaki dikey boşluk (bitişik etiketlerde 0.0 mm)</small>
                             </div>
                         </div>
 
@@ -1265,6 +1283,85 @@
 
     <!-- Sidebar Mobile Overlay -->
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Direct In-Place Edit Fabric Modal -->
+    <div id="edit-fabric-modal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 650px;">
+            <div class="modal-header" style="background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff;">
+                <div class="modal-title" style="color: #fff;">
+                    <i class="fa-solid fa-pen-to-square" style="color: #38bdf8;"></i>
+                    <span>Kumaş Bilgilerini Düzenle</span>
+                </div>
+                <button type="button" class="modal-close-btn" id="btn-close-edit-fabric-modal" style="color: #fff;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <form id="edit-fabric-form" onsubmit="return false;">
+                    <input type="hidden" id="edit-fabric-id">
+                    
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 1.25rem;">
+                        <span style="font-size: 0.85rem; color: #64748b; font-weight: 600;">İç Kod (Sabit & Benzersiz):</span>
+                        <span class="internal-code-badge" id="edit-fabric-internal-code-badge" style="font-size: 0.95rem; font-weight: 700; padding: 4px 10px;">-</span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-fabric-company" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; display: block;">Firma / Kumaşçı Adı *</label>
+                            <input type="text" id="edit-fabric-company" class="input uppercase-input" required placeholder="Örn: AYDIN KUMAŞ">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-fabric-quality-name" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; display: block;">Kalite Adı</label>
+                            <input type="text" id="edit-fabric-quality-name" class="input uppercase-input" placeholder="Örn: SANDY, ŞİFON">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-fabric-quality-code" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; display: block;">Kalite Kodu (Article)</label>
+                            <input type="text" id="edit-fabric-quality-code" class="input uppercase-input" placeholder="Örn: ART-102">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-fabric-color" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; display: block;">Renk / Varyant</label>
+                            <input type="text" id="edit-fabric-color" class="input uppercase-input" placeholder="Örn: SİYAH, KIRMIZI">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-fabric-design-code" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; display: block;">Desen Kodu</label>
+                            <input type="text" id="edit-fabric-design-code" class="input uppercase-input" placeholder="Örn: D-405">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-fabric-barcode" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; display: block;">Barkod / QR Değeri</label>
+                            <input type="text" id="edit-fabric-barcode" class="input uppercase-input" placeholder="Örn: 8690000000000">
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label for="edit-fabric-composition" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; display: block;">Kumaş Karışımı / Yapısı</label>
+                        <input type="text" id="edit-fabric-composition" class="input uppercase-input" placeholder="Örn: 95% PES 5% EA">
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-fabric-width" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; display: block;">En (cm)</label>
+                            <input type="text" id="edit-fabric-width" class="input" placeholder="Örn: 150">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-fabric-weight" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; display: block;">Gramaj (g/m²)</label>
+                            <input type="text" id="edit-fabric-weight" class="input" placeholder="Örn: 220">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
+                        <button type="button" class="btn btn-secondary" id="btn-cancel-edit-fabric">Vazgeç</button>
+                        <button type="button" class="btn btn-primary" id="btn-save-edit-fabric" style="background: linear-gradient(135deg, #0284c7, #0369a1); font-weight: 600;">
+                            <i class="fa-solid fa-floppy-disk"></i> Değişiklikleri Kaydet
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <!-- Excel (.xlsx) & Backup Studio Modal -->
     <div id="backup-modal" class="modal-overlay">

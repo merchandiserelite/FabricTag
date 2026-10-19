@@ -361,8 +361,8 @@ function initApp() {
                 "opt_printer_argox": "Argox / Rulo Termal Yazıcı (Tekli Sürekli)",
                 "lbl_label_width": "Etiket Genişliği (mm)",
                 "lbl_label_height": "Etiket Yüksekliği (mm)",
-                "lbl_col_gap": "Sütun Arası Boşluk (mm)",
-                "lbl_row_gap": "Satır Arası Boşluk (mm)",
+                "lbl_col_gap": "Etiketler Arası Mesafe (Sütun Boşluğu) (mm)",
+                "lbl_row_gap": "Satırlar Arası Dikey Boşluk (mm)",
                 "lbl_margin_top": "Sayfa Üst Kenar Boşluğu (mm)",
                 "lbl_margin_left": "Sayfa Sol Kenar Boşluğu (mm)",
                 "btn_save_paper": "Kağıt Ölçülerini Kaydet",
@@ -1356,6 +1356,16 @@ function initApp() {
             .toUpperCase();
     }
 
+    // Helper to format company name specifically for stickers (limited to max 2 words)
+    function formatCompanyForSticker(rawName) {
+        if (!rawName) return "-";
+        const clean = toAppUpper(rawName).trim();
+        if (!clean) return "-";
+        const words = clean.split(/\s+/).filter(Boolean);
+        if (words.length <= 2) return clean;
+        return words.slice(0, 2).join(" ");
+    }
+
     // Helper for safe number parsing (preserving 0)
     function parseNum(val, fallback) {
         if (val === null || val === undefined || val === "") return fallback;
@@ -1413,13 +1423,13 @@ function initApp() {
 
     // Current Active Design Config
     const DEFAULT_DESIGN_CONFIG = {
-        config_version: "3.6.0",
+        config_version: "3.7.5",
         default_template: "option-b",
         printer_type: "a4",
         label_width: 63.5,
         label_height: 46.6,
-        col_gap: 0.1,
-        row_gap: 0.1,
+        col_gap: 2.5,
+        row_gap: 0.0,
         margin_top: 8.0,
         margin_left: 6.0,
         logo_visible: true,
@@ -1486,15 +1496,13 @@ function initApp() {
 
     let currentDesignConfig = Object.assign({}, DEFAULT_DESIGN_CONFIG);
 
-    // Load LocalStorage Cache immediately (with strict version check)
+    // Load LocalStorage Cache immediately
     try {
         const cached = localStorage.getItem("elite_sticker_settings");
         if (cached) {
             const parsed = JSON.parse(cached);
-            if (parsed && parsed.config_version === "3.6.0") {
+            if (parsed && typeof parsed === "object") {
                 Object.assign(currentDesignConfig, parsed);
-            } else {
-                localStorage.removeItem("elite_sticker_settings");
             }
         }
     } catch (e) {}
@@ -1670,6 +1678,9 @@ function initApp() {
             .then(logos => {
                 if (!Array.isArray(logos)) return;
                 desLogoSelect.innerHTML = "";
+                const targetUrl = (currentDesignConfig.active_logo_url || "").trim();
+                let matched = false;
+
                 logos.forEach(logo => {
                     const opt = document.createElement("option");
                     opt.value = logo.url;
@@ -1678,11 +1689,34 @@ function initApp() {
                     } else {
                         opt.textContent = logo.name;
                     }
-                    if (logo.url === currentDesignConfig.active_logo_url) {
+
+                    let isMatch = false;
+                    try {
+                        isMatch = (logo.url === targetUrl) || 
+                            (decodeURIComponent(logo.url).toLowerCase() === decodeURIComponent(targetUrl).toLowerCase());
+                    } catch(e) {
+                        isMatch = (logo.url === targetUrl);
+                    }
+
+                    if (isMatch) {
                         opt.selected = true;
+                        matched = true;
                     }
                     desLogoSelect.appendChild(opt);
                 });
+
+                if (!matched && targetUrl && targetUrl !== "/logo.png") {
+                    const opt = document.createElement("option");
+                    opt.value = targetUrl;
+                    opt.textContent = targetUrl.split("/").pop();
+                    opt.selected = true;
+                    desLogoSelect.appendChild(opt);
+                }
+
+                if (desLogoSelect.value) {
+                    currentDesignConfig.active_logo_url = desLogoSelect.value;
+                }
+                renderDesignerPreview(true);
             })
             .catch(err => console.error("Error loading logos:", err));
     }
@@ -1710,6 +1744,7 @@ function initApp() {
             })
             .then(data => {
                 currentDesignConfig.active_logo_url = data.url;
+                triggerAutoSave();
                 showToast("Yeni logo başarıyla yüklendi ve aktif edildi!", 1500);
                 loadLogosList();
                 renderDesignerPreview();
@@ -1728,6 +1763,7 @@ function initApp() {
     if (desLogoSelect) {
         desLogoSelect.addEventListener("change", (e) => {
             currentDesignConfig.active_logo_url = e.target.value;
+            triggerAutoSave();
             renderDesignerPreview();
         });
     }
@@ -1883,8 +1919,8 @@ function initApp() {
         if (prefPrinterType) prefPrinterType.value = cfg.printer_type || "a4";
         if (prefLabelWidth) prefLabelWidth.value = cfg.label_width || 63.5;
         if (prefLabelHeight) prefLabelHeight.value = cfg.label_height || 46.6;
-        if (prefColGap) prefColGap.value = cfg.col_gap !== undefined ? cfg.col_gap : 0.1;
-        if (prefRowGap) prefRowGap.value = cfg.row_gap !== undefined ? cfg.row_gap : 0.1;
+        if (prefColGap) prefColGap.value = cfg.col_gap !== undefined ? cfg.col_gap : 2.5;
+        if (prefRowGap) prefRowGap.value = cfg.row_gap !== undefined ? cfg.row_gap : 0.0;
         if (prefMarginTop) prefMarginTop.value = cfg.margin_top !== undefined ? cfg.margin_top : 8.0;
         if (prefMarginLeft) prefMarginLeft.value = cfg.margin_left !== undefined ? cfg.margin_left : 6.0;
 
@@ -1916,6 +1952,32 @@ function initApp() {
         if (desUseFiberAbbr) desUseFiberAbbr.checked = !!cfg.use_fiber_abbreviations;
 
         // 1. Logo & Company
+        if (desLogoSelect && cfg.active_logo_url) {
+            let found = false;
+            for (let opt of desLogoSelect.options) {
+                try {
+                    if (opt.value === cfg.active_logo_url || 
+                        decodeURIComponent(opt.value).toLowerCase() === decodeURIComponent(cfg.active_logo_url).toLowerCase()) {
+                        opt.selected = true;
+                        found = true;
+                        break;
+                    }
+                } catch(e) {
+                    if (opt.value === cfg.active_logo_url) {
+                        opt.selected = true;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found && desLogoSelect.options.length > 0 && cfg.active_logo_url !== "/logo.png") {
+                const opt = document.createElement("option");
+                opt.value = cfg.active_logo_url;
+                opt.textContent = cfg.active_logo_url.split("/").pop();
+                opt.selected = true;
+                desLogoSelect.appendChild(opt);
+            }
+        }
         if (desLogoVisible) desLogoVisible.checked = cfg.logo_visible !== false;
         if (desLogoHeight) {
             desLogoHeight.value = cfg.logo_height || 6.0;
@@ -2050,7 +2112,7 @@ function initApp() {
     }
 
     function getDesignerCurrentState() {
-        const selectedLogoUrl = desLogoSelect ? desLogoSelect.value : currentDesignConfig.active_logo_url;
+        const selectedLogoUrl = (desLogoSelect && desLogoSelect.value) ? desLogoSelect.value : (currentDesignConfig.active_logo_url || "/logo.png");
         const selectedFontFamily = desFontFamily ? desFontFamily.value : currentDesignConfig.font_family;
         const currentOrder = getModularElementsOrderFromDOM();
 
@@ -2198,20 +2260,46 @@ function initApp() {
 
         const blocks = {};
 
-        // 1. Logo Row
+        // 1. Floating Logo Overlay (Independent Layer)
+        let floatingLogoHtml = "";
         if (cfg.logo_visible) {
-            let alignStyle = "justify-content: flex-start;";
-            if (cfg.logo_align === "center") alignStyle = "justify-content: center;";
-            if (cfg.logo_align === "right") alignStyle = "justify-content: flex-end;";
+            let logoAlignCSS = "left: 2.5mm;";
+            if (offsets['logo_row_x'] !== undefined && parseFloat(offsets['logo_row_x']) !== 0) {
+                logoAlignCSS = `left: calc(2.5mm + ${parseFloat(offsets['logo_row_x'])}mm);`;
+            } else if (cfg.logo_align === "center") {
+                logoAlignCSS = "left: 50%; transform: translateX(-50%);";
+            } else if (cfg.logo_align === "right") {
+                logoAlignCSS = "right: 2.5mm;";
+            }
 
-            const intAttrs = isInteractive ? `data-element-id="logo_row" class="print-logo-row interactive-designer-elem ${activeSelectedElemId === 'logo_row' ? 'selected-element' : ''}"` : 'class="print-logo-row"';
+            const logoTop = 1.5 + parseFloat(offsets['logo_row'] || 0);
+            const logoH = Math.max(2.0, parseFloat(cfg.logo_height) || 6.0);
+            const isSel = activeSelectedElemId === 'logo_row';
 
-            blocks.logo_row = `
-                <div ${intAttrs} style="display: flex; align-items: center; ${alignStyle} margin-bottom: 0.3mm; width: 100%; flex-shrink: 0; ${getOffsetStyle('logo_row')}">
-                    <img src="${logoSrc}" class="print-logo" style="height: ${cfg.logo_height || 5.5}mm; width: auto; max-width: 32mm; object-fit: contain; display: block;" alt="LOGO">
-                    ${cfg.show_company ? `<div class="print-company" style="font-size: ${fCompany}pt; font-weight: 700; line-height: 1.2; text-align: ${cfg.align_company || 'right'}; flex-grow: 1; margin-left: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000;">${toAppUpper(data.company_name) || "-"}</div>` : ''}
+            floatingLogoHtml = `
+                <div id="floating-logo-wrapper" class="floating-logo-wrapper ${isInteractive ? 'interactive-designer-elem ' + (isSel ? 'selected-element' : '') : ''}" ${isInteractive ? 'data-element-id="logo_row"' : ''} style="position: absolute; top: ${logoTop}mm; ${logoAlignCSS} height: ${logoH}mm; max-height: ${logoH}mm; min-height: 0 !important; z-index: 10; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; cursor: ${isInteractive ? 'grab' : 'default'};">
+                    <img src="${logoSrc}" class="print-logo" style="height: ${logoH}mm !important; max-height: ${logoH}mm !important; width: auto !important; max-width: 100% !important; min-height: 0 !important; min-width: 0 !important; object-fit: contain !important; display: block; pointer-events: none;" alt="LOGO">
+                    ${(isInteractive && isSel) ? `
+                        <div class="logo-resize-handle se" id="logo-resize-handle" title="Boyutu büyütüp küçültmek için sürükleyin" style="position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px; background: #2563eb; border: 2.5px solid #ffffff; border-radius: 50%; cursor: nwse-resize; z-index: 35; box-shadow: 0 2px 6px rgba(0,0,0,0.5);"></div>
+                    ` : ''}
                 </div>
             `;
+        }
+
+        // 1.b Firma Adı Satırı (Belge akışında, Logodan tamamen bağımsız)
+        if (cfg.show_company) {
+            const intAttrs = isInteractive ? `data-element-id="company_name" class="print-logo-row interactive-designer-elem ${activeSelectedElemId === 'company_name' ? 'selected-element' : ''}"` : 'class="print-logo-row"';
+            let compAlign = "flex-end";
+            if (cfg.align_company === "left") compAlign = "flex-start";
+            else if (cfg.align_company === "center") compAlign = "center";
+
+            blocks.logo_row = `
+                <div ${intAttrs} style="display: flex; align-items: center; justify-content: ${compAlign}; margin-bottom: 0.3mm; width: 100%; flex-shrink: 0; min-height: 3.5mm; ${getOffsetStyle('company_name')}">
+                    <div class="print-company" style="font-size: ${fCompany}pt; font-weight: 700; line-height: 1.2; text-align: ${cfg.align_company || 'right'}; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000;">${formatCompanyForSticker(data.company_name)}</div>
+                </div>
+            `;
+        } else {
+            blocks.logo_row = "";
         }
 
         // 2. Kalite Kodu (Ayrı Satır)
@@ -2356,8 +2444,9 @@ function initApp() {
         }
 
         return `
-            <div class="print-label" style="font-family: ${fontFamily}; width: 100%; height: 100%; padding: 1.8mm 2.5mm; background-color: ${labelBg} !important; ${labelBorderCSS} box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; gap: 0.35mm; overflow: hidden;">
+            <div class="print-label" style="position: relative; font-family: ${fontFamily}; width: 100%; height: 100%; padding: 1.8mm 2.5mm; background-color: ${labelBg} !important; ${labelBorderCSS} box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; gap: 0.35mm; overflow: hidden;">
                 ${assembledHtml}
+                ${floatingLogoHtml}
             </div>
         `;
     }
@@ -2392,7 +2481,8 @@ function initApp() {
             if (elemId) {
                 toolbar.style.display = "flex";
                 const elemNames = {
-                    logo_row: "Logo & Firma",
+                    logo_row: "Logo",
+                    company_name: "Firma Adı",
                     quality_code: "Kalite Kodu",
                     quality_name: "Kalite Adı",
                     color: "Renk / Varyant",
@@ -2405,10 +2495,57 @@ function initApp() {
                 const offsets = currentDesignConfig.element_offsets || {};
                 const curVal = parseFloat(offsets[elemId] || 0);
                 if (valSpan) valSpan.textContent = (curVal >= 0 ? "+" : "") + curVal.toFixed(1) + " mm";
+
+                const btnLeft = document.getElementById("btn-tb-nudge-left");
+                const btnRight = document.getElementById("btn-tb-nudge-right");
+                const logoSizeControls = document.getElementById("toolbar-logo-size-controls");
+                const logoKbdTip = document.getElementById("toolbar-kbd-logo-tip");
+                const logoSizeVal = document.getElementById("toolbar-logo-size-val");
+
+                if (elemId === "logo_row") {
+                    if (btnLeft) btnLeft.style.display = "inline-flex";
+                    if (btnRight) btnRight.style.display = "inline-flex";
+                    if (logoSizeControls) {
+                        logoSizeControls.style.display = "flex";
+                        const curH = parseFloat(currentDesignConfig.logo_height) || 6.0;
+                        if (logoSizeVal) logoSizeVal.textContent = curH.toFixed(1) + " mm";
+                    }
+                    if (logoKbdTip) logoKbdTip.style.display = "inline";
+                } else {
+                    if (btnLeft) btnLeft.style.display = "none";
+                    if (btnRight) btnRight.style.display = "none";
+                    if (logoSizeControls) logoSizeControls.style.display = "none";
+                    if (logoKbdTip) logoKbdTip.style.display = "none";
+                }
             } else {
                 toolbar.style.display = "none";
             }
         }
+    }
+
+    function adjustLogoHeight(delta) {
+        let cur = parseFloat(currentDesignConfig.logo_height) || 6.0;
+        cur = Math.round((cur + delta) * 10) / 10;
+        if (cur < 2.0) cur = 2.0;
+        if (cur > 35.0) cur = 35.0;
+        currentDesignConfig.logo_height = cur;
+
+        if (desLogoHeight) desLogoHeight.value = cur;
+        if (valLogoHeight) valLogoHeight.textContent = cur.toFixed(1) + "mm";
+        const logoSizeVal = document.getElementById("toolbar-logo-size-val");
+        if (logoSizeVal) logoSizeVal.textContent = cur.toFixed(1) + " mm";
+
+        const wrapper = document.getElementById("floating-logo-wrapper");
+        if (wrapper) {
+            wrapper.style.height = cur + "mm";
+            wrapper.style.maxHeight = cur + "mm";
+            const img = wrapper.querySelector(".print-logo");
+            if (img) {
+                img.style.setProperty("height", cur + "mm", "important");
+                img.style.setProperty("max-height", cur + "mm", "important");
+            }
+        }
+        triggerAutoSave();
     }
 
     function nudgeElement(elemId, delta) {
@@ -2432,10 +2569,25 @@ function initApp() {
         saveVisualDesignToAPI();
     }
 
+    function nudgeElementX(elemId, delta) {
+        if (!elemId) return;
+        if (!currentDesignConfig.element_offsets) currentDesignConfig.element_offsets = {};
+        let cur = parseFloat(currentDesignConfig.element_offsets[elemId + "_x"] || 0);
+        cur = Math.round((cur + delta) * 10) / 10;
+        if (cur > 50) cur = 50;
+        if (cur < -30) cur = -30;
+        currentDesignConfig.element_offsets[elemId + "_x"] = cur;
+        renderDesignerPreview();
+        triggerAutoSave();
+    }
+
     function resetElementOffset(elemId) {
         if (!elemId) return;
         if (!currentDesignConfig.element_offsets) currentDesignConfig.element_offsets = {};
         currentDesignConfig.element_offsets[elemId] = 0.0;
+        if (elemId === "logo_row") {
+            currentDesignConfig.element_offsets["logo_row_x"] = 0.0;
+        }
 
         const badge = document.getElementById("val-offset-" + elemId);
         if (badge) badge.textContent = "0.0 mm";
@@ -2449,11 +2601,33 @@ function initApp() {
         saveVisualDesignToAPI();
     }
 
-    function renderDesignerPreview() {
+    let autoSaveTimer = null;
+    function triggerAutoSave() {
+        const payload = getDesignerCurrentState();
+        try {
+            localStorage.setItem("elite_sticker_settings", JSON.stringify(payload));
+        } catch(e) {}
+
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => {
+            fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            }).then(res => res.json()).then(() => {
+                Object.assign(currentDesignConfig, payload);
+            }).catch(err => console.warn("Auto-save failed:", err));
+        }, 350);
+    }
+
+    function renderDesignerPreview(skipAutoSave = false) {
         if (!dashedLabelBoundary || !designerLiveLabel) return;
 
         const cfg = getDesignerCurrentState();
         currentDesignConfig = cfg;
+        if (!skipAutoSave) {
+            triggerAutoSave();
+        }
 
         const w = cfg.label_width || 63.5;
         const h = cfg.label_height || 46.6;
@@ -2513,15 +2687,147 @@ function initApp() {
         });
     }
 
-    // Live Label Interactive Element Click Handler
+    // Live Label Interactive Element Click & Drag / Resize Handlers
+    let isDraggingLogo = false;
+    let isResizingLogo = false;
+    let dragStartX = 0, dragStartY = 0;
+    let initialOffsetX = 0, initialOffsetY = 0;
+    let initialLogoHeight = 6.0;
+    let logoOriginX = 0, logoOriginY = 0;
+    let initialDistance = 1;
+
     if (designerLiveLabel) {
-        designerLiveLabel.addEventListener("click", (e) => {
+        designerLiveLabel.addEventListener("mousedown", (e) => {
+            const handle = e.target.closest("#logo-resize-handle");
+            const logoWrapper = e.target.closest("#floating-logo-wrapper");
+
+            if (handle) {
+                e.preventDefault();
+                e.stopPropagation();
+                isResizingLogo = true;
+                dragStartX = e.clientX;
+                dragStartY = e.clientY;
+                initialLogoHeight = Math.max(2.0, parseFloat(currentDesignConfig.logo_height) || 6.0);
+                const wrapper = document.getElementById("floating-logo-wrapper");
+                if (wrapper) {
+                    const rect = wrapper.getBoundingClientRect();
+                    logoOriginX = rect.left;
+                    logoOriginY = rect.top;
+                    initialDistance = Math.hypot(dragStartX - logoOriginX, dragStartY - logoOriginY);
+                } else {
+                    logoOriginX = dragStartX;
+                    logoOriginY = dragStartY;
+                    initialDistance = 1;
+                }
+                document.body.style.cursor = "nwse-resize";
+                return;
+            }
+
+            if (logoWrapper) {
+                selectDesignerElement("logo_row");
+
+                e.preventDefault();
+                isDraggingLogo = true;
+                dragStartX = e.clientX;
+                dragStartY = e.clientY;
+
+                if (!currentDesignConfig.element_offsets) currentDesignConfig.element_offsets = {};
+                initialOffsetY = parseFloat(currentDesignConfig.element_offsets["logo_row"] || 0);
+                initialOffsetX = parseFloat(currentDesignConfig.element_offsets["logo_row_x"] || 0);
+
+                logoWrapper.classList.add("dragging");
+                document.body.style.cursor = "grabbing";
+                return;
+            }
+
             const targetElem = e.target.closest(".interactive-designer-elem");
             if (targetElem && targetElem.dataset.elementId) {
                 selectDesignerElement(targetElem.dataset.elementId);
             }
         });
     }
+
+    window.addEventListener("mousemove", (e) => {
+        if (!isResizingLogo && !isDraggingLogo) return;
+
+        const boundary = document.getElementById("dashed-label-boundary");
+        if (!boundary) return;
+        const pxPerMm = (boundary.offsetWidth) / (currentDesignConfig.label_width || 63.5);
+        if (!pxPerMm || pxPerMm <= 0) return;
+
+        if (isResizingLogo) {
+            e.preventDefault();
+            const currentDist = Math.hypot(e.clientX - logoOriginX, e.clientY - logoOriginY);
+            const ratio = currentDist / Math.max(12, initialDistance);
+            let newH = Math.round((initialLogoHeight * ratio) * 2) / 2; // 0.5mm steps
+            if (newH < 2.0) newH = 2.0;
+            if (newH > 35.0) newH = 35.0;
+
+            currentDesignConfig.logo_height = newH;
+            if (desLogoHeight) desLogoHeight.value = newH;
+            if (valLogoHeight) valLogoHeight.textContent = newH.toFixed(1) + "mm";
+            const logoSizeVal = document.getElementById("toolbar-logo-size-val");
+            if (logoSizeVal) logoSizeVal.textContent = newH.toFixed(1) + " mm";
+
+            const wrapper = document.getElementById("floating-logo-wrapper");
+            if (wrapper) {
+                wrapper.style.height = newH + "mm";
+                wrapper.style.maxHeight = newH + "mm";
+                const img = wrapper.querySelector(".print-logo");
+                if (img) {
+                    img.style.setProperty("height", newH + "mm", "important");
+                    img.style.setProperty("max-height", newH + "mm", "important");
+                }
+            }
+            return;
+        }
+
+        if (isDraggingLogo) {
+            e.preventDefault();
+            const deltaX = (e.clientX - dragStartX) / pxPerMm;
+            const deltaY = (e.clientY - dragStartY) / pxPerMm;
+
+            let newX = Math.round((initialOffsetX + deltaX) * 2) / 2; // 0.5mm steps
+            let newY = Math.round((initialOffsetY + deltaY) * 2) / 2;
+
+            if (newY < -20) newY = -20;
+            if (newY > 40) newY = 40;
+            if (newX < -30) newX = -30;
+            if (newX > 60) newX = 60;
+
+            if (!currentDesignConfig.element_offsets) currentDesignConfig.element_offsets = {};
+            currentDesignConfig.element_offsets["logo_row"] = newY;
+            currentDesignConfig.element_offsets["logo_row_x"] = newX;
+
+            const badge = document.getElementById("val-offset-logo_row");
+            if (badge) badge.textContent = (newY >= 0 ? "+" : "") + newY.toFixed(1) + " mm";
+
+            const valSpan = document.getElementById("nudge-toolbar-val");
+            if (valSpan && activeSelectedElemId === "logo_row") {
+                valSpan.textContent = (newY >= 0 ? "+" : "") + newY.toFixed(1) + " mm";
+            }
+
+            const wrapper = document.getElementById("floating-logo-wrapper");
+            if (wrapper) {
+                wrapper.style.top = (1.5 + newY) + "mm";
+                wrapper.style.left = `calc(2.5mm + ${newX}mm)`;
+                wrapper.style.right = "auto";
+                wrapper.style.transform = "none";
+            }
+        }
+    });
+
+    window.addEventListener("mouseup", () => {
+        if (isResizingLogo || isDraggingLogo) {
+            isResizingLogo = false;
+            isDraggingLogo = false;
+            document.body.style.cursor = "";
+            const wrapper = document.getElementById("floating-logo-wrapper");
+            if (wrapper) wrapper.classList.remove("dragging");
+            triggerAutoSave();
+            renderDesignerPreview(true);
+        }
+    });
 
     // Card Nudge Buttons Click Delegation
     document.addEventListener("click", (e) => {
@@ -2543,11 +2849,23 @@ function initApp() {
         }
     });
 
-    // Preview Toolbar Nudge Buttons
+    // Preview Toolbar Nudge & Sizing Buttons
+    const btnTbLeft = document.getElementById("btn-tb-nudge-left");
+    const btnTbRight = document.getElementById("btn-tb-nudge-right");
     const btnTbUp = document.getElementById("btn-tb-nudge-up");
     const btnTbDown = document.getElementById("btn-tb-nudge-down");
     const btnTbReset = document.getElementById("btn-tb-nudge-reset");
+    const btnTbLogoShrink = document.getElementById("btn-tb-logo-shrink");
+    const btnTbLogoGrow = document.getElementById("btn-tb-logo-grow");
+    const btnLogoHMinus = document.getElementById("btn-logo-h-minus");
+    const btnLogoHPlus = document.getElementById("btn-logo-h-plus");
 
+    if (btnTbLeft) btnTbLeft.addEventListener("click", () => {
+        if (activeSelectedElemId === "logo_row") nudgeElementX("logo_row", -0.5);
+    });
+    if (btnTbRight) btnTbRight.addEventListener("click", () => {
+        if (activeSelectedElemId === "logo_row") nudgeElementX("logo_row", 0.5);
+    });
     if (btnTbUp) btnTbUp.addEventListener("click", () => {
         if (activeSelectedElemId) nudgeElement(activeSelectedElemId, -0.5);
     });
@@ -2557,8 +2875,12 @@ function initApp() {
     if (btnTbReset) btnTbReset.addEventListener("click", () => {
         if (activeSelectedElemId) resetElementOffset(activeSelectedElemId);
     });
+    if (btnTbLogoShrink) btnTbLogoShrink.addEventListener("click", () => adjustLogoHeight(-0.5));
+    if (btnTbLogoGrow) btnTbLogoGrow.addEventListener("click", () => adjustLogoHeight(0.5));
+    if (btnLogoHMinus) btnLogoHMinus.addEventListener("click", () => adjustLogoHeight(-0.5));
+    if (btnLogoHPlus) btnLogoHPlus.addEventListener("click", () => adjustLogoHeight(0.5));
 
-    // Keyboard Arrow Up / Down Nudging
+    // Keyboard Arrow Up / Down / Left / Right & Plus / Minus Sizing
     window.addEventListener("keydown", (e) => {
         if (!activeSelectedElemId) return;
 
@@ -2576,6 +2898,20 @@ function initApp() {
             e.preventDefault();
             const step = e.shiftKey ? 1.5 : 0.5;
             nudgeElement(activeSelectedElemId, step);
+        } else if (e.key === "ArrowLeft" && activeSelectedElemId === "logo_row") {
+            e.preventDefault();
+            const step = e.shiftKey ? -1.5 : -0.5;
+            nudgeElementX("logo_row", step);
+        } else if (e.key === "ArrowRight" && activeSelectedElemId === "logo_row") {
+            e.preventDefault();
+            const step = e.shiftKey ? 1.5 : 0.5;
+            nudgeElementX("logo_row", step);
+        } else if (activeSelectedElemId === "logo_row" && (e.key === "-" || e.key === "_" || e.key === "[")) {
+            e.preventDefault();
+            adjustLogoHeight(-0.5);
+        } else if (activeSelectedElemId === "logo_row" && (e.key === "+" || e.key === "=" || e.key === "]")) {
+            e.preventDefault();
+            adjustLogoHeight(0.5);
         } else if (e.key === "Escape") {
             selectDesignerElement(null);
         }
@@ -3656,7 +3992,81 @@ function initApp() {
         inputComposition.value = cleanCompositionPunctuation(data.composition);
         inputBarcode.value = toAppUpper(data.barcode_or_qr);
         if (inputColor) inputColor.value = toAppUpper(data.color || "");
+        if (typeof checkFabricIdentityLive === "function") checkFabricIdentityLive();
     }
+
+    // 4 Temel Alana Göre Gerçek Zamanlı Eşleşme / Yeni Kod Kontrolü
+    // (Kumaşçı, Kalite Adı, Kalite Kodu, Renk)
+    let identityCheckTimeout = null;
+    let identityAbortController = null;
+    function checkFabricIdentityLive() {
+        clearTimeout(identityCheckTimeout);
+        if (identityAbortController) {
+            try { identityAbortController.abort(); } catch(e) {}
+            identityAbortController = null;
+        }
+        identityCheckTimeout = setTimeout(() => {
+            const company = toAppUpper(inputCompany?.value) || "GENEL";
+            const qCode = toAppUpper(inputQualityCode?.value);
+            const qName = toAppUpper(inputQualityName?.value);
+            const color = toAppUpper(inputColor?.value || "");
+
+            if (!qName && !qCode) {
+                if (duplicateWarning && !editingInternalCode) duplicateWarning.style.display = "none";
+                return;
+            }
+
+            const params = new URLSearchParams({
+                company: company,
+                quality_code: qCode === "KODSUZ" ? "" : qCode,
+                quality_name: qName,
+                color: color
+            });
+
+            identityAbortController = new AbortController();
+            fetch(`/api/fabrics/lookup?${params.toString()}`, { signal: identityAbortController.signal })
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.found && data.fabric) {
+                        // Kumaşçı, kalite adı, kalite kodu ve rengi birebir aynı -> Güncellenecek
+                        editingInternalCode = data.fabric.internal_code;
+                        if (inputInternalCode) inputInternalCode.value = data.fabric.internal_code;
+                        if (internalCodeGroup) internalCodeGroup.style.display = "flex";
+                        if (duplicateWarning) {
+                            duplicateWarning.innerHTML = `<i class="fa-solid fa-clock-rotate-left"></i> Kayıtlı Kumaş: ${data.fabric.internal_code} (Kaydedildiğinde güncellenecektir)`;
+                            duplicateWarning.style.display = "inline-flex";
+                            duplicateWarning.style.background = "#fef3c7";
+                            duplicateWarning.style.color = "#92400e";
+                        }
+                    } else {
+                        // Kumaşçı, kalite adı, kalite kodu veya rengi farklı -> Yeni içkod atanacak
+                        editingInternalCode = null;
+                        if (inputInternalCode) inputInternalCode.value = "";
+                        if (internalCodeGroup) internalCodeGroup.style.display = "none";
+                        if (duplicateWarning) {
+                            if (color) {
+                                duplicateWarning.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> ✨ Yeni Renk / Varyant (Yeni İç Kod Atanacak)`;
+                            } else {
+                                duplicateWarning.innerHTML = `<i class="fa-solid fa-plus-circle"></i> Yeni Kumaş Kalitesi (Yeni İç Kod Atanacak)`;
+                            }
+                            duplicateWarning.style.display = "inline-flex";
+                            duplicateWarning.style.background = "#e0e7ff";
+                            duplicateWarning.style.color = "#3730a3";
+                        }
+                    }
+                })
+                .catch(err => {
+                    if (err.name !== 'AbortError') {
+                        console.debug("Identity lookup error:", err);
+                    }
+                });
+        }, 350);
+    }
+
+    if (inputCompany) inputCompany.addEventListener("input", checkFabricIdentityLive);
+    if (inputQualityCode) inputQualityCode.addEventListener("input", checkFabricIdentityLive);
+    if (inputQualityName) inputQualityName.addEventListener("input", checkFabricIdentityLive);
+    if (inputColor) inputColor.addEventListener("input", checkFabricIdentityLive);
 
     // Manuel Kumaş Giriş Modu
     const btnManualFabricEntry = document.getElementById("btn-manual-fabric-entry");
@@ -3750,10 +4160,11 @@ function initApp() {
                 body { background: #f1f5f9; padding: 10px; font-family: ${fontFamily}; }
                 .a4-container { background: white; margin: 0 auto; padding: ${mTop}mm ${mLeft}mm; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 210mm; min-height: 297mm; }
                 .a4-label-grid { display: grid; grid-template-columns: repeat(3, ${w}mm); grid-auto-rows: ${h}mm; column-gap: ${cGap}mm; row-gap: ${rGap}mm; }
-                .print-label { width: ${w}mm !important; height: ${h}mm !important; border: 1px dashed #cbd5e1; font-family: ${fontFamily}; }
+                .print-label { width: ${w}mm !important; height: ${h}mm !important; border: none; font-family: ${fontFamily}; }
                 @media print {
                     body { background: white; padding: 0; }
                     .a4-container { box-shadow: none; padding: 0; margin: 0; width: 100%; }
+                    .print-label { border: none; }
                 }
             `;
         }
@@ -3880,17 +4291,23 @@ function initApp() {
         })
         .then(savedRecord => {
             if (savedRecord.is_duplicate) {
-                showToast("Bu kalite veritabanında zaten kayıtlı!", 1000);
+                showToast("Bu kalite veritabanında zaten kayıtlı: " + savedRecord.internal_code, 1500);
             } else if (savedRecord.is_updated) {
-                showToast("Mevcut kayıt başarıyla güncellendi!", 1000);
+                showToast("Mevcut kumaş başarıyla güncellendi: " + savedRecord.internal_code, 1500);
             } else {
-                showToast("Yeni kumaş kaydedildi!", 1000);
+                showToast("Yeni kumaş kaydedildi: " + savedRecord.internal_code, 1500);
             }
 
             if (!isFromQueue) {
                 editingInternalCode = savedRecord.internal_code;
                 inputInternalCode.value = savedRecord.internal_code;
                 internalCodeGroup.style.display = "flex";
+                if (duplicateWarning) {
+                    duplicateWarning.innerHTML = `<i class="fa-solid fa-check-circle"></i> Kayıtlı Kumaş: ${savedRecord.internal_code}`;
+                    duplicateWarning.style.display = "inline-flex";
+                    duplicateWarning.style.background = "#dcfce7";
+                    duplicateWarning.style.color = "#166534";
+                }
             }
             return savedRecord;
         });
@@ -3993,6 +4410,13 @@ function initApp() {
             btnBatchPrint.classList.remove("btn-success");
             btnBatchPrint.classList.add("btn-primary");
         }
+
+        const btnBatchDelete = document.getElementById("btn-batch-delete");
+        const batchDeleteCount = document.getElementById("batch-delete-count");
+        if (btnBatchDelete && batchDeleteCount) {
+            batchDeleteCount.textContent = checkedCount;
+            btnBatchDelete.style.display = checkedCount > 0 ? "inline-flex" : "none";
+        }
     }
 
     function syncCheckboxSelection(code, isChecked) {
@@ -4008,7 +4432,12 @@ function initApp() {
         updateBatchCountText();
     }
 
+    let dbLoadAbortController = null;
     function loadDatabase(search = "") {
+        if (dbLoadAbortController) {
+            try { dbLoadAbortController.abort(); } catch(e) {}
+            dbLoadAbortController = null;
+        }
         let url = "/api/fabrics";
         if (search) {
             url += "?search=" + encodeURIComponent(search);
@@ -4017,7 +4446,8 @@ function initApp() {
         // Ensure correct initial view mode
         setDbViewMode(currentDbViewMode);
 
-        fetch(url)
+        dbLoadAbortController = new AbortController();
+        fetch(url, { signal: dbLoadAbortController.signal })
             .then(res => res.json())
             .then(fabrics => {
                 dbTableBody.innerHTML = "";
@@ -4069,6 +4499,12 @@ function initApp() {
                             <button class="btn-action btn-edit" title="Düzenle">
                                 <i class="fa-solid fa-pen-to-square"></i>
                             </button>
+                            <button class="btn-action btn-print" title="Yazdır">
+                                <i class="fa-solid fa-print"></i>
+                            </button>
+                            <button class="btn-action btn-delete" title="Sil" style="color: #ef4444;">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
                         </td>
                     `;
                     
@@ -4078,48 +4514,51 @@ function initApp() {
                     });
 
                     tr.addEventListener("click", (e) => {
-                        if (e.target.tagName !== "INPUT" && !e.target.closest(".btn-edit")) {
+                        if (e.target.tagName !== "INPUT" && !e.target.closest(".btn-action")) {
                             syncCheckboxSelection(code, !rowCb.checked);
                         }
                     });
 
+                    tr.querySelector(".btn-print").addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        triggerSinglePrint(f);
+                    });
+
                     tr.querySelector(".btn-edit").addEventListener("click", (e) => {
                         e.stopPropagation();
-                        loadRecordIntoScanTab(f);
+                        openEditFabricModal(f);
+                    });
+
+                    tr.querySelector(".btn-delete").addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        confirmDeleteFabric(f);
                     });
                     
                     dbTableBody.appendChild(tr);
 
-                    // 2. Mobile & Rich Card Element
+                    // 2. Responsive Card View (for mobile or card mode)
                     if (dbCardsContainer) {
                         const card = document.createElement("div");
                         card.className = "fabric-card";
-                        card.dataset.fabricJson = JSON.stringify(f);
                         card.dataset.code = code;
+                        card.dataset.fabricJson = JSON.stringify(f);
 
                         card.innerHTML = `
                             <div class="fabric-card-header">
-                                <div class="card-left-badge">
-                                    <input type="checkbox" class="db-card-checkbox" data-code="${code}">
-                                    <span class="internal-code-badge">${code}</span>
-                                </div>
-                                <div class="fabric-card-actions">
-                                    <button type="button" class="btn-card-action btn-card-print" title="Yazdır"><i class="fa-solid fa-print"></i></button>
-                                    <button type="button" class="btn-card-action btn-card-edit" title="Düzenle"><i class="fa-solid fa-pen-to-square"></i></button>
-                                </div>
+                                <span class="internal-code-badge">${code}</span>
+                                <input type="checkbox" class="db-card-checkbox" data-code="${code}">
                             </div>
-                            <div class="fabric-card-title">
-                                <div class="fc-company"><i class="fa-solid fa-building"></i> ${f.company_name}</div>
-                                <div class="fc-article"><i class="fa-solid fa-tag"></i> ${f.quality_code} ${f.quality_name ? '• ' + f.quality_name : ''}</div>
+                            <div class="fabric-card-body">
+                                <h3 class="fabric-card-company">${f.company_name}</h3>
+                                <div class="fabric-card-name">${f.quality_name || "-"}</div>
+                                <div class="fabric-card-code"><span class="label">K.Kodu:</span> <strong>${f.quality_code || "-"}</strong></div>
+                                ${f.design_code ? `<div class="fabric-card-design"><span class="label">Desen:</span> <strong>${f.design_code}</strong></div>` : ''}
+                                ${f.color ? `<div class="fabric-card-color"><span class="label">Renk:</span> <span class="badge-color-tag" style="background:#f1f5f9; padding: 2px 7px; border-radius:4px; font-weight:600; color:#1e293b;">${f.color}</span></div>` : ''}
                             </div>
                             <div class="fabric-card-specs">
                                 <div class="spec-item">
-                                    <span class="spec-label"><i class="fa-solid fa-shapes"></i> Desen Kodu</span>
-                                    <span class="spec-value">${f.design_code || '-'}</span>
-                                </div>
-                                <div class="spec-item">
-                                    <span class="spec-label"><i class="fa-solid fa-palette"></i> Renk Kodu</span>
-                                    <span class="spec-value">${f.color || '-'}</span>
+                                    <span class="spec-label"><i class="fa-solid fa-tag"></i> Barkod</span>
+                                    <span class="spec-value">${f.barcode_or_qr || '-'}</span>
                                 </div>
                                 <div class="spec-item">
                                     <span class="spec-label"><i class="fa-solid fa-ruler-horizontal"></i> En</span>
@@ -4129,12 +4568,16 @@ function initApp() {
                                     <span class="spec-label"><i class="fa-solid fa-weight-scale"></i> Gramaj</span>
                                     <span class="spec-value">${f.weight ? f.weight + ' g/m²' : '-'}</span>
                                 </div>
+                                <div class="spec-item">
+                                    <span class="spec-label"><i class="fa-solid fa-scroll"></i> Karışım</span>
+                                    <span class="spec-value" title="${f.composition || ''}">${f.composition || '-'}</span>
+                                </div>
                             </div>
-                            ${f.composition ? `
-                            <div class="fabric-card-comp">
-                                <span class="comp-label"><i class="fa-solid fa-scroll"></i> Karışım:</span>
-                                <span class="comp-value">${f.composition}</span>
-                            </div>` : ''}
+                            <div class="fabric-card-footer">
+                                <button type="button" class="btn-card-action btn-card-print" title="Yazdır"><i class="fa-solid fa-print"></i> Yazdır</button>
+                                <button type="button" class="btn-card-action btn-card-edit" title="Düzenle"><i class="fa-solid fa-pen-to-square"></i> Düzenle</button>
+                                <button type="button" class="btn-card-action btn-card-delete" title="Sil" style="color: #ef4444;"><i class="fa-solid fa-trash-can"></i> Sil</button>
+                            </div>
                         `;
 
                         const cardCb = card.querySelector(".db-card-checkbox");
@@ -4155,7 +4598,12 @@ function initApp() {
 
                         card.querySelector(".btn-card-edit").addEventListener("click", (e) => {
                             e.stopPropagation();
-                            loadRecordIntoScanTab(f);
+                            openEditFabricModal(f);
+                        });
+
+                        card.querySelector(".btn-card-delete").addEventListener("click", (e) => {
+                            e.stopPropagation();
+                            confirmDeleteFabric(f);
                         });
 
                         dbCardsContainer.appendChild(card);
@@ -4163,6 +4611,7 @@ function initApp() {
                 });
             })
             .catch(err => {
+                if (err.name === 'AbortError') return;
                 console.error("Error loading database:", err);
                 dbTableBody.innerHTML = `
                     <tr>
@@ -4215,19 +4664,165 @@ function initApp() {
         triggerBatchPrint(selectedFabrics, selectedTemplate);
     });
 
-    function loadRecordIntoScanTab(record) {
-        populateForm(record);
-        duplicateWarning.innerHTML = `<i class="fa-solid fa-pen-to-square"></i> Düzenlenen Kayıt: ${record.internal_code}`;
-        duplicateWarning.style.display = "inline-flex";
+    // ==========================================
+    // DOĞRUDAN VERİTABANI DÜZENLEME & SİLME MODÜLÜ
+    // ==========================================
+    const editFabricModal = document.getElementById("edit-fabric-modal");
+    const btnCloseEditFabricModal = document.getElementById("btn-close-edit-fabric-modal");
+    const btnCancelEditFabric = document.getElementById("btn-cancel-edit-fabric");
+    const btnSaveEditFabric = document.getElementById("btn-save-edit-fabric");
+
+    const editFabricId = document.getElementById("edit-fabric-id");
+    const editFabricCodeBadge = document.getElementById("edit-fabric-internal-code-badge");
+    const editFabricCompany = document.getElementById("edit-fabric-company");
+    const editFabricQualityName = document.getElementById("edit-fabric-quality-name");
+    const editFabricQualityCode = document.getElementById("edit-fabric-quality-code");
+    const editFabricColor = document.getElementById("edit-fabric-color");
+    const editFabricDesignCode = document.getElementById("edit-fabric-design-code");
+    const editFabricBarcode = document.getElementById("edit-fabric-barcode");
+    const editFabricComposition = document.getElementById("edit-fabric-composition");
+    const editFabricWidth = document.getElementById("edit-fabric-width");
+    const editFabricWeight = document.getElementById("edit-fabric-weight");
+
+    function openEditFabricModal(f) {
+        if (!f) return;
+        if (editFabricId) editFabricId.value = f.id || "";
+        if (editFabricCodeBadge) editFabricCodeBadge.textContent = f.internal_code || "-";
+        if (editFabricCompany) editFabricCompany.value = f.company_name || "";
+        if (editFabricQualityName) editFabricQualityName.value = f.quality_name || "";
+        if (editFabricQualityCode) editFabricQualityCode.value = f.quality_code || "";
+        if (editFabricColor) editFabricColor.value = f.color || "";
+        if (editFabricDesignCode) editFabricDesignCode.value = f.design_code || "";
+        if (editFabricBarcode) editFabricBarcode.value = f.barcode_or_qr || "";
+        if (editFabricComposition) editFabricComposition.value = f.composition || "";
+        if (editFabricWidth) editFabricWidth.value = f.width || "";
+        if (editFabricWeight) editFabricWeight.value = f.weight || "";
         
-        imagePreview.src = "";
-        previewBox.style.display = "none";
-        
-        resultCard.style.opacity = "1";
-        resultCard.style.pointerEvents = "auto";
-        
-        navButtons[0].click();
-        showToast(`Düzenleme modu: ${record.internal_code}`, 1000);
+        if (editFabricModal) editFabricModal.classList.add("active");
+    }
+
+    function closeEditFabricModal() {
+        if (editFabricModal) editFabricModal.classList.remove("active");
+    }
+
+    if (btnCloseEditFabricModal) btnCloseEditFabricModal.addEventListener("click", closeEditFabricModal);
+    if (btnCancelEditFabric) btnCancelEditFabric.addEventListener("click", closeEditFabricModal);
+    if (editFabricModal) {
+        editFabricModal.addEventListener("click", (e) => {
+            if (e.target === editFabricModal) closeEditFabricModal();
+        });
+    }
+
+    if (btnSaveEditFabric) {
+        btnSaveEditFabric.addEventListener("click", async () => {
+            const fid = editFabricId ? editFabricId.value : null;
+            if (!fid) return;
+
+            const company = editFabricCompany ? editFabricCompany.value.trim().toUpperCase() : "";
+            if (!company) {
+                alert("Lütfen firma / kumaşçı adını girin.");
+                if (editFabricCompany) editFabricCompany.focus();
+                return;
+            }
+
+            const payload = {
+                company_name: company,
+                quality_code: editFabricQualityCode ? editFabricQualityCode.value.trim().toUpperCase() : "",
+                quality_name: editFabricQualityName ? editFabricQualityName.value.trim().toUpperCase() : "",
+                design_code: editFabricDesignCode ? editFabricDesignCode.value.trim().toUpperCase() : "",
+                color: editFabricColor ? editFabricColor.value.trim().toUpperCase() : "",
+                width: editFabricWidth ? editFabricWidth.value.trim() : "",
+                weight: editFabricWeight ? editFabricWeight.value.trim() : "",
+                composition: editFabricComposition ? editFabricComposition.value.trim().toUpperCase() : "",
+                barcode_or_qr: editFabricBarcode ? editFabricBarcode.value.trim().toUpperCase() : ""
+            };
+
+            btnSaveEditFabric.disabled = true;
+            btnSaveEditFabric.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kaydediliyor...`;
+
+            try {
+                const res = await fetch(`/api/fabrics/${fid}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const result = await res.json();
+                if (!res.ok || !result.success) {
+                    throw new Error(result.detail || "Güncelleme başarısız.");
+                }
+
+                closeEditFabricModal();
+                showToast(`Kumaş başarıyla güncellendi: ${result.fabric?.internal_code || ""}`);
+                loadDatabase(dbSearch ? dbSearch.value.trim() : "");
+            } catch (err) {
+                alert("Hata: " + err.message);
+            } finally {
+                btnSaveEditFabric.disabled = false;
+                btnSaveEditFabric.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Değişiklikleri Kaydet`;
+            }
+        });
+    }
+
+    async function confirmDeleteFabric(f) {
+        if (!f || !f.id) return;
+        const msg = `${f.internal_code} iç kodlu kumaşı silmek istediğinize emin misiniz?\n\n` +
+                    `Firma: ${f.company_name || '-'}\nKalite: ${f.quality_name || f.quality_code || '-'}\n\n` +
+                    `NOT: Bu iç kod bir daha kullanılmayacak, yeni kayıtlar en son numaradan artarak devam edecektir.`;
+        if (!confirm(msg)) return;
+
+        try {
+            const res = await fetch(`/api/fabrics/${f.id}`, { method: "DELETE" });
+            const result = await res.json();
+            if (!res.ok || !result.success) {
+                throw new Error(result.detail || "Silme işlemi başarısız.");
+            }
+            showToast(`${f.internal_code} silindi`);
+            loadDatabase(dbSearch ? dbSearch.value.trim() : "");
+        } catch (err) {
+            alert("Silme hatası: " + err.message);
+        }
+    }
+
+    const btnBatchDelete = document.getElementById("btn-batch-delete");
+    if (btnBatchDelete) {
+        btnBatchDelete.addEventListener("click", async () => {
+            const selectedFabrics = [];
+            document.querySelectorAll("#db-table-body tr").forEach(tr => {
+                const cb = tr.querySelector(".db-row-checkbox");
+                if (cb && cb.checked && tr.dataset.fabricJson) {
+                    try { selectedFabrics.push(JSON.parse(tr.dataset.fabricJson)); } catch(e) {}
+                }
+            });
+
+            if (selectedFabrics.length === 0) {
+                alert("Lütfen silinecek kumaşları işaretleyin.");
+                return;
+            }
+
+            const msg = `Seçilen ${selectedFabrics.length} adet kumaş kaydını kalıcı olarak silmek istediğinize emin misiniz?\n\n` +
+                        `NOT: Bu iç kodlar bir daha kullanılmayacak, yeni kayıtlar artmaya devam edecektir.`;
+            if (!confirm(msg)) return;
+
+            const ids = selectedFabrics.map(f => f.id);
+            btnBatchDelete.disabled = true;
+            try {
+                const res = await fetch("/api/fabrics/batch-delete", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ids: ids })
+                });
+                const result = await res.json();
+                if (!res.ok || !result.success) {
+                    throw new Error(result.detail || "Toplu silme başarısız.");
+                }
+                showToast(`${result.deleted_count} kumaş silindi`);
+                loadDatabase(dbSearch ? dbSearch.value.trim() : "");
+            } catch (err) {
+                alert("Toplu silme hatası: " + err.message);
+            } finally {
+                btnBatchDelete.disabled = false;
+            }
+        });
     }
     
     let searchTimeout = null;

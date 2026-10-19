@@ -37,45 +37,83 @@ if ONEDRIVE_BACKUP_DIR:
     except Exception:
         pass
 
+def normalize_fabric_text(val):
+    if val is None:
+        return ""
+    s = str(val).strip()
+    s = s.replace('i', 'I').replace('ı', 'I').replace('İ', 'I')
+    return s.upper()
+
 def get_db_connection():
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA cache_size=-64000")
+    conn.create_function("NORM_TXT", 1, normalize_fabric_text)
     return conn
 
 def init_db():
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS fabrics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            internal_code TEXT UNIQUE NOT NULL,
-            company_name TEXT,
-            quality_code TEXT,
-            quality_name TEXT,
-            design_code TEXT,
-            width TEXT,
-            weight TEXT,
-            composition TEXT,
-            barcode_or_qr TEXT,
-            color TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
     try:
-        cursor.execute("ALTER TABLE fabrics ADD COLUMN color TEXT")
-    except Exception:
-        pass
-    conn.commit()
-    conn.close()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS fabrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                internal_code TEXT UNIQUE NOT NULL,
+                company_name TEXT,
+                quality_code TEXT,
+                quality_name TEXT,
+                design_code TEXT,
+                width TEXT,
+                weight TEXT,
+                composition TEXT,
+                barcode_or_qr TEXT,
+                color TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        try:
+            cursor.execute("ALTER TABLE fabrics ADD COLUMN color TEXT")
+        except Exception:
+            pass
+            
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS code_sequence (
+                prefix TEXT PRIMARY KEY,
+                last_number INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        
+        # Initialize code_sequence with current max number across existing fabrics
+        cursor.execute("SELECT internal_code FROM fabrics")
+        max_num = 0
+        for r in cursor.fetchall():
+            m = re.search(r'(\d+)$', str(r["internal_code"]).strip())
+            if m:
+                val = int(m.group(1))
+                if val > max_num:
+                    max_num = val
+        cursor.execute("""
+            INSERT INTO code_sequence (prefix, last_number) VALUES ('GLOBAL', ?)
+            ON CONFLICT(prefix) DO UPDATE SET last_number = MAX(code_sequence.last_number, excluded.last_number)
+        """, (max_num,))
+        
+        conn.commit()
+    finally:
+        conn.close()
 
 def get_total_fabrics_count() -> int:
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM fabrics")
-        row = cursor.fetchone()
-        conn.close()
-        return row[0] if row else 0
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM fabrics")
+            row = cursor.fetchone()
+            return row[0] if row else 0
+        finally:
+            conn.close()
     except Exception:
         return 0
 
@@ -117,33 +155,47 @@ def get_next_internal_code(conn, code_settings=None):
     full_prefix = f"{clean_prefix}{separator}" if clean_prefix else ""
     
     cursor = conn.cursor()
+    
+    # 1. Fetch current max from code_sequence tracker
+    cursor.execute("SELECT last_number FROM code_sequence WHERE prefix = 'GLOBAL'")
+    seq_row = cursor.fetchone()
+    seq_max = seq_row[0] if seq_row else 0
+    
+    # 2. Also check fabrics in case any higher number exists
     cursor.execute("SELECT internal_code FROM fabrics")
     rows = cursor.fetchall()
     
-    max_num = 0
+    fabrics_max = 0
     for row in rows:
         code = str(row["internal_code"]).strip().upper()
         if full_prefix and code.startswith(full_prefix):
             rest = code[len(full_prefix):]
             if rest.isdigit():
                 num = int(rest)
-                if num > max_num:
-                    max_num = num
+                if num > fabrics_max:
+                    fabrics_max = num
         elif not full_prefix and code.isdigit():
             num = int(code)
-            if num > max_num:
-                max_num = num
+            if num > fabrics_max:
+                fabrics_max = num
         else:
             m = re.search(r'(\d+)$', code)
             if m:
                 num = int(m.group(1))
-                if num > max_num:
-                    max_num = num
+                if num > fabrics_max:
+                    fabrics_max = num
                     
-    if max_num == 0:
+    baseline_max = max(seq_max, fabrics_max)
+    if baseline_max == 0:
         next_num = start_num
     else:
-        next_num = max(max_num + 1, start_num)
+        next_num = max(baseline_max + 1, start_num)
+        
+    # Update tracker immediately so that consecutive calls or deleted records never reuse next_num
+    cursor.execute("""
+        INSERT INTO code_sequence (prefix, last_number) VALUES ('GLOBAL', ?)
+        ON CONFLICT(prefix) DO UPDATE SET last_number = MAX(code_sequence.last_number, excluded.last_number)
+    """, (next_num,))
         
     if digits > 0:
         formatted_num = f"{next_num:0{digits}d}"
@@ -152,32 +204,110 @@ def get_next_internal_code(conn, code_settings=None):
         
     return f"{full_prefix}{formatted_num}"
 
+def find_fabric_by_identity(company_name, quality_name, quality_code, color):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        norm_company = normalize_fabric_text(company_name) or "GENEL"
+        norm_qname = normalize_fabric_text(quality_name)
+        norm_qcode = normalize_fabric_text(quality_code)
+        if norm_qcode == "KODSUZ":
+            norm_qcode = ""
+        norm_color = normalize_fabric_text(color)
+        
+        if not (norm_qname or norm_qcode):
+            return None
+            
+        cursor.execute("""
+            SELECT * FROM fabrics 
+            WHERE NORM_TXT(COALESCE(company_name, 'GENEL')) = ?
+              AND NORM_TXT(COALESCE(quality_name, '')) = ?
+              AND NORM_TXT(COALESCE(quality_code, '')) = ?
+              AND NORM_TXT(COALESCE(color, '')) = ?
+        """, (norm_company, norm_qname, norm_qcode, norm_color))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
 def add_fabric(company_name, quality_code, quality_name, design_code, width, weight, composition, barcode_or_qr, internal_code=None, color=None):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    company_name = company_name.strip().upper() if company_name else "GENEL"
-    quality_code = quality_code.strip().upper() if quality_code else ""
-    if quality_code == "KODSUZ":
-        quality_code = ""
-    quality_name = quality_name.strip().upper() if quality_name else ""
-    design_code = design_code.strip().upper() if design_code else ""
-    color = color.strip().upper() if color else ""
-    width = width.strip().upper() if width else ""
-    weight = weight.strip().upper() if weight else ""
-    barcode_or_qr = barcode_or_qr.strip().upper() if barcode_or_qr else ""
-    
-    if composition:
-        comp_clean = re.sub(r'[/,;+]+', ' ', composition)
-        composition = re.sub(r'\s+', ' ', comp_clean).strip().upper()
-    else:
-        composition = ""
+    try:
+        cursor = conn.cursor()
+        
+        # 1. Metin Temizliği ve Normalizasyon
+        company_name = company_name.strip().upper() if company_name else "GENEL"
+        quality_code = quality_code.strip().upper() if quality_code else ""
+        if quality_code == "KODSUZ":
+            quality_code = ""
+        quality_name = quality_name.strip().upper() if quality_name else ""
+        design_code = design_code.strip().upper() if design_code else ""
+        color = color.strip().upper() if color else ""
+        width = width.strip().upper() if width else ""
+        weight = weight.strip().upper() if weight else ""
+        barcode_or_qr = barcode_or_qr.strip().upper() if barcode_or_qr else ""
+        
+        if composition:
+            comp_clean = re.sub(r'[/,;+]+', ' ', composition)
+            composition = re.sub(r'\s+', ' ', comp_clean).strip().upper()
+        else:
+            composition = ""
 
-    # 1. If internal_code is provided and exists in DB, UPDATE existing record
-    if internal_code:
-        cursor.execute("SELECT * FROM fabrics WHERE internal_code = ?", (internal_code.strip().upper(),))
-        existing_by_code = cursor.fetchone()
-        if existing_by_code:
+        norm_company = normalize_fabric_text(company_name) or "GENEL"
+        norm_qname = normalize_fabric_text(quality_name)
+        norm_qcode = normalize_fabric_text(quality_code)
+        norm_color = normalize_fabric_text(color)
+
+        # 2. 4 Temel Alana Göre Eşleşen Kayıt Arama:
+        # (kumaşçı, kalite adı, kalite kodu, renk)
+        existing_record = None
+        if norm_qname or norm_qcode:
+            cursor.execute("""
+                SELECT * FROM fabrics 
+                WHERE NORM_TXT(COALESCE(company_name, 'GENEL')) = ?
+                  AND NORM_TXT(COALESCE(quality_name, '')) = ?
+                  AND NORM_TXT(COALESCE(quality_code, '')) = ?
+                  AND NORM_TXT(COALESCE(color, '')) = ?
+            """, (norm_company, norm_qname, norm_qcode, norm_color))
+            existing_record = cursor.fetchone()
+
+        # Eğer 4 alanla bulunamadıysa ve barkod verilmişse barkod eşleşmesi kontrolü
+        if not existing_record and barcode_or_qr and barcode_or_qr.strip():
+            cursor.execute(
+                "SELECT * FROM fabrics WHERE barcode_or_qr = ? AND barcode_or_qr != ''",
+                (barcode_or_qr.strip().upper(),)
+            )
+            existing_bc = cursor.fetchone()
+            if existing_bc:
+                bc_color = normalize_fabric_text(existing_bc["color"])
+                if not norm_color or bc_color == norm_color:
+                    existing_record = existing_bc
+
+        # Eğer internal_code verilmişse (Arayüzde daha önce seçilen/yüklenen iç kod)
+        if not existing_record and internal_code:
+            cursor.execute("SELECT * FROM fabrics WHERE internal_code = ?", (internal_code.strip().upper(),))
+            existing_by_code = cursor.fetchone()
+            if existing_by_code:
+                c_comp = normalize_fabric_text(existing_by_code["company_name"] or "GENEL")
+                c_qn = normalize_fabric_text(existing_by_code["quality_name"])
+                c_qc = normalize_fabric_text(existing_by_code["quality_code"])
+                c_col = normalize_fabric_text(existing_by_code["color"])
+                # Yalnızca 4 alan da aynıysa bu kaydı güncelle
+                if (c_comp == norm_company and c_qn == norm_qname and c_qc == norm_qcode and c_col == norm_color):
+                    existing_record = existing_by_code
+                # NOT: Eğer renk veya kalite kodu/adı farklı ise existing_record None kalır;
+                # böylece aynı kalitenin yeni rengi için ayrı bir satır ve yeni bir içkod oluşturulur!
+
+        # 3. KARAR: MEVCUT KAYDI GÜNCELLEME VEYA YENİ İÇKOD OLUŞTURMA
+        if existing_record:
+            # Kumaşçı, kalite adı, kalite kodu ve rengi aynı -> Veritabanında güncelle
+            rec_id = existing_record["id"]
+            final_design = design_code if design_code else (existing_record["design_code"] or "")
+            final_width = width if width else (existing_record["width"] or "")
+            final_weight = weight if weight else (existing_record["weight"] or "")
+            final_comp = composition if composition else (existing_record["composition"] or "")
+            final_barcode = barcode_or_qr if barcode_or_qr else (existing_record["barcode_or_qr"] or "")
+
             cursor.execute("""
                 UPDATE fabrics SET
                     company_name = ?,
@@ -189,97 +319,163 @@ def add_fabric(company_name, quality_code, quality_name, design_code, width, wei
                     composition = ?,
                     barcode_or_qr = ?,
                     color = ?
-                WHERE internal_code = ?
-            """, (company_name, quality_code, quality_name, design_code,
-                  width, weight, composition, barcode_or_qr, color, internal_code.strip().upper()))
+                WHERE id = ?
+            """, (company_name, quality_code, quality_name, final_design,
+                  final_width, final_weight, final_comp, final_barcode, color, rec_id))
             conn.commit()
-            cursor.execute("SELECT * FROM fabrics WHERE internal_code = ?", (internal_code.strip().upper(),))
+
+            cursor.execute("SELECT * FROM fabrics WHERE id = ?", (rec_id,))
             updated_row = dict(cursor.fetchone())
             updated_row["is_duplicate"] = False
             updated_row["is_updated"] = True
-            conn.close()
             return updated_row
+        else:
+            # Kumaşçı, kalite adı, kalite kodu veya rengi farklı -> Yeni içkod oluştur ve ekle
+            new_code = get_next_internal_code(conn)
+            cursor.execute("""
+                INSERT INTO fabrics (
+                    internal_code, company_name, quality_code, quality_name, 
+                    design_code, width, weight, composition, barcode_or_qr, color
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (new_code, company_name, quality_code, quality_name, 
+                  design_code, width, weight, composition, barcode_or_qr, color))
+            
+            conn.commit()
+            cursor.execute("SELECT * FROM fabrics WHERE id = ?", (cursor.lastrowid,))
+            new_row = dict(cursor.fetchone())
+            new_row["is_duplicate"] = False
+            new_row["is_updated"] = False
+            return new_row
+    finally:
+        conn.close()
 
-    # 2. Duplicate checking
-    # In textile, a quality (e.g. "Sandy") often has multiple colors and design variants.
-    # A true duplicate occurs ONLY if:
-    # - Barcode is non-empty and matches an existing record, OR
-    # - Company + Quality Code + Design Code + Color are ALL identical!
-    if barcode_or_qr and barcode_or_qr.strip():
-        cursor.execute(
-            "SELECT * FROM fabrics WHERE barcode_or_qr = ? AND barcode_or_qr != ''",
-            (barcode_or_qr.strip().upper(),)
-        )
-        existing_bc = cursor.fetchone()
-        if existing_bc:
-            dup_dict = dict(existing_bc)
-            dup_dict["is_duplicate"] = True
-            dup_dict["is_updated"] = False
-            conn.close()
-            return dup_dict
-
-    if (company_name != "GENEL" or quality_code) and (quality_code or quality_name or design_code):
-        cursor.execute(
-            """SELECT * FROM fabrics 
-               WHERE LOWER(company_name) = LOWER(?) 
-                 AND LOWER(quality_code) = LOWER(?)
-                 AND LOWER(COALESCE(design_code, '')) = LOWER(?)
-                 AND LOWER(COALESCE(color, '')) = LOWER(?)""",
-            (company_name, quality_code, design_code, color)
-        )
+def update_fabric(fabric_id, company_name, quality_code, quality_name, design_code, width, weight, composition, barcode_or_qr, color):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM fabrics WHERE id = ?", (fabric_id,))
         existing = cursor.fetchone()
-        if existing:
-            dup_dict = dict(existing)
-            dup_dict["is_duplicate"] = True
-            dup_dict["is_updated"] = False
-            conn.close()
-            return dup_dict
+        if not existing:
+            return None
+            
+        company_name = company_name.strip().upper() if company_name else "GENEL"
+        quality_code = quality_code.strip().upper() if quality_code else ""
+        if quality_code == "KODSUZ":
+            quality_code = ""
+        quality_name = quality_name.strip().upper() if quality_name else ""
+        design_code = design_code.strip().upper() if design_code else ""
+        color = color.strip().upper() if color else ""
+        width = width.strip().upper() if width else ""
+        weight = weight.strip().upper() if weight else ""
+        barcode_or_qr = barcode_or_qr.strip().upper() if barcode_or_qr else ""
+        
+        if composition:
+            comp_clean = re.sub(r'[/,;+]+', ' ', composition)
+            composition = re.sub(r'\s+', ' ', comp_clean).strip().upper()
+        else:
+            composition = ""
 
-    # 3. New Record Insertion
-    new_code = get_next_internal_code(conn)
-    cursor.execute("""
-        INSERT INTO fabrics (
-            internal_code, company_name, quality_code, quality_name, 
-            design_code, width, weight, composition, barcode_or_qr, color
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (new_code, company_name, quality_code, quality_name, 
-          design_code, width, weight, composition, barcode_or_qr, color))
-    
-    conn.commit()
-    cursor.execute("SELECT * FROM fabrics WHERE id = ?", (cursor.lastrowid,))
-    new_row = dict(cursor.fetchone())
-    new_row["is_duplicate"] = False
-    new_row["is_updated"] = False
-    conn.close()
-    return new_row
+        cursor.execute("""
+            UPDATE fabrics SET
+                company_name = ?,
+                quality_code = ?,
+                quality_name = ?,
+                design_code = ?,
+                width = ?,
+                weight = ?,
+                composition = ?,
+                barcode_or_qr = ?,
+                color = ?
+            WHERE id = ?
+        """, (company_name, quality_code, quality_name, design_code,
+              width, weight, composition, barcode_or_qr, color, fabric_id))
+        conn.commit()
+
+        cursor.execute("SELECT * FROM fabrics WHERE id = ?", (fabric_id,))
+        updated_row = dict(cursor.fetchone())
+        updated_row["is_duplicate"] = False
+        updated_row["is_updated"] = True
+        return updated_row
+    finally:
+        conn.close()
+
+def delete_fabric(fabric_id):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM fabrics WHERE id = ?", (fabric_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        code = row["internal_code"]
+        m = re.search(r'(\d+)$', str(code).strip())
+        if m:
+            num = int(m.group(1))
+            cursor.execute("""
+                INSERT INTO code_sequence (prefix, last_number) 
+                VALUES ('GLOBAL', ?)
+                ON CONFLICT(prefix) DO UPDATE SET last_number = MAX(code_sequence.last_number, excluded.last_number)
+            """, (num,))
+        cursor.execute("DELETE FROM fabrics WHERE id = ?", (fabric_id,))
+        conn.commit()
+        return dict(row)
+    finally:
+        conn.close()
+
+def delete_fabrics_batch(fabric_ids):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        deleted_count = 0
+        for fid in fabric_ids:
+            cursor.execute("SELECT * FROM fabrics WHERE id = ?", (fid,))
+            row = cursor.fetchone()
+            if row:
+                code = row["internal_code"]
+                m = re.search(r'(\d+)$', str(code).strip())
+                if m:
+                    num = int(m.group(1))
+                    cursor.execute("""
+                        INSERT INTO code_sequence (prefix, last_number) 
+                        VALUES ('GLOBAL', ?)
+                        ON CONFLICT(prefix) DO UPDATE SET last_number = MAX(code_sequence.last_number, excluded.last_number)
+                    """, (num,))
+                cursor.execute("DELETE FROM fabrics WHERE id = ?", (fid,))
+                deleted_count += 1
+        conn.commit()
+        return deleted_count
+    finally:
+        conn.close()
 
 def get_all_fabrics(search_query=None, start_date=None, end_date=None):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    conditions = []
-    params = []
-    
-    if search_query:
-        query = f"%{search_query}%"
-        conditions.append("(internal_code LIKE ? OR company_name LIKE ? OR quality_code LIKE ? OR quality_name LIKE ? OR design_code LIKE ? OR composition LIKE ? OR color LIKE ?)")
-        params.extend([query, query, query, query, query, query, query])
+    try:
+        cursor = conn.cursor()
         
-    if start_date:
-        conditions.append("created_at >= ?")
-        params.append(start_date)
+        conditions = []
+        params = []
         
-    if end_date:
-        conditions.append("created_at <= ?")
-        params.append(end_date)
+        if search_query:
+            query = f"%{normalize_fabric_text(search_query)}%"
+            conditions.append("(NORM_TXT(internal_code) LIKE ? OR NORM_TXT(company_name) LIKE ? OR NORM_TXT(quality_code) LIKE ? OR NORM_TXT(quality_name) LIKE ? OR NORM_TXT(design_code) LIKE ? OR NORM_TXT(composition) LIKE ? OR NORM_TXT(color) LIKE ?)")
+            params.extend([query, query, query, query, query, query, query])
+            
+        if start_date:
+            conditions.append("created_at >= ?")
+            params.append(start_date)
+            
+        if end_date:
+            conditions.append("created_at <= ?")
+            params.append(end_date)
+            
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = f"SELECT * FROM fabrics {where_clause} ORDER BY created_at DESC"
         
-    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    sql = f"SELECT * FROM fabrics {where_clause} ORDER BY created_at DESC"
-    
-    cursor.execute(sql, params)
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
 
 def export_to_xlsx(filepath, start_date=None, end_date=None):
     rows = get_all_fabrics(start_date=start_date, end_date=end_date)
@@ -384,10 +580,12 @@ def export_to_xlsx(filepath, start_date=None, end_date=None):
 
 def export_to_csv(filepath):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM fabrics ORDER BY created_at DESC")
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM fabrics ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
     
     headers = [
         "İç Kod (Internal Code)", 
@@ -771,28 +969,43 @@ def import_excel_fabrics(filepath, column_mappings):
             comp = clean_excel_text(record["composition"])
             barcode = clean_excel_text(record["barcode_or_qr"])
             
-            # Internal code determination
+            # Internal code determination & 4-Field Identity Check
             int_code = str(record["internal_code"]).strip().upper() if record["internal_code"] else ""
             
-            if not int_code:
-                int_code = get_next_internal_code(conn, code_settings)
-            
-            if not barcode:
-                barcode = int_code
+            existing = None
+            if int_code:
+                cursor.execute("SELECT * FROM fabrics WHERE internal_code = ?", (int_code,))
+                existing = cursor.fetchone()
                 
-            # Check if internal_code exists in DB
-            cursor.execute("SELECT id FROM fabrics WHERE internal_code = ?", (int_code,))
-            existing = cursor.fetchone()
+            if not existing and (q_name or q_code):
+                norm_co = normalize_fabric_text(company) or "GENEL"
+                norm_qn = normalize_fabric_text(q_name)
+                norm_qc = normalize_fabric_text(q_code)
+                norm_cl = normalize_fabric_text(color_val)
+                cursor.execute("""
+                    SELECT * FROM fabrics 
+                    WHERE NORM_TXT(COALESCE(company_name, 'GENEL')) = ?
+                      AND NORM_TXT(COALESCE(quality_name, '')) = ?
+                      AND NORM_TXT(COALESCE(quality_code, '')) = ?
+                      AND NORM_TXT(COALESCE(color, '')) = ?
+                """, (norm_co, norm_qn, norm_qc, norm_cl))
+                existing = cursor.fetchone()
             
             if existing:
+                target_code = existing["internal_code"]
+                final_bc = barcode if barcode else (existing["barcode_or_qr"] or target_code)
                 cursor.execute("""
                     UPDATE fabrics SET 
                         company_name = ?, quality_code = ?, quality_name = ?, 
                         design_code = ?, color = ?, width = ?, weight = ?, composition = ?, barcode_or_qr = ?
                     WHERE id = ?
-                """, (company, q_code, q_name, d_code, color_val, width, weight, comp, barcode, existing["id"]))
+                """, (company, q_code, q_name, d_code, color_val, width, weight, comp, final_bc, existing["id"]))
                 updated_count += 1
             else:
+                if not int_code:
+                    int_code = get_next_internal_code(conn, code_settings)
+                if not barcode:
+                    barcode = int_code
                 cursor.execute("""
                     INSERT INTO fabrics (
                         internal_code, company_name, quality_code, quality_name,

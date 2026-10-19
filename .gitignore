@@ -1,4 +1,4 @@
-﻿__pycache__/
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
@@ -9,6 +9,10 @@ ENV/
 .venv/
 uploads/*
 !uploads/.gitkeep
-backups/*.tmp
-.system_generated/
+backups/
+build/
+dist/
 *.log
+.system_generated/
+license.dat
+.api_key

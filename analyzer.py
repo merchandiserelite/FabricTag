@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 from google import genai
 from google.genai import types
 
@@ -113,8 +114,17 @@ def analyze_swatch_card(image_bytes: bytes, mime_type: str, api_key: str) -> dic
         
         client = genai.Client(api_key=api_key)
         
-        # High speed and active Google Gemini models
-        models_to_try = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash']
+        # Comprehensive cascade of Google Gemini models with priority on latest active models
+        models_to_try = [
+            'gemini-3.6-flash',
+            'gemini-3-flash-preview',
+            'gemini-3.5-flash',
+            'gemini-3.7-flash',
+            'gemini-3.8-flash',
+            'gemini-flash-latest',
+            'gemini-3.5-flash-lite',
+            'gemini-3.1-flash-lite'
+        ]
         response = None
         last_error = None
         
@@ -144,10 +154,17 @@ def analyze_swatch_card(image_bytes: bytes, mime_type: str, api_key: str) -> dic
                     )
                 logger.warning(f"Model {model_name} failed or unavailable: {str(e)}")
                 last_error = e
+                if "503" in err_str or "429" in err_str:
+                    time.sleep(1.0)
                 continue
                 
         if not response or not response.text:
-            if last_error:
+            err_msg = str(last_error) if last_error else ""
+            if "503" in err_msg or "UNAVAILABLE" in err_msg or "high demand" in err_msg.lower():
+                raise Exception("Google yapay zeka sunucularında anlık yoğunluk yaşanıyor (503). Lütfen 5-10 saniye bekleyip tekrar deneyin veya yeni bir API anahtarı girin.")
+            elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                raise Exception("Google API ücretsiz kota sınırına ulaşıldı (429). Lütfen Google AI Studio'dan yeni bir API anahtarı alıp Ayarlar'a kaydedin.")
+            elif last_error:
                 raise last_error
             else:
                 raise Exception("Tüm yapay zeka modelleri meşgul veya hata verdi. Lütfen az sonra tekrar deneyin.")
