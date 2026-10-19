@@ -10633,6 +10633,11 @@ window.__texflowApp = createApp({
                 measurements: '',
                 poka_badge_enabled: false,
                 dual_variant_enabled: false,
+                col_style_w: 16,
+                col_color_w: 14,
+                col_total_w: 10,
+                table_scale: 1.3,
+                table_row_height: 'large',
                 show_barcode: false,
                 barcode_type: 'CODE128',
                 barcode_field: 'carton_no',
@@ -10743,6 +10748,74 @@ window.__texflowApp = createApp({
             }
         };
 
+        // =========================================================================
+        // KOLİ ÜSTÜ BEDEN TABLOSU İNTERAKTİF BOYUTLANDIRMA & SÜTUN KAYDIRMA MOTORU
+        // =========================================================================
+        const isResizingCartonTable = ref(false);
+        const tableResizeMode = ref(null); // 'col_style', 'col_color', 'col_total', 'corner_table'
+        const resizeHudText = ref('');
+        const resizeHudPos = ref({ x: 0, y: 0 });
+
+        let tableResizeStart = {
+            clientX: 0,
+            clientY: 0,
+            tableWidthPx: 450,
+            tableHeightPx: 120,
+            startStyleW: 16,
+            startColorW: 14,
+            startTotalW: 10,
+            startScale: 1.3,
+            startRowHeight: 'large',
+            targetLayout: null
+        };
+
+        const startCartonColResize = (e, mode, layoutObj = null) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const tableEl = e.target.closest('table') || (e.target.closest('.group\\/cartontable') ? e.target.closest('.group\\/cartontable').querySelector('table') : null);
+            const tableRect = tableEl ? tableEl.getBoundingClientRect() : { width: 450, height: 120 };
+
+            const curStyleW = layoutObj && layoutObj.col_style_w !== undefined ? layoutObj.col_style_w : printColStyleW.value;
+            const curColorW = layoutObj && layoutObj.col_color_w !== undefined ? layoutObj.col_color_w : printColColorW.value;
+            const curTotalW = layoutObj && layoutObj.col_total_w !== undefined ? layoutObj.col_total_w : printColTotalW.value;
+            const curScale = layoutObj && layoutObj.table_scale !== undefined ? layoutObj.table_scale : printTableScale.value;
+            const curRowHeight = layoutObj && layoutObj.table_row_height ? layoutObj.table_row_height : printTableRowHeight.value;
+
+            tableResizeStart = {
+                clientX: e.clientX,
+                clientY: e.clientY,
+                tableWidthPx: tableRect.width || 450,
+                tableHeightPx: tableRect.height || 120,
+                startStyleW: Number(curStyleW || 16),
+                startColorW: Number(curColorW || 14),
+                startTotalW: Number(curTotalW || 10),
+                startScale: Number(curScale || 1.3),
+                startRowHeight: curRowHeight || 'large',
+                targetLayout: layoutObj
+            };
+
+            isResizingCartonTable.value = true;
+            tableResizeMode.value = mode;
+            document.body.style.userSelect = 'none';
+
+            if (mode === 'corner_table') {
+                document.body.style.cursor = 'nwse-resize';
+                const curRem = Math.max(10, 100 - (tableResizeStart.startStyleW + tableResizeStart.startColorW + tableResizeStart.startTotalW));
+                resizeHudText.value = `Tablo Ölçeği: %${Math.round(tableResizeStart.startScale * 100)} | Beden Payı: %${curRem}`;
+            } else if (mode === 'col_style') {
+                document.body.style.cursor = 'col-resize';
+                resizeHudText.value = `Model (Style) Genişliği: %${tableResizeStart.startStyleW}`;
+            } else if (mode === 'col_color') {
+                document.body.style.cursor = 'col-resize';
+                resizeHudText.value = `Renk (Colour) Genişliği: %${tableResizeStart.startColorW}`;
+            } else if (mode === 'col_total') {
+                document.body.style.cursor = 'col-resize';
+                resizeHudText.value = `Total Genişliği: %${tableResizeStart.startTotalW}`;
+            }
+            resizeHudPos.value = { x: e.clientX, y: e.clientY - 25 };
+        };
+
         const startCanvasElemDrag = (e, elemId) => {
             e.preventDefault();
             selectDesignerElem(elemId);
@@ -10757,6 +10830,68 @@ window.__texflowApp = createApp({
         };
 
         window.addEventListener('mousemove', (e) => {
+            // 1. Koli Üstü Tablo / Sütun Boyutlandırma
+            if (isResizingCartonTable.value && tableResizeMode.value) {
+                const diffX = e.clientX - tableResizeStart.clientX;
+                const diffY = e.clientY - tableResizeStart.clientY;
+                const tableW = Math.max(200, tableResizeStart.tableWidthPx);
+                const diffPct = (diffX / tableW) * 100;
+                const isDesigner = !!tableResizeStart.targetLayout;
+                const tgt = tableResizeStart.targetLayout;
+
+                resizeHudPos.value = { x: e.clientX, y: e.clientY - 30 };
+
+                if (tableResizeMode.value === 'col_style') {
+                    const newStyle = Math.round(Math.max(6, Math.min(35, tableResizeStart.startStyleW + diffPct)));
+                    if (isDesigner) tgt.col_style_w = newStyle;
+                    else printColStyleW.value = newStyle;
+
+                    const curColor = isDesigner ? (tgt.col_color_w || 14) : printColColorW.value;
+                    const curTotal = isDesigner ? (tgt.col_total_w || 10) : printColTotalW.value;
+                    const curRem = Math.max(10, 100 - (newStyle + Number(curColor) + Number(curTotal)));
+                    resizeHudText.value = `Model (Style): %${newStyle} ➔ Bedenlere Kalan Pay: %${curRem} (Eşit Dağıtıldı)`;
+                } else if (tableResizeMode.value === 'col_color') {
+                    const newColor = Math.round(Math.max(6, Math.min(35, tableResizeStart.startColorW + diffPct)));
+                    if (isDesigner) tgt.col_color_w = newColor;
+                    else printColColorW.value = newColor;
+
+                    const curStyle = isDesigner ? (tgt.col_style_w || 16) : printColStyleW.value;
+                    const curTotal = isDesigner ? (tgt.col_total_w || 10) : printColTotalW.value;
+                    const curRem = Math.max(10, 100 - (Number(curStyle) + newColor + Number(curTotal)));
+                    resizeHudText.value = `Renk (Colour): %${newColor} ➔ Bedenlere Kalan Pay: %${curRem} (Eşit Dağıtıldı)`;
+                } else if (tableResizeMode.value === 'col_total') {
+                    const newTotal = Math.round(Math.max(6, Math.min(25, tableResizeStart.startTotalW - diffPct)));
+                    if (isDesigner) tgt.col_total_w = newTotal;
+                    else printColTotalW.value = newTotal;
+
+                    const curStyle = isDesigner ? (tgt.col_style_w || 16) : printColStyleW.value;
+                    const curColor = isDesigner ? (tgt.col_color_w || 14) : printColColorW.value;
+                    const curRem = Math.max(10, 100 - (Number(curStyle) + Number(curColor) + newTotal));
+                    resizeHudText.value = `Total: %${newTotal} ➔ Bedenlere Kalan Pay: %${curRem} (Eşit Dağıtıldı)`;
+                } else if (tableResizeMode.value === 'corner_table') {
+                    const scaleDelta = diffX / 250;
+                    const newScale = Math.max(0.80, Math.min(1.80, Math.round((tableResizeStart.startScale + scaleDelta) * 20) / 20));
+
+                    let newRowHeight = tableResizeStart.startRowHeight;
+                    if (diffY > 35 && newRowHeight === 'normal') newRowHeight = 'large';
+                    if (diffY > 75) newRowHeight = 'xlarge';
+                    if (diffY < -30 && newRowHeight === 'xlarge') newRowHeight = 'large';
+                    if (diffY < -60) newRowHeight = 'normal';
+
+                    if (isDesigner) {
+                        tgt.table_scale = newScale;
+                        tgt.table_row_height = newRowHeight;
+                    } else {
+                        printTableScale.value = newScale;
+                        printTableRowHeight.value = newRowHeight;
+                    }
+                    const rowLabels = { normal: 'Kompakt', large: 'Geniş (Önerilen)', xlarge: 'Çok Geniş' };
+                    resizeHudText.value = `Tablo Ölçeği: %${Math.round(newScale * 100)} | Satır: ${rowLabels[newRowHeight] || newRowHeight}`;
+                }
+                return;
+            }
+
+            // 2. Tuval Öğesi Serbest Sürükleme
             if (!isDraggingCanvasElem.value || !dragCanvasElemId) return;
             const container = document.getElementById('designer-active-sticker-card');
             const widthMm = (designerTemplate.value.layout_json && designerTemplate.value.layout_json.sticker_width_mm) || 
@@ -10779,6 +10914,30 @@ window.__texflowApp = createApp({
         });
 
         window.addEventListener('mouseup', () => {
+            if (isResizingCartonTable.value) {
+                isResizingCartonTable.value = false;
+                tableResizeMode.value = null;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+
+                try {
+                    localStorage.setItem('texflow_carton_size_settings', JSON.stringify({
+                        col_style_w: printColStyleW.value,
+                        col_color_w: printColColorW.value,
+                        col_total_w: printColTotalW.value,
+                        table_scale: printTableScale.value,
+                        table_row_height: printTableRowHeight.value
+                    }));
+                } catch (e) {}
+
+                if (activeCartonTemplate.value && activeCartonTemplate.value.layout_json) {
+                    activeCartonTemplate.value.layout_json.col_style_w = printColStyleW.value;
+                    activeCartonTemplate.value.layout_json.col_color_w = printColColorW.value;
+                    activeCartonTemplate.value.layout_json.col_total_w = printColTotalW.value;
+                    activeCartonTemplate.value.layout_json.table_scale = printTableScale.value;
+                    activeCartonTemplate.value.layout_json.table_row_height = printTableRowHeight.value;
+                }
+            }
             if (isDraggingCanvasElem.value) {
                 isDraggingCanvasElem.value = false;
                 dragCanvasElemId = null;
@@ -10865,12 +11024,120 @@ window.__texflowApp = createApp({
         const printShowGridLines = ref(true);
         const printBorderStyle = ref('solid');
         const printBorderWidth = ref(2);
-        const printFontScale = ref(1.0);
+        const printFontScale = ref(1.15); // Default 1.15 = 115% for clear, large carton text
         const printMarginMm = ref(6);
         const printCustomWidth = ref(297);
         const printCustomHeight = ref(210);
         const printShowPokaBadge = ref(false); // Default: false (koli ustunde rozet gizli / silinmis)
         const printCustomBrand = ref('');
+
+        // Size Distribution & Table Sizing Configuration (Depo Okuma Standartları)
+        const printColStyleW = ref(16); // % width for Style column (default 16%)
+        const printColColorW = ref(14); // % width for Color column (default 14%)
+        const printColTotalW = ref(10); // % width for Total column (default 10%)
+        const printTableScale = ref(1.3); // Table font & cell scale factor (default 1.30 = 130%)
+        const printTableRowHeight = ref('large'); // 'normal', 'large', 'xlarge'
+        const showTableSizeSettings = ref(false); // popover panel visibility
+
+        // Try to load any previously stored manual table sizing preference
+        try {
+            const savedSizeSettings = localStorage.getItem('texflow_carton_size_settings');
+            if (savedSizeSettings) {
+                const parsed = JSON.parse(savedSizeSettings);
+                const totalNonSizes = (Number(parsed.col_style_w) || 0) + (Number(parsed.col_color_w) || 0) + (Number(parsed.col_total_w) || 0);
+                if (totalNonSizes > 0 && totalNonSizes <= 45) {
+                    if (parsed.col_style_w) printColStyleW.value = Number(parsed.col_style_w);
+                    if (parsed.col_color_w) printColColorW.value = Number(parsed.col_color_w);
+                    if (parsed.col_total_w) printColTotalW.value = Number(parsed.col_total_w);
+                } else {
+                    printColStyleW.value = 16;
+                    printColColorW.value = 14;
+                    printColTotalW.value = 10;
+                }
+                if (parsed.table_scale) printTableScale.value = Number(parsed.table_scale);
+                if (parsed.table_row_height) printTableRowHeight.value = parsed.table_row_height;
+                if (parsed.font_scale) printFontScale.value = Number(parsed.font_scale);
+            }
+        } catch (e) {}
+
+        const printRemainingSizesW = computed(() => {
+            const used = Number(printColStyleW.value || 16) + Number(printColColorW.value || 14) + Number(printColTotalW.value || 10);
+            return Math.max(20, 100 - used);
+        });
+
+        const getCartonFontPx = (basePx, customScale = null) => {
+            const scale = Number(customScale !== null && customScale !== undefined ? customScale : (printFontScale.value || 1.15));
+            return Math.round(basePx * scale);
+        };
+
+        const getCartonSizeColWidth = (carton = null) => {
+            const headers = getCartonSizeHeaders(carton);
+            const count = (headers && headers.length) ? headers.length : 6;
+            const styleW = carton?.layout?.col_style_w !== undefined ? carton.layout.col_style_w : (printColStyleW.value || 16);
+            const colorW = carton?.layout?.col_color_w !== undefined ? carton.layout.col_color_w : (printColColorW.value || 14);
+            const totalW = carton?.layout?.col_total_w !== undefined ? carton.layout.col_total_w : (printColTotalW.value || 10);
+            const rem = Math.max(20, 100 - (Number(styleW) + Number(colorW) + Number(totalW)));
+            const w = rem / count;
+            return `${w.toFixed(2)}%`;
+        };
+
+        const getCartonTableContainerStyle = (carton = null) => {
+            const headers = getCartonSizeHeaders(carton);
+            const count = (headers && headers.length) ? headers.length : 6;
+            const styleW = carton?.layout?.col_style_w !== undefined ? carton.layout.col_style_w : (printColStyleW.value || 16);
+            const colorW = carton?.layout?.col_color_w !== undefined ? carton.layout.col_color_w : (printColColorW.value || 14);
+            const totalW = carton?.layout?.col_total_w !== undefined ? carton.layout.col_total_w : (printColTotalW.value || 10);
+            const rem = Math.max(20, 100 - (Number(styleW) + Number(colorW) + Number(totalW)));
+            const sizeColW = (rem / count).toFixed(2);
+            return {
+                '--carton-col-style-w': `${styleW}%`,
+                '--carton-col-color-w': `${colorW}%`,
+                '--carton-col-total-w': `${totalW}%`,
+                '--carton-col-size-w': `${sizeColW}%`
+            };
+        };
+
+        const getCartonTableRowHeightPx = (layout = '2up', customScale = null, customRowHeight = null) => {
+            let baseH = 34;
+            if (layout === '6up') baseH = 22;
+            else if (layout === '4up') baseH = 28;
+            else if (layout === '1up') baseH = 44;
+            const scale = Number(customScale !== null && customScale !== undefined ? customScale : (printTableScale.value || 1.3));
+            const fontScale = Number(printFontScale.value || 1.15);
+            const rh = customRowHeight || printTableRowHeight.value;
+            const hFactor = rh === 'xlarge' ? 1.35 : (rh === 'large' ? 1.15 : 1.0);
+            return Math.round(baseH * scale * hFactor * Math.max(1.0, (fontScale - 1.0) * 0.4 + 1.0));
+        };
+
+        const getCartonSizeFontSizePx = (layout = '2up', isQty = false, customScale = null) => {
+            let base = isQty ? 16 : 13;
+            if (layout === '6up') base = isQty ? 11 : 9;
+            else if (layout === '4up') base = isQty ? 14 : 11;
+            else if (layout === '1up') base = isQty ? 20 : 16;
+            const tableScale = Number(customScale !== null && customScale !== undefined ? customScale : (printTableScale.value || 1.3));
+            const fontScale = Number(printFontScale.value || 1.15);
+            return Math.round(base * tableScale * fontScale);
+        };
+
+        const applyTablePreset = (mode) => {
+            if (mode === 'warehouse') {
+                printColStyleW.value = 16;
+                printColColorW.value = 14;
+                printColTotalW.value = 10;
+                printTableScale.value = 1.35;
+                printFontScale.value = 1.25;
+                printTableRowHeight.value = 'large';
+                showToast('info', 'Depo Okuma Modu uygulandı: Bedenler %60, İri yazı boyutu ve yüksek satır.');
+            } else if (mode === 'balanced') {
+                printColStyleW.value = 18;
+                printColColorW.value = 16;
+                printColTotalW.value = 10;
+                printTableScale.value = 1.1;
+                printFontScale.value = 1.1;
+                printTableRowHeight.value = 'normal';
+                showToast('info', 'Standart Dengeli Mod uygulandı: Bedenler %56.');
+            }
+        };
 
         const isStockCarton = (carton) => {
             if (!carton) return false;
@@ -11016,6 +11283,19 @@ window.__texflowApp = createApp({
             } else {
                 printCustomBrand.value = '';
             }
+
+            if (tpl.layout_json) {
+                if (tpl.layout_json.col_style_w !== undefined) printColStyleW.value = Number(tpl.layout_json.col_style_w);
+                else printColStyleW.value = 16;
+                if (tpl.layout_json.col_color_w !== undefined) printColColorW.value = Number(tpl.layout_json.col_color_w);
+                else printColColorW.value = 14;
+                if (tpl.layout_json.col_total_w !== undefined) printColTotalW.value = Number(tpl.layout_json.col_total_w);
+                else printColTotalW.value = 10;
+                if (tpl.layout_json.table_scale !== undefined) printTableScale.value = Number(tpl.layout_json.table_scale);
+                else printTableScale.value = 1.3;
+                if (tpl.layout_json.table_row_height !== undefined) printTableRowHeight.value = tpl.layout_json.table_row_height;
+                else printTableRowHeight.value = 'large';
+            }
         };
 
         const onPrintPaperSizeChange = (newSize) => {
@@ -11136,17 +11416,34 @@ window.__texflowApp = createApp({
                 font_scale: printFontScale.value,
                 layout_json: Object.assign({}, activeCartonTemplate.value ? activeCartonTemplate.value.layout_json : {}, {
                     poka_badge_enabled: printShowPokaBadge.value,
-                    brand: printCustomBrand.value ? `BRAND: ${printCustomBrand.value}` : 'BRAND: ANNA'
+                    brand: printCustomBrand.value ? `BRAND: ${printCustomBrand.value}` : 'BRAND: ANNA',
+                    col_style_w: printColStyleW.value,
+                    col_color_w: printColColorW.value,
+                    col_total_w: printColTotalW.value,
+                    table_scale: printTableScale.value,
+                    table_row_height: printTableRowHeight.value
                 }),
                 is_default: true
             };
 
             try {
+                // Also cache to localStorage for instant reuse across all carton labels
+                try {
+                    localStorage.setItem('texflow_carton_size_settings', JSON.stringify({
+                        col_style_w: printColStyleW.value,
+                        col_color_w: printColColorW.value,
+                        col_total_w: printColTotalW.value,
+                        table_scale: printTableScale.value,
+                        table_row_height: printTableRowHeight.value,
+                        font_scale: printFontScale.value
+                    }));
+                } catch (e) {}
+
                 const res = await apiFetch('/api/carton-templates/save', {
                     method: 'POST',
                     body: JSON.stringify(payload)
                 });
-                showToast('success', `"${customer}" için sayfa yapısı (${printPaperSize.value}) başarıyla kaydedildi!`);
+                showToast('success', `"${customer}" için sayfa ve beden tablosu yapısı başarıyla kaydedildi!`);
                 await loadCartonTemplates(customer);
             } catch (err) {
                 showToast('error', err.message || 'Sayfa yapısı kaydedilemedi.');
@@ -11238,6 +11535,21 @@ window.__texflowApp = createApp({
                     else if (designerTemplate.value.items_per_page === 4) designerTemplate.value.sticker_format = 'A4_4up';
                     else if (designerTemplate.value.paper_size.includes('Argox')) designerTemplate.value.sticker_format = designerTemplate.value.paper_size;
                     else designerTemplate.value.sticker_format = 'A4_2up_landscape';
+                }
+                if (designerTemplate.value.layout_json.col_style_w === undefined) {
+                    designerTemplate.value.layout_json.col_style_w = printColStyleW.value || 16;
+                }
+                if (designerTemplate.value.layout_json.col_color_w === undefined) {
+                    designerTemplate.value.layout_json.col_color_w = printColColorW.value || 14;
+                }
+                if (designerTemplate.value.layout_json.col_total_w === undefined) {
+                    designerTemplate.value.layout_json.col_total_w = printColTotalW.value || 10;
+                }
+                if (designerTemplate.value.layout_json.table_scale === undefined) {
+                    designerTemplate.value.layout_json.table_scale = printTableScale.value || 1.3;
+                }
+                if (!designerTemplate.value.layout_json.table_row_height) {
+                    designerTemplate.value.layout_json.table_row_height = printTableRowHeight.value || 'large';
                 }
             } else {
                 designerTemplate.value = getCleanBlankTemplate();
@@ -11581,7 +11893,12 @@ window.__texflowApp = createApp({
         const getPrintElemOffset = (elemId) => {
             const tpl = activeCartonTemplate.value;
             if (!tpl || !tpl.layout_json || !tpl.layout_json.element_offsets) return { x: 0, y: 0 };
-            return tpl.layout_json.element_offsets[elemId] || { x: 0, y: 0 };
+            const off = tpl.layout_json.element_offsets[elemId] || { x: 0, y: 0 };
+            // Adresin ve basligin koli kutusu disina sola veya yukariya firlamasini engelleyen koruma
+            if (elemId === 'address' && (off.x < 0 || off.y < -5)) {
+                return { x: Math.max(0, off.x || 0), y: Math.max(-2, off.y || 0) };
+            }
+            return off;
         };
 
         const getPrintElemTransform = (elemId) => {
@@ -12320,8 +12637,26 @@ window.__texflowApp = createApp({
             getPrintCartonPairs,
             printShowPokaBadge,
             printCustomBrand,
+            printColStyleW,
+            printColColorW,
+            printColTotalW,
+            printTableScale,
+            printTableRowHeight,
+            showTableSizeSettings,
+            printRemainingSizesW,
+            getCartonSizeColWidth,
+            getCartonTableContainerStyle,
+            getCartonTableRowHeightPx,
+            getCartonSizeFontSizePx,
+            getCartonFontPx,
+            applyTablePreset,
             formatCartonSizeQty,
             getCartonSizeHeaders,
+            isResizingCartonTable,
+            tableResizeMode,
+            resizeHudText,
+            resizeHudPos,
+            startCartonColResize,
             isStockCarton,
             availableFonts,
             fontSizesList,

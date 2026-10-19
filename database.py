@@ -337,6 +337,11 @@ def init_db():
             "barcode_type": "CODE128",
             "barcode_field": "carton_no",
             "sticker_format": "A4_2up",
+            "col_style_w": 16,
+            "col_color_w": 14,
+            "col_total_w": 10,
+            "table_scale": 1.3,
+            "table_row_height": "large",
             "element_offsets": {
                 "header": {"x": 0, "y": 0},
                 "address": {"x": 0, "y": 0},
@@ -370,6 +375,11 @@ def init_db():
             "grid_rows": 3,
             "sticker_width_mm": 105,
             "sticker_height_mm": 99,
+            "col_style_w": 16,
+            "col_color_w": 14,
+            "col_total_w": 10,
+            "table_scale": 1.1,
+            "table_row_height": "large",
             "element_offsets": {}
         }, ensure_ascii=False)
 
@@ -393,13 +403,13 @@ def init_db():
         cursor.execute("""
         INSERT INTO carton_label_templates 
         (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
-        VALUES (1, 'Standart / Genel', 'A4 Yatay Koli Üstü Şablonu (2\'li)', 'A4', 'landscape', 297, 210, 2, 'solid', 2, 1, 6, 1.0, ?, 1)
+        VALUES (1, 'Standart / Genel', 'A4 Yatay Koli Üstü Şablonu (2''li)', 'A4', 'landscape', 297, 210, 2, 'solid', 2, 1, 6, 1.0, ?, 1)
         """, (default_clean_layout,))
 
         cursor.execute("""
         INSERT INTO carton_label_templates 
         (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
-        VALUES (1, 'Standart / Genel', 'A4 6\'lı Sticker (2x3 Tabaka)', 'A4', 'portrait', 210, 297, 6, 'solid', 1, 1, 4, 0.85, ?, 0)
+        VALUES (1, 'Standart / Genel', 'A4 6''lı Sticker (2x3 Tabaka)', 'A4', 'portrait', 210, 297, 6, 'solid', 1, 1, 4, 0.85, ?, 0)
         """, (default_6up_layout,))
 
         cursor.execute("""
