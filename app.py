@@ -2317,6 +2317,7 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
         "AKS",
         "ETKOL",
         "LOGO",
+        "NAKIŞ",
         "BRİT",
         "LASTİK",
         "Düğme",
@@ -2329,7 +2330,6 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
         "DİKME",
         "İlik-Düğme",
         "Çıtçıt Çakım",
-        "",
         "",
         "",
         "",
@@ -2466,17 +2466,14 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
         fabrics = cost_data.get("fabrics") or []
         items = cost_data.get("items") or []
 
-        def get_item_val(keywords):
-            for it in items:
-                n = (it.get("name") or "").lower()
-                if any(k.lower() in n for k in keywords):
-                    v = it.get("total_tl")
-                    if v is None or v == "":
-                        v = it.get("evaluated_price")
-                    if v is None or v == "":
-                        v = it.get("price")
-                    return safe_num(v, 0.0)
-            return 0.0
+        def normalize_tr(text):
+            if not text:
+                return ""
+            s_val = str(text).replace("İ", "i").replace("I", "i").replace("ı", "i").replace("\u0307", "")
+            tr_map = {"ğ": "g", "ü": "u", "ş": "s", "ö": "o", "ç": "c"}
+            for c, r in tr_map.items():
+                s_val = s_val.replace(c, r).replace(c.upper(), r)
+            return s_val.lower().strip()
 
         fb1 = fabrics[0] if len(fabrics) > 0 else {}
         fb1_price = safe_num(fb1.get("price") or s.get("fabric_price_1"))
@@ -2501,28 +2498,79 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
 
         kumas_toplam = safe_num(cost_data.get("totals", {}).get("toplam_kumas_tl") or (fb1_total + fb2_total + fb3_total))
 
-        v_fason = get_item_val(["fason", "dikim"])
-        v_kesim = get_item_val(["kesim"])
-        v_aks = get_item_val(["aksesuar", "aks"])
-        v_etkol = get_item_val(["etiket", "kol", "etkol"])
-        v_logo = get_item_val(["logo", "baskı", "nakış"])
-        v_brit = get_item_val(["brit"])
-        v_lastik = get_item_val(["lastik"])
-        v_dugme = get_item_val(["düğme", "fermuar"])
-        v_citcit = get_item_val(["çıtçıt"])
-        v_diger = get_item_val(["diğer", "tasarım", "kalıp"])
-        v_kargo = get_item_val(["kargo"])
-        v_nakliye = get_item_val(["nakliye"])
-        v_kumas_extra = get_item_val(["yıkama", "taş"]) or (fb1_total if not get_item_val(["yıkama", "taş"]) else 0.0)
-        v_astar = get_item_val(["astar", "tela"])
-        v_dikme = get_item_val(["dikme", "el dikişi"])
-        v_ilik_dugme = get_item_val(["ilik", "ilik-düğme"])
-        v_citcit_cakim = get_item_val(["çakım", "çıtçıt çakım"])
+        v_fason = 0.0
+        v_kesim = 0.0
+        v_aks = 0.0
+        v_etkol = 0.0
+        v_logo = 0.0
+        v_nakis = 0.0
+        v_brit = 0.0
+        v_lastik = 0.0
+        v_dugme = 0.0
+        v_citcit = 0.0
+        v_diger = 0.0
+        v_kargo = 0.0
+        v_nakliye = 0.0
+        v_kumas_extra = 0.0
+        v_astar = 0.0
+        v_dikme = 0.0
+        v_ilik_dugme = 0.0
+        v_citcit_cakim = 0.0
+
+        for it in items:
+            n = normalize_tr(it.get("name"))
+            v = it.get("total_tl")
+            if v is None or v == "":
+                v = it.get("evaluated_price")
+            if v is None or v == "":
+                v = it.get("price")
+            val = safe_num(v, 0.0)
+            if val == 0.0:
+                continue
+
+            if "ilik" in n:
+                v_ilik_dugme += val
+            elif "cakim" in n:
+                v_citcit_cakim += val
+            elif "citcit" in n:
+                v_citcit += val
+            elif "dugme" in n or "fermuar" in n:
+                v_dugme += val
+            elif any(k in n for k in ["fason", "dikim"]):
+                v_fason += val
+            elif any(k in n for k in ["kesim", "pastal"]):
+                v_kesim += val
+            elif any(k in n for k in ["etiket", "etkol", "kol"]):
+                v_etkol += val
+            elif "logo" in n:
+                v_logo += val
+            elif any(k in n for k in ["nakis", "naki", "nakış", "baski", "baskı", "tas", "taş"]):
+                v_nakis += val
+            elif any(k in n for k in ["brit", "birit", "biye"]):
+                v_brit += val
+            elif "lastik" in n:
+                v_lastik += val
+            elif "kargo" in n:
+                v_kargo += val
+            elif any(k in n for k in ["nakliye", "sevkiyat"]):
+                v_nakliye += val
+            elif any(k in n for k in ["yikama", "apre", "terbiye"]):
+                v_kumas_extra += val
+            elif any(k in n for k in ["astar", "tela", "vatka"]):
+                v_astar += val
+            elif any(k in n for k in ["dikme", "el dikisi"]):
+                v_dikme += val
+            elif any(k in n for k in ["aksesuar", "aks", "kapsul"]):
+                v_aks += val
+            else:
+                # Maliyette girilen diger tum kalemler
+                v_diger += val
 
         totals = cost_data.get("totals") or {}
         maliyet_tl = safe_num(totals.get("maliyet_1_tl") or totals.get("maliyet_2_tl"))
         if maliyet_tl == 0.0 and (kumas_toplam > 0 or v_fason > 0):
-            maliyet_tl = round((kumas_toplam + v_fason + v_kesim + v_aks + v_etkol + v_kargo + v_nakliye + v_diger) * 1.06, 2)
+            imalat_sum = v_fason + v_kesim + v_aks + v_etkol + v_logo + v_nakis + v_brit + v_lastik + v_dugme + v_citcit + v_diger + v_kargo + v_nakliye + v_kumas_extra + v_astar + v_dikme + v_ilik_dugme + v_citcit_cakim
+            maliyet_tl = round((kumas_toplam + imalat_sum) * 1.06, 2)
             
         maliyet_eur = safe_num(totals.get("maliyet_1_doviz") or (round(maliyet_tl / eur_rate, 2) if eur_rate > 0 else 0.0))
         price = safe_num(totals.get("toplam_satis_doviz") or s.get("unit_price"))
@@ -2619,6 +2667,7 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
             v_aks if v_aks else 0,
             v_etkol if v_etkol else 0,
             v_logo if v_logo else 0,
+            v_nakis if v_nakis else 0,
             v_brit if v_brit else 0,
             v_lastik if v_lastik else 0,
             v_dugme if v_dugme else 0,
@@ -2631,7 +2680,6 @@ def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, compan
             v_dikme if v_dikme else 0,
             v_ilik_dugme if v_ilik_dugme else 0,
             v_citcit_cakim if v_citcit_cakim else 0,
-            None,
             None,
             None,
             None,
@@ -3386,6 +3434,7 @@ class ShippingSizeItem(BaseModel):
 class ShippingUpdateRequest(BaseModel):
     style_id: int
     sizes: List[ShippingSizeItem] = []
+    shipping_date: Optional[str] = None
 
 @app.post("/api/shipping/update")
 def api_update_shipping(req: ShippingUpdateRequest, user: Dict[str, Any] = Depends(require_user)):
@@ -3402,6 +3451,13 @@ def api_update_shipping(req: ShippingUpdateRequest, user: Dict[str, Any] = Depen
     user_name = user.get("full_name") or user.get("username") or "Sevkiyat Sorumlusu"
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
 
+    final_shipping_date = (req.shipping_date or "").strip()
+    if not final_shipping_date:
+        c.execute("SELECT o.delivery_date FROM styles s JOIN orders o ON s.order_id = o.id WHERE s.id = ?", (req.style_id,))
+        o_row = c.fetchone()
+        del_date = o_row[0] if o_row else None
+        final_shipping_date = style_row["shipping_date"] or del_date or now_str
+
     total_shipped_qty = 0
     for sz in req.sizes:
         c.execute("""
@@ -3415,7 +3471,7 @@ def api_update_shipping(req: ShippingUpdateRequest, user: Dict[str, Any] = Depen
     UPDATE styles 
     SET shipping_date = ?, updated_at = CURRENT_TIMESTAMP 
     WHERE id = ?
-    """, (now_str, req.style_id))
+    """, (final_shipping_date, req.style_id))
 
     c.execute("""
     INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
@@ -3430,7 +3486,7 @@ def api_update_shipping(req: ShippingUpdateRequest, user: Dict[str, Any] = Depen
         "status": "success",
         "style_id": req.style_id,
         "total_shipped_quantity": total_shipped_qty,
-        "shipping_date": now_str
+        "shipping_date": final_shipping_date
     }
 
 
@@ -3495,8 +3551,8 @@ def find_matching_styles_for_packing(customer: str, style_no: str, color_name: s
             scored.append((score, s))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    best_match = scored[0][1] if scored else (all_styles[0] if all_styles else None)
-    candidates = [item[1] for item in scored[:limit]]
+    best_match = scored[0][1] if (scored and scored[0][0] >= 30) else None
+    candidates = [item[1] for item in scored[:limit] if item[0] >= 30]
     return best_match, candidates
 
 @app.post("/api/packing-list/upload")
@@ -3637,7 +3693,7 @@ def api_process_packing_list(
         "message": f"Çeki listesi başarıyla sisteme işlendi. Toplam {total_shipped_qty} adet kaydedildi.",
         "style_id": req.style_id,
         "total_shipped_quantity": total_shipped_qty,
-        "shipping_date": now_str
+        "shipping_date": final_shipping_date
     }
 
 

@@ -1907,13 +1907,16 @@ Critical Rules:
     def _parse_packing_list_excel(cls, file_path: str) -> Dict[str, Any]:
         """
         Extracts structured packing list data from Excel files (.xlsx, .xlsm, .xls)
-        supporting Anna Van Toor (both table & vertical block formats) and universal formats.
+        supporting Anna Van Toor (both table & vertical block formats), SOLV, and universal formats.
         """
         from collections import Counter
         from pathlib import Path
+        import os
         ext = Path(file_path).suffix.lower()
 
         # 1. Load rows using xlrd for .xls, openpyxl for .xlsx/.xlsm
+        # Intelligently score sheets: prioritize data table sheets ('çeki', 'packing', 'list')
+        # over single-label design preview sheets ('koli üstü', 'label', 'etiket', 'şablon').
         rows = []
         sheet_name = None
         if ext == ".xls":
@@ -1927,25 +1930,33 @@ Critical Rules:
                 except Exception:
                     raise ImportError("Eski .xls formatındaki çeki listesini okumak için 'xlrd' kütüphanesi gereklidir. Lütfen 'pip install xlrd' çalıştırınız.")
             wb_xls = xlrd.open_workbook(file_path)
+            candidate_sheets = []
             for name in wb_xls.sheet_names():
-                norm = name.lower()
-                if any(k in norm for k in ['çeki', 'ceki', 'packing', 'koli', 'anna', 'list']):
-                    sheet_name = name
-                    break
-            if not sheet_name:
-                sheet_name = wb_xls.sheet_names()[0]
+                norm = name.lower().replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+                is_label_preview = any(k in norm for k in ['koli ustu', 'koli_ustu', 'label', 'etiket', 'sablon'])
+                score = 0
+                if any(k in norm for k in ['ceki', 'packing']): score += 50
+                if 'list' in norm: score += 20
+                if is_label_preview: score -= 40
+                candidate_sheets.append((score, name))
+            candidate_sheets.sort(key=lambda x: x[0], reverse=True)
+            sheet_name = candidate_sheets[0][1] if candidate_sheets else wb_xls.sheet_names()[0]
             ws = wb_xls.sheet_by_name(sheet_name)
             rows = [[ws.cell_value(r, c) for c in range(ws.ncols)] for r in range(ws.nrows)]
         else:
             import openpyxl
             wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            candidate_sheets = []
             for name in wb.sheetnames:
-                norm = name.lower()
-                if any(k in norm for k in ['çeki', 'ceki', 'packing', 'koli', 'anna', 'list']):
-                    sheet_name = name
-                    break
-            if not sheet_name:
-                sheet_name = wb.sheetnames[0]
+                norm = name.lower().replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+                is_label_preview = any(k in norm for k in ['koli ustu', 'koli_ustu', 'label', 'etiket', 'sablon'])
+                score = 0
+                if any(k in norm for k in ['ceki', 'packing']): score += 50
+                if 'list' in norm: score += 20
+                if is_label_preview: score -= 40
+                candidate_sheets.append((score, name))
+            candidate_sheets.sort(key=lambda x: x[0], reverse=True)
+            sheet_name = candidate_sheets[0][1] if candidate_sheets else wb.sheetnames[0]
             ws = wb[sheet_name]
             rows = [list(r) for r in ws.iter_rows(values_only=True)]
             wb.close()
@@ -1953,10 +1964,21 @@ Critical Rules:
         if not rows:
             raise ValueError("Çeki listesi sayfası boş veya okunamadı.")
 
-        # 2. Check for Brand, Style No & Customer in header area (top 15 rows)
+        # 2. Check for Brand, Style No & Customer in header area (top 15 rows) or filename/other sheets
         detected_customer = ""
         detected_brand = ""
         detected_style = ""
+
+        # Check filename first
+        fname = os.path.basename(file_path)
+        m_fn = re.match(r'^([A-Za-z0-9\s_-]+?)(?:\s+(?:KOL[İI]|CEK[İI]|ŞABLON|SABLON|USTU|ÜSTÜ|LABEL|CARTON))', fname, re.IGNORECASE)
+        if m_fn:
+            candidate_fn_cust = m_fn.group(1).strip()
+            if candidate_fn_cust and len(candidate_fn_cust) >= 2:
+                detected_customer = candidate_fn_cust
+                detected_brand = candidate_fn_cust
+
+        # Scan rows in selected sheet
         for r in rows[:15]:
             for val in r:
                 s_val = str(val or '').strip()
@@ -1979,8 +2001,35 @@ Critical Rules:
                 if 'anna' in s_val.lower() and 'van' in s_val.lower():
                     detected_customer = "Anna van Toor B.V."
 
-        if not detected_brand:
-            detected_brand = ""
+        # If customer still not detected, scan other sheets for customer headers/multiline blocks
+        if not detected_customer and ext != ".xls":
+            try:
+                import openpyxl
+                wb_scan = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+                for s_chk in wb_scan.sheetnames:
+                    ws_chk = wb_scan[s_chk]
+                    for r_chk in ws_chk.iter_rows(max_row=12, max_col=8, values_only=True):
+                        for v_chk in r_chk:
+                            if v_chk and isinstance(v_chk, str):
+                                v_chk_str = v_chk.strip()
+                                if chr(10) in v_chk_str:
+                                    lines_chk = [l.strip() for l in v_chk_str.split(chr(10)) if l.strip()]
+                                    if lines_chk and not any(k in lines_chk[0].lower() for k in ['style', 'colour', 'color', 'brand', 'koli', 'beden', 'carton', 'total', 'quantity', 'size']):
+                                        detected_customer = lines_chk[0]
+                                        if not detected_brand: detected_brand = lines_chk[0]
+                                        break
+                                elif v_chk_str.upper() in ['SOLV', 'ANNA VAN TOOR']:
+                                    detected_customer = v_chk_str
+                                    if not detected_brand: detected_brand = v_chk_str
+                                    break
+                        if detected_customer:
+                            break
+                wb_scan.close()
+            except Exception:
+                pass
+
+        if not detected_brand and detected_customer:
+            detected_brand = detected_customer
 
         # 3. Header row detection
         header_idx = -1
@@ -2072,7 +2121,7 @@ Critical Rules:
 
         if is_vertical_block:
             cur_color = ""
-            cur_channel = "GENEL"
+            cur_channel = ""
             
             for r_idx in range(header_idx + 1, len(rows)):
                 r = rows[r_idx]
@@ -2186,7 +2235,7 @@ Critical Rules:
                 
                 m_val = str(r[col_map['model']]).strip() if 'model' in col_map and len(r) > col_map['model'] and r[col_map['model']] else (detected_style or '')
                 color_val = str(r[col_map['color']]).strip() if 'color' in col_map and len(r) > col_map['color'] and r[col_map['color']] else ''
-                channel_val = str(r[col_map['channel']]).strip() if 'channel' in col_map and len(r) > col_map['channel'] and r[col_map['channel']] else 'GENEL'
+                channel_val = str(r[col_map['channel']]).strip() if 'channel' in col_map and len(r) > col_map['channel'] and r[col_map['channel']] else ''
                 cust_val = str(r[col_map['customer']]).strip() if 'customer' in col_map and len(r) > col_map['customer'] and r[col_map['customer']] else detected_customer
                 carton_no = r[col_map['carton']] if 'carton' in col_map and len(r) > col_map['carton'] else None
                 try: carton_no = int(float(carton_no))
@@ -2247,7 +2296,7 @@ Critical Rules:
                     'carton_no': carton_no,
                     'model': m_val,
                     'color': color_val,
-                    'channel': channel_val or 'GENEL',
+                    'channel': channel_val or '',
                     'customer': cust_val,
                     'brand': detected_brand,
                     'sizes': row_sizes,
@@ -2267,7 +2316,7 @@ Critical Rules:
 
         for item in raw_items:
             c_no = item['carton_no']
-            chan = item['channel'] or 'GENEL'
+            chan = item['channel'] or ''
             mod = item['model']
             col = item['color']
             sizes = item['sizes']
@@ -2340,27 +2389,30 @@ Critical Rules:
 
         for idx, c in enumerate(cartons, 1):
             c['carton_id'] = idx
-            chan = c['channel'] or 'GENEL'
-            if chan not in channel_summary:
+            chan = c['channel'] or ''
+            if chan:
+                if chan not in channel_summary:
+                    badge = cls.get_channel_badge(chan)
+                    channel_summary[chan] = {
+                        'cartons': 0,
+                        'total_qty': 0,
+                        'badge_color': badge['hex'],
+                        'badge_name': badge['name']
+                    }
+                channel_summary[chan]['total_qty'] += c['total_qty']
+                channel_summary[chan]['cartons'] += 1
                 badge = cls.get_channel_badge(chan)
-                channel_summary[chan] = {
-                    'cartons': 0,
-                    'total_qty': 0,
-                    'badge_color': badge['hex'],
-                    'badge_name': badge['name']
-                }
-            channel_summary[chan]['total_qty'] += c['total_qty']
-            channel_summary[chan]['cartons'] += 1
+                c['channel_color'] = badge['hex']
+            else:
+                c['channel_color'] = ''
 
             for sz, qty in c['sizes'].items():
                 size_summary[sz] += qty
 
-            badge = cls.get_channel_badge(chan)
             key = (c['color'], c['channel']) if is_vertical_block else chan
-            total_of = c.get('group_count') if (c.get('group_count') and c.get('group_count') > 0) else channel_counts[key]
+            total_of = c.get('group_count') if (c.get('group_count') and c.get('group_count') > 0) else (channel_counts.get(key) or len(cartons))
             c['group_count'] = total_of
-            c['channel_color'] = badge['hex']
-            c['carton_label_text'] = f"CARTON NO: {c['carton_no']} OF {total_of}"
+            c['carton_label_text'] = f"CARTON NO: {c['carton_no']} OF {total_of}" if (chan or is_vertical_block) else f"Carton Nr. {c['carton_no']}"
 
         return {
             "success": True,
@@ -2472,7 +2524,7 @@ Do not include markdown code block formatting or explanations, output only raw J
                     # Add channel colors & summaries if missing
                     channel_summary = {}
                     for c in parsed.get("cartons", []):
-                        ch = c.get("channel", "GENEL")
+                        ch = c.get("channel", "")
                         if ch not in channel_summary:
                             b = cls.get_channel_badge(ch)
                             channel_summary[ch] = {"cartons": 0, "total_qty": 0, "badge_color": b["hex"], "badge_name": b["name"]}
@@ -2536,18 +2588,25 @@ Do not include markdown code block formatting or explanations, output only raw J
         """
         Analyzes an Excel carton label template file (.xlsx, .xlsm, .xls).
         Inspects sheets, cell formulations (XLOOKUP, SUM, etc.), merged ranges,
-        customer headers, size grids, gross weight, measurements, and detects
-        suggested paper size (A4, A5, Argox Termal).
+        customer headers, address lines, size grids, gross weight, measurements,
+        and detects suggested paper size (A4, A5, Argox Termal).
         """
         import openpyxl
         wb = openpyxl.load_workbook(file_path, data_only=False)
         
-        # Pick sheet: prioritize sheets containing 'koli', 'etiket', 'label', 'carton', 'box'
+        # Pick sheet: prioritize sheets containing 'koli ustu', 'etiket', 'label', 'carton', 'sablon'
         sheet_name = None
         for s in wb.sheetnames:
-            if any(k in s.lower() for k in ['koli', 'etiket', 'label', 'carton', 'box']):
+            norm = s.lower().replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+            if any(k in norm for k in ['koli ustu', 'koli_ustu', 'etiket', 'label', 'carton', 'sablon']):
                 sheet_name = s
                 break
+        if not sheet_name:
+            for s in wb.sheetnames:
+                norm = s.lower().replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+                if any(k in norm for k in ['koli', 'box']):
+                    sheet_name = s
+                    break
         if not sheet_name:
             sheet_name = wb.sheetnames[0]
             
@@ -2561,7 +2620,6 @@ Do not include markdown code block formatting or explanations, output only raw J
         detected_customer = ""
         detected_brand = ""
         measurements = "60X40X30"
-        has_dual_column = False
         raw_cells = []
 
         std_sizes = {'XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '28', '30', '32', '34', '36', '38', '40', '42', '44', '46', '48'}
@@ -2577,30 +2635,19 @@ Do not include markdown code block formatting or explanations, output only raw J
                 if is_formula:
                     formulas.append({'coord': cell.coordinate, 'formula': val})
                 
-                # Check if sheet contains a 2nd label block to the right (>= column 14)
-                if c >= 14 and val and not is_formula:
-                    has_dual_column = True
-                
                 # Size tokens
                 if val.upper() in std_sizes and val.upper() not in detected_sizes:
                     detected_sizes.append(val.upper())
                 
-                # Header lines (rows 1-7, col 1, not a formula)
-                if r <= 7 and c == 1 and not is_formula:
-                    if not any(k in val.lower() for k in ['style', 'colour', 'color', 'brand', 'koli']):
-                        header_lines.append(val)
-                        if not detected_customer and len(val) > 2:
-                            detected_customer = val
-                
-                # Brand
+                # Brand token
                 if 'brand' in val.lower() and not detected_brand:
                     detected_brand = val
                 
-                # Measurements (e.g. 60X40X30)
-                if 'measurements' in val.lower() or 'ebat' in val.lower() or re.search(r'\d+X\d+X\d+', val, re.I):
-                    m_match = re.search(r'\d+X\d+X\d+', val, re.I)
+                # Measurements token
+                if 'measurements' in val.lower() or 'ebat' in val.lower() or re.search(r'\\d+X\\d+X\\d+', val, re.I):
+                    m_match = re.search(r'\\d+X\\d+X\\d+', val, re.I)
                     if m_match:
-                        measurements = m_match.group(0)
+                        measurements = m_match.group(0).upper()
 
                 raw_cells.append({
                     'row': r,
@@ -2610,6 +2657,63 @@ Do not include markdown code block formatting or explanations, output only raw J
                     'is_formula': is_formula
                 })
 
+        # Deep Header lines & customer detection: check rows 1..15, cols 1..10
+        for r in range(1, min(max_r + 1, 15)):
+            for c in range(1, min(max_c + 1, 10)):
+                cell = ws.cell(r, c)
+                val = str(cell.value).strip() if cell.value is not None else ""
+                if not val or val.startswith('='):
+                    continue
+                if '\n' in val:
+                    lines = [l.strip() for l in val.split('\n') if l.strip()]
+                    for line in lines:
+                        if not any(k in line.lower() for k in ['style', 'colour', 'color', 'brand', 'koli', 'beden', 'carton', 'total', 'quantity', 'size']):
+                            if line not in header_lines:
+                                header_lines.append(line)
+                            if not detected_customer and len(line) >= 2:
+                                detected_customer = line
+                elif r <= 7 and c <= 4:
+                    if not any(k in val.lower() for k in ['style', 'colour', 'color', 'brand', 'koli', 'beden', 'carton', 'total', 'quantity', 'size']):
+                        if val not in header_lines and len(val) >= 2:
+                            header_lines.append(val)
+                            if not detected_customer:
+                                detected_customer = val
+
+        # If customer not in cells, check sheet name and filename
+        if not detected_customer:
+            m_sh = re.match(r'^([A-Za-z0-9\\s_-]+?)(?:\\s+(?:KOL[İI]|CEK[İI]|ŞABLON|SABLON|USTU|ÜSTÜ|LABEL|CARTON))', sheet_name, re.IGNORECASE)
+            if m_sh:
+                detected_customer = m_sh.group(1).strip()
+            else:
+                m_fn = re.match(r'^([A-Za-z0-9\\s_-]+?)(?:\\s+(?:KOL[İI]|CEK[İI]|ŞABLON|SABLON|USTU|ÜSTÜ|LABEL|CARTON))', Path(file_path).name, re.IGNORECASE)
+                if m_fn:
+                    detected_customer = m_fn.group(1).strip()
+
+        if not detected_brand and detected_customer and detected_customer != "Özel Müşteri":
+            detected_brand = detected_customer
+
+        # If measurements not found, search other sheets
+        if not measurements or measurements == "60X40X30":
+            for s in wb.sheetnames:
+                ws_tmp = wb[s]
+                found_m = False
+                for r in range(1, min((ws_tmp.max_row or 0) + 1, 10)):
+                    for c in range(1, min((ws_tmp.max_column or 0) + 1, 10)):
+                        v = str(ws_tmp.cell(r, c).value or '')
+                        m_match = re.search(r'\\d+X\\d+X\\d+', v, re.I)
+                        if m_match:
+                            measurements = m_match.group(0).upper()
+                            found_m = True
+                            break
+                    if found_m:
+                        break
+                if found_m:
+                    break
+
+        # Dual column check: requires at least 3 keyword cells at col >= 14
+        dual_col_count = sum(1 for cell_info in raw_cells if cell_info['col'] >= 14 and not cell_info['is_formula'] and any(k in cell_info['val'].lower() for k in ['style', 'color', 'colour', 'size', 'koli', 'carton', 'total', 'quantity']))
+        has_dual_column = (dual_col_count >= 3)
+
         # Suggest page and geometry
         if has_dual_column:
             paper_size = 'A4'
@@ -2618,11 +2722,19 @@ Do not include markdown code block formatting or explanations, output only raw J
             width_mm = 297.0
             height_mm = 210.0
         else:
-            paper_size = 'Argox_100x150'
-            orientation = 'portrait'
-            items_per_page = 1
-            width_mm = 100.0
-            height_mm = 150.0
+            is_thermal = any(k in sheet_name.lower() or k in Path(file_path).name.lower() for k in ['argox', 'termal', 'thermal', '100x150', '80x50'])
+            if is_thermal:
+                paper_size = 'Argox_100x150'
+                orientation = 'portrait'
+                items_per_page = 1
+                width_mm = 100.0
+                height_mm = 150.0
+            else:
+                paper_size = 'A4'
+                orientation = 'landscape'
+                items_per_page = 1
+                width_mm = 297.0
+                height_mm = 210.0
 
         customer_disp = detected_customer if detected_customer else "Özel Müşteri"
         template_name = f"{customer_disp} Koli Üstü Şablonu ({paper_size})"
@@ -2632,26 +2744,39 @@ Do not include markdown code block formatting or explanations, output only raw J
         address_2 = header_lines[2] if len(header_lines) > 2 else ""
         address_3 = header_lines[3] if len(header_lines) > 3 else ""
 
+        # Inspect which fields ACTUALLY exist in the label sheet (do not add non-existent fields!)
+        sheet_text = " ".join(str(c['val']).lower() for c in raw_cells if not c['is_formula'])
+        has_channel = any(k in sheet_text for k in ['channel', 'kanal', 'shop', 'webshop'])
+        has_gross_weight = any(k in sheet_text for k in ['gross', 'brüt', 'brut', 'weight', 'ağırlık', 'agirlik'])
+        has_measurements = any(k in sheet_text for k in ['measurements', 'ebat', 'ölçü', 'olcu', 'dimensions'])
+        has_brand = any('brand' in c['val'].lower() or 'marka' in c['val'].lower() for c in raw_cells)
+        has_barcode = any(k in sheet_text for k in ['barcode', 'barkod', 'ean', 'upc'])
+        is_solv = 'solv' in customer_disp.lower() or 'solv' in sheet_name.lower()
+
         layout_json = {
+            "template_style": "solv_classic" if is_solv else "standard",
             "header_title": header_title,
             "address_line1": address_1,
             "address_line2": address_2,
             "address_line3": address_3,
-            "brand": (f"BRAND: {detected_brand}" if detected_brand else ""),
-            "measurements": measurements,
-            "poka_badge_enabled": True,
+            "brand": (f"BRAND: {detected_brand}" if has_brand else ""),
+            "show_brand": has_brand,
+            "show_channel": has_channel,
+            "show_gross_weight": has_gross_weight,
+            "show_measurements": has_measurements,
+            "poka_badge_enabled": has_channel,
             "dual_variant_enabled": (items_per_page == 2),
-            "show_barcode": (paper_size == 'Argox_100x150'),
+            "show_barcode": has_barcode,
             "detected_sizes": detected_sizes,
             "fields": [
                 {"id": "header", "label": "Müşteri & Adres Başlığı", "key": "header_block", "visible": True},
-                {"id": "brand", "label": "Marka Bilgisi", "key": "brand", "visible": bool(detected_brand)},
-                {"id": "channel", "label": "Kanal & Poka-Yoke Renk Rozeti", "key": "channel_badge", "visible": True},
+                {"id": "brand", "label": "Marka Bilgisi", "key": "brand", "visible": has_brand},
+                {"id": "channel", "label": "Kanal & Poka-Yoke Renk Rozeti", "key": "channel_badge", "visible": has_channel},
                 {"id": "size_table", "label": "Beden & Adet Tablosu", "key": "size_table", "visible": True},
-                {"id": "carton_no", "label": "Koli Numarası (CARTON NO ... OF ...)", "key": "carton_no", "visible": True},
-                {"id": "gross_weight", "label": "Brüt Ağırlık (GROSS WEIGHT)", "key": "gross_weight", "visible": True},
-                {"id": "measurements", "label": "Koli Ebatları (MEASUREMENTS)", "key": "measurements", "visible": True},
-                {"id": "barcode", "label": "Barkod Alanı", "key": "barcode", "visible": (paper_size == 'Argox_100x150')}
+                {"id": "carton_no", "label": "Koli Numarası", "key": "carton_no", "visible": True},
+                {"id": "gross_weight", "label": "Brüt Ağırlık (GROSS WEIGHT)", "key": "gross_weight", "visible": has_gross_weight},
+                {"id": "measurements", "label": "Koli Ebatları (MEASUREMENTS)", "key": "measurements", "visible": has_measurements},
+                {"id": "barcode", "label": "Barkod Alanı", "key": "barcode", "visible": has_barcode}
             ]
         }
 
@@ -2676,10 +2801,4 @@ Do not include markdown code block formatting or explanations, output only raw J
             "sample_formulas": formulas[:6],
             "raw_cells_count": len(raw_cells)
         }
-
-
-
-
-
-
 

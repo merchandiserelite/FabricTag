@@ -4375,7 +4375,7 @@
                                     </div>
                                     <input type="text"
                                            v-model="cuttingSearch"
-                                           placeholder="PO, Müşteri, Model, Renk, Kumaş, Kalite..."
+                                           placeholder="PO, Müşteri, Model, Renk, Kanal, Kumaş, Kalite..."
                                            class="w-full pl-9 pr-8 py-2 rounded-xl text-xs border font-medium transition focus:outline-none focus:ring-2 focus:ring-purple-500/40"
                                            :class="isDarkMode ? 'bg-slate-800/80 border-slate-700 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'">
                                     <button v-if="cuttingSearch"
@@ -4470,6 +4470,14 @@
                                                   :class="isDarkMode ? 'bg-slate-800 text-slate-200 border-slate-700' : 'bg-slate-100 text-slate-800 border-slate-200'">
                                                 <span>Renk: {{ s.color_name || '-' }}</span>
                                                 <span v-if="s.color_code" class="text-[11px] opacity-75 font-mono font-normal">({{ s.color_code }})</span>
+                                            </span>
+
+                                            <!-- 6. Kanal Bilgisi (Varsa Göster) -->
+                                            <span v-if="s.channel"
+                                                  class="px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1 shadow-sm"
+                                                  :class="isDarkMode ? 'bg-purple-500/15 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200'"
+                                                  title="Kanal / Dağıtım Bilgisi">
+                                                <span>Kanal: {{ s.channel }}</span>
                                             </span>
                                         </div>
                                         <div v-if="s.description" class="text-xs text-slate-400 truncate max-w-xl">
@@ -4731,7 +4739,7 @@
                                     </div>
                                     <input type="text"
                                            v-model="shippingSearch"
-                                           placeholder="PO, Müşteri, Model, Renk, Kumaş, Kalite..."
+                                           placeholder="PO, Müşteri, Model, Renk, Kanal, Kumaş, Kalite..."
                                            class="w-full pl-9 pr-8 py-2 rounded-xl text-xs border font-medium transition focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                                            :class="isDarkMode ? 'bg-slate-800/80 border-slate-700 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'">
                                     <button v-if="shippingSearch"
@@ -4818,6 +4826,15 @@
                                                 <span>Renk: {{ s.color_name || '-' }}</span>
                                                 <span v-if="s.color_code" class="text-[11px] opacity-75 font-mono font-normal">({{ s.color_code }})</span>
                                             </span>
+
+                                            <!-- 6. Kanal Bilgisi (Varsa Göster) -->
+                                            <span v-if="s.channel"
+                                                  class="px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 shadow-sm"
+                                                  :class="isDarkMode ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 ring-1 ring-purple-500/20' : 'bg-purple-100 text-purple-800 border-purple-300'"
+                                                  title="Kanal / Dağıtım Bilgisi">
+                                                <i data-lucide="git-branch" class="w-3.5 h-3.5 text-purple-400"></i>
+                                                <span>Kanal: {{ s.channel }}</span>
+                                            </span>
                                         </div>
                                         <div v-if="s.description" class="text-xs text-slate-400 truncate max-w-xl">
                                             {{ s.description }}
@@ -4841,10 +4858,15 @@
                                             <span>Kaydet</span>
                                         </button>
                                     </div>
-                                    <!-- Yükleme Tarihi -->
-                                    <div v-if="s.shipping_date" class="text-[10px] text-slate-400 font-mono flex items-center gap-1 tracking-tight" title="Son Yükleme Kayıt Tarihi">
-                                        <i data-lucide="truck" class="w-3 h-3 text-emerald-400"></i>
-                                        <span>Yükleme: {{ s.shipping_date }}</span>
+                                    <!-- Yükleme Tarihi (Düzenlenebilir) -->
+                                    <div class="flex items-center gap-1 mt-0.5" title="Fiili yükleme / sevk tarihi (zamanında sevkiyat takibi)">
+                                        <i data-lucide="truck" class="w-3.5 h-3.5 text-emerald-500"></i>
+                                        <span class="text-[10px] font-bold text-slate-400">Yükleme:</span>
+                                        <input type="text"
+                                               v-model="s.shipping_date"
+                                               :placeholder="s.delivery_date || 'GG.AA.YYYY'"
+                                               class="w-24 px-1.5 py-0.5 text-center font-mono font-bold text-[11px] rounded border transition focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                               :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-50 border-slate-300 text-emerald-700'">
                                     </div>
                                 </div>
                             </div>
@@ -4973,21 +4995,21 @@
                                             </td>
                                         </tr>
 
-                                        <!-- Satır 4: Fark (Kesilen Adet - Yüklenen Adet) -->
+                                        <!-- Satır 4: Fark (Yüklenen Adet - Kesilen Adet) -->
                                         <tr :class="isDarkMode ? 'hover:bg-slate-800/30' : 'hover:bg-slate-50/50'">
-                                            <td class="py-2 px-3 font-semibold text-slate-400 whitespace-nowrap" title="Kesilen Adet - Yüklenen Adet">
-                                                Fark (Kesim - Yükleme):
+                                            <td class="py-2 px-3 font-semibold text-slate-400 whitespace-nowrap" title="Yükleme Adeti - Kesim Adeti">
+                                                Fark (Yükleme - Kesim):
                                             </td>
                                             <td v-for="sz in (s.sizes || [])" :key="'shszd-'+sz.id" class="py-2 px-2.5 text-center">
-                                                <span v-if="((sz.cut_quantity || 0) - (sz.shipped_quantity || 0)) > 0"
-                                                      class="inline-block px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                                      title="Kesilip Henüz Yüklenmeyen">
-                                                    +{{ (sz.cut_quantity || 0) - (sz.shipped_quantity || 0) }}
+                                                <span v-if="((sz.shipped_quantity || 0) - (sz.cut_quantity || 0)) > 0"
+                                                      class="inline-block px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                                      title="Kesilenden Fazla Yüklenen (+)">
+                                                    +{{ (sz.shipped_quantity || 0) - (sz.cut_quantity || 0) }}
                                                 </span>
-                                                <span v-else-if="((sz.cut_quantity || 0) - (sz.shipped_quantity || 0)) < 0"
+                                                <span v-else-if="((sz.shipped_quantity || 0) - (sz.cut_quantity || 0)) < 0"
                                                       class="inline-block px-1.5 py-0.5 rounded text-[11px] font-mono font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                                                      title="Kesilenden Fazla Yüklenen">
-                                                    {{ (sz.cut_quantity || 0) - (sz.shipped_quantity || 0) }}
+                                                      title="Kesilenden Eksik Yüklenen (-)">
+                                                    {{ (sz.shipped_quantity || 0) - (sz.cut_quantity || 0) }}
                                                 </span>
                                                 <span v-else class="text-[11px] font-mono text-slate-400">
                                                     0
@@ -4996,7 +5018,7 @@
                                             <td class="py-2 px-3 text-right font-mono font-extrabold border-l"
                                                 :class="[
                                                     isDarkMode ? 'border-slate-800' : 'border-slate-200',
-                                                    getShippingStyleDiff(s) > 0 ? 'text-amber-500' : (getShippingStyleDiff(s) < 0 ? 'text-rose-500' : 'text-slate-400')
+                                                    getShippingStyleDiff(s) > 0 ? 'text-emerald-500' : (getShippingStyleDiff(s) < 0 ? 'text-rose-500' : 'text-slate-400')
                                                 ]">
                                                 {{ getShippingStyleDiff(s) > 0 ? '+' + getShippingStyleDiff(s) : getShippingStyleDiff(s) }} Adet
                                             </td>
@@ -5356,6 +5378,99 @@
                         </div>
                     </div>
 
+                    <!-- KAYITLI KOLİ ÜSTÜ FORMATLARI YÖNETİM PANELİ -->
+                    <div class="p-4 sm:p-5 rounded-2xl border transition-all shadow-sm mb-4"
+                         :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold flex items-center gap-2" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                    <span>📋 Kayıtlı Koli Üstü Formatları & Şablonlar</span>
+                                    <span class="text-xs px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono">
+                                        {{ cartonTemplatesList.length }} Şablon
+                                    </span>
+                                </span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button @click="document.getElementById('templateExcelInput').click()" :disabled="isAnalyzingTemplate"
+                                        class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                                        :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-sky-400 hover:bg-slate-700' : 'bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100'"
+                                        title="Excel koli üstü şablonunu yükleyip birebir sisteme aktarın">
+                                    <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                                    <span>+ Excel'den Format Yükle</span>
+                                </button>
+                                <button @click="openTemplateDesigner(null)"
+                                        class="px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                                        :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'"
+                                        title="Sıfırdan boş bir koli üstü şablonu oluşturun">
+                                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                    <span>+ Yeni Tasarla</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Şablonlar Tablosu -->
+                        <div class="overflow-x-auto rounded-xl border custom-scrollbar"
+                             :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="text-[11px] uppercase tracking-wider border-b font-bold"
+                                       :class="isDarkMode ? 'bg-slate-950 text-slate-400 border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200'">
+                                    <tr>
+                                        <th class="p-2.5 px-3">Müşteri</th>
+                                        <th class="p-2.5 px-3">Şablon Format Adı</th>
+                                        <th class="p-2.5 px-3">Kağıt / Düzen</th>
+                                        <th class="p-2.5 px-3 text-center">Durum</th>
+                                        <th class="p-2.5 px-3 text-right w-44">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y" :class="isDarkMode ? 'divide-slate-800' : 'divide-slate-100'">
+                                    <tr v-for="tpl in cartonTemplatesList" :key="'tpl-row-'+tpl.id"
+                                        class="transition"
+                                        :class="activeCartonTemplate && activeCartonTemplate.id === tpl.id ? (isDarkMode ? 'bg-purple-950/30 font-bold' : 'bg-purple-50/60 font-bold') : (isDarkMode ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50')">
+                                        <!-- Müşteri -->
+                                        <td class="p-2.5 px-3" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                            {{ tpl.customer_name }}
+                                        </td>
+                                        <!-- Şablon Adı -->
+                                        <td class="p-2.5 px-3 font-mono" :class="isDarkMode ? 'text-purple-300' : 'text-purple-700'">
+                                            {{ tpl.template_name }}
+                                        </td>
+                                        <!-- Kağıt / Düzen -->
+                                        <td class="p-2.5 px-3 text-slate-400">
+                                            {{ tpl.paper_size }} ({{ tpl.orientation === 'landscape' ? 'Yatay' : 'Dikey' }}) - {{ tpl.items_per_page === 2 ? "2'li Yan Yana" : (tpl.items_per_page === 6 ? "6'lı Sticker" : "Tekli") }}
+                                        </td>
+                                        <!-- Durum -->
+                                        <td class="p-2.5 px-3 text-center">
+                                            <span v-if="activeCartonTemplate && activeCartonTemplate.id === tpl.id"
+                                                  class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                                Aktif Şablon
+                                            </span>
+                                            <button v-else @click="selectCartonTemplate(tpl)"
+                                                    class="px-2 py-0.5 rounded-full text-[10px] font-semibold border transition cursor-pointer"
+                                                    :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-black'">
+                                                Seç
+                                            </button>
+                                        </td>
+                                        <!-- İşlemler -->
+                                        <td class="p-2.5 px-3 text-right space-x-1.5">
+                                            <button @click="openTemplateDesigner(tpl)"
+                                                    class="px-2.5 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer text-amber-500 hover:text-amber-600"
+                                                    :class="isDarkMode ? 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'"
+                                                    title="Şablonu Düzenle & Tasarla">
+                                                ✏️ Düzenle
+                                            </button>
+                                            <button @click="deleteCartonTemplate(tpl.id, tpl.template_name)"
+                                                    class="px-2.5 py-1 rounded-lg border text-xs font-semibold transition cursor-pointer text-rose-500 hover:text-rose-600"
+                                                    :class="isDarkMode ? 'bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/20' : 'bg-rose-50 border-rose-200 hover:bg-rose-100'"
+                                                    title="Bu Şablonu Kalıcı Olarak Sil">
+                                                🗑️ Sil
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- SÜRÜKLE BIRAK YÜKLEME KUTUCUĞU (DROPZONE) -->
                     <div @dragover.prevent="packingDragOver = true"
                          @dragleave.prevent="packingDragOver = false"
@@ -5372,7 +5487,7 @@
                                 </div>
                                 <div class="text-left">
                                     <div class="text-xs font-bold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
-                                        {{ packingFile ? packingFile.name : 'Anna_Van_Toor_koli_ustu_x2.xlsm' }}
+                                        {{ packingFile ? packingFile.name : 'Yüklenen Çeki Listesi / Şablon' }}
                                     </div>
                                     <div class="text-[11px] text-slate-400">
                                         Farklı bir çeki listesi yüklemek için buraya yeni bir dosya sürükleyip bırakabilir veya tıklayabilirsiniz
@@ -5428,7 +5543,7 @@
                                         <div class="space-y-2 text-xs">
                                             <div class="flex items-center justify-between py-1 border-b" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
                                                 <span class="text-slate-400">Müşteri:</span>
-                                                <span class="font-extrabold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">{{ packingData.customer || 'ANNA' }}</span>
+                                                <span class="font-extrabold" :class="isDarkMode ? 'text-white' : 'text-slate-900'">{{ packingData.customer || '-' }}</span>
                                             </div>
                                             <div class="flex items-center justify-between py-1 border-b" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
                                                 <span class="text-slate-400">Model / Style:</span>
@@ -5542,7 +5657,7 @@
                                                 <i data-lucide="tag" class="w-3.5 h-3.5 text-amber-500"></i>
                                                 <span>Koli Üstü Etiket Formatı</span>
                                             </div>
-                                            <span v-if="activeCartonTemplate && packingData && activeCartonTemplate.customer_name && activeCartonTemplate.customer_name.toLowerCase().includes(packingData.customer.toLowerCase().slice(0, 4))"
+                                            <span v-if="activeCartonTemplate && packingData && packingData.customer && packingData.customer.trim().length >= 2 && activeCartonTemplate.customer_name && activeCartonTemplate.customer_name.toLowerCase().includes(packingData.customer.trim().toLowerCase().slice(0, 4))"
                                                   class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                                                 Müşteriye Özel Eşleşti
                                             </span>
@@ -5687,12 +5802,12 @@
                                            :class="isDarkMode ? 'bg-slate-900 text-slate-300 border-slate-800' : 'bg-slate-100 text-slate-700 border-slate-200'">
                                         <tr>
                                             <th class="p-3 text-center w-16">Koli No</th>
-                                            <th class="p-3">Kanal (Renk Rozeti)</th>
+                                            <th v-if="hasCartonChannel" class="p-3">Kanal</th>
                                             <th class="p-3">Model</th>
                                             <th class="p-3">Renk</th>
                                             <th class="p-3 text-center">Beden Dağılımı</th>
                                             <th class="p-3 text-center">Koli Adeti</th>
-                                            <th class="p-3 text-center">Brüt Kg</th>
+                                            <th v-if="hasCartonGrossWeight" class="p-3 text-center">Brüt Kg</th>
                                             <th class="p-3 text-center">Ölçüler</th>
                                             <th class="p-3 text-center w-28">İşlem</th>
                                         </tr>
@@ -5710,7 +5825,7 @@
                                             </td>
 
                                             <!-- Kanal -->
-                                            <td class="p-3">
+                                            <td v-if="hasCartonChannel" class="p-3">
                                                 <div class="flex items-center gap-2">
                                                     <span class="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm border border-black/20"
                                                           :style="{ backgroundColor: c.channel_color }"></span>
@@ -6273,7 +6388,49 @@
                                                  zoom: designerTemplate.font_scale
                                              }">
                                             
-                                            <div class="h-full flex flex-col justify-between p-3"
+                                            <template v-if="isSolvDesigner()">
+                                                <div class="h-full flex flex-col justify-center p-2 select-none">
+                                                    <table class="w-full border-2 border-black border-collapse text-left font-sans bg-white" style="border: 2px solid black;">
+                                                        <tr>
+                                                            <td colspan="100" class="border-2 border-black p-3 font-bold text-sm leading-relaxed text-black" style="border: 2px solid black;">
+                                                                <div class="whitespace-pre-line leading-normal">{{ getSolvDesignerAddress() }}</div>
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td class="border-2 border-black p-2 font-bold text-xs text-black bg-gray-50" style="border: 2px solid black; width: 22%;">STYLE Nr.</td>
+                                                            <td colspan="99" class="border-2 border-black p-2 font-black text-sm text-black font-mono" style="border: 2px solid black;">The Cargo</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td class="border-2 border-black p-2 font-bold text-xs text-black bg-gray-50" style="border: 2px solid black; width: 22%;">COLOUR</td>
+                                                            <td colspan="99" class="border-2 border-black p-2 font-black text-sm text-black font-mono" style="border: 2px solid black;">BROWN</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td class="border-2 border-black p-2 font-bold text-xs text-black bg-gray-50" style="border: 2px solid black; width: 22%;">SIZE</td>
+                                                            <td v-for="sz in (designerTemplate.layout_json?.detected_sizes || ['XS', 'S', 'M', 'L', 'XL'])" :key="'solv-prev-sz-'+sz"
+                                                                class="border-2 border-black p-1 font-bold text-center text-xs text-black uppercase"
+                                                                style="border: 2px solid black;">
+                                                                {{ sz }}
+                                                            </td>
+                                                            <td class="border-2 border-black p-1 font-bold text-center text-xs text-black" style="border: 2px solid black; width: 14%;">Total</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td class="border-2 border-black p-2 font-bold text-xs text-black bg-gray-50" style="border: 2px solid black; width: 22%;">QUANTITY</td>
+                                                            <td v-for="(sz, sIdx) in (designerTemplate.layout_json?.detected_sizes || ['XS', 'S', 'M', 'L', 'XL'])" :key="'solv-prev-qty-'+sz"
+                                                                class="border-2 border-black p-1 font-black text-center text-sm text-black font-mono"
+                                                                style="border: 2px solid black;">
+                                                                {{ [ '', '', '', '', '18' ][sIdx] || '' }}
+                                                            </td>
+                                                            <td class="border-2 border-black p-1 font-black text-center text-sm text-black font-mono" style="border: 2px solid black; width: 14%;">18</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td class="border-2 border-black p-2 font-bold text-xs text-black bg-gray-50" style="border: 2px solid black; width: 22%;">Carton Nr.</td>
+                                                            <td colspan="99" class="border-2 border-black p-2 font-black text-sm text-black font-mono" style="border: 2px solid black;">12 OF 29</td>
+                                                        </tr>
+                                                    </table>
+                                                </div>
+                                            </template>
+                                            <template v-else>
+                                                <div class="h-full flex flex-col justify-between p-3"
                                                  :class="[
                                                      designerTemplate.border_style === 'none' ? 'border-0' : (designerTemplate.border_style === 'dashed' ? 'border-dashed' : (designerTemplate.border_style === 'double' ? 'border-double' : 'border-solid')),
                                                      designerTemplate.border_width === 1 ? 'border border-black' : (designerTemplate.border_width === 3 ? 'border-4 border-black' : 'border-2 border-black')
@@ -6549,7 +6706,7 @@
 
                                                 </div>
 
-                                            </div>
+                                            </template>
 
                                         </div>
 
@@ -7096,7 +7253,7 @@
                                             </div>
                                             
                                             <!-- Poka-Yoke Renk Rozeti -->
-                                            <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                            <div v-if="printShowPokaBadge && activeCartonTemplate?.layout_json?.poka_badge_enabled !== false && hasCartonChannel(c)" class="shrink-0 flex items-center justify-center poka-yoke-badge"
                                                  :style="{ transform: getPrintElemTransform('poka_badge'), width: '18mm', height: '18mm', minWidth: '18mm', minHeight: '18mm' }">
                                                 <svg viewBox="0 0 100 100" class="w-full h-full block">
                                                     <circle cx="50" cy="50" r="46" :fill="c.channel_color || '#000000'" stroke="none" />
@@ -7242,7 +7399,7 @@
                                                 <div class="font-bold text-black" :style="{ fontSize: getCartonFontPx(11) + 'px', transform: getPrintElemTransform('measurements') }">MEASUREMENTS: {{ c.measurements || '60X40X30' }}</div>
                                             </div>
 
-                                            <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                            <div v-if="printShowPokaBadge && activeCartonTemplate?.layout_json?.poka_badge_enabled !== false && hasCartonChannel(c)" class="shrink-0 flex items-center justify-center poka-yoke-badge"
                                                  :style="{ transform: getPrintElemTransform('poka_badge'), width: '25mm', height: '25mm', minWidth: '25mm', minHeight: '25mm' }">
                                                 <svg viewBox="0 0 100 100" class="w-full h-full block">
                                                     <circle cx="50" cy="50" r="46" :fill="c.channel_color || '#000000'" stroke="none" />
@@ -7392,13 +7549,13 @@
                                             <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
                                             <div class="pt-1 flex items-center justify-between gap-2">
                                                 <div class="space-y-1">
-                                                    <div class="font-black uppercase tracking-wider text-black" :style="{ fontSize: getCartonFontPx(17) + 'px', transform: getPrintElemTransform('channel') }">
+                                                    <div v-if="hasCartonChannel(pair[0])" class="font-black uppercase tracking-wider text-black" :style="{ fontSize: getCartonFontPx(17) + 'px', transform: getPrintElemTransform('channel') }">
                                                         {{ pair[0].channel }}
                                                     </div>
                                                     <div class="font-black tracking-wide text-black" :style="{ fontSize: getCartonFontPx(17) + 'px', transform: getPrintElemTransform('carton_no') }">
                                                         {{ pair[0].carton_label_text || ('CARTON NO: ' + pair[0].carton_no + ' OF ' + pair[0].group_count) }}
                                                     </div>
-                                                    <div class="font-bold text-black" :style="{ fontSize: getCartonFontPx(14) + 'px', transform: getPrintElemTransform('gross_weight') }">
+                                                    <div v-if="hasCartonGrossWeight(pair[0])" class="font-bold text-black" :style="{ fontSize: getCartonFontPx(14) + 'px', transform: getPrintElemTransform('gross_weight') }">
                                                         GROSS WEIGHT: <span class="font-black">{{ pair[0].gross_weight }} kg</span>
                                                     </div>
                                                     <div class="font-bold text-black tracking-wider" :style="{ fontSize: getCartonFontPx(14) + 'px', transform: getPrintElemTransform('measurements') }">
@@ -7407,7 +7564,7 @@
                                                 </div>
 
                                                 <!-- Poka-Yoke Renk Rozeti (3.5 cm / 35 mm Çap) -->
-                                                <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                <div v-if="printShowPokaBadge && activeCartonTemplate?.layout_json?.poka_badge_enabled !== false && hasCartonChannel(c)" class="shrink-0 flex items-center justify-center poka-yoke-badge"
                                                      :style="{ transform: getPrintElemTransform('poka_badge'), width: '35mm', height: '35mm', minWidth: '35mm', minHeight: '35mm' }">
                                                     <svg viewBox="0 0 100 100" class="w-full h-full block"
                                                          style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
@@ -7551,13 +7708,13 @@
                                             <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
                                             <div class="pt-1 flex items-center justify-between gap-2">
                                                 <div class="space-y-1">
-                                                    <div class="font-black uppercase tracking-wider text-black" :style="{ fontSize: getCartonFontPx(17) + 'px', transform: getPrintElemTransform('channel') }">
+                                                    <div v-if="hasCartonChannel(pair[1])" class="font-black uppercase tracking-wider text-black" :style="{ fontSize: getCartonFontPx(17) + 'px', transform: getPrintElemTransform('channel') }">
                                                         {{ pair[1].channel }}
                                                     </div>
                                                     <div class="font-black tracking-wide text-black" :style="{ fontSize: getCartonFontPx(17) + 'px', transform: getPrintElemTransform('carton_no') }">
                                                         {{ pair[1].carton_label_text || ('CARTON NO: ' + pair[1].carton_no + ' OF ' + pair[1].group_count) }}
                                                     </div>
-                                                    <div class="font-bold text-black" :style="{ fontSize: getCartonFontPx(14) + 'px', transform: getPrintElemTransform('gross_weight') }">
+                                                    <div v-if="hasCartonGrossWeight(pair[1])" class="font-bold text-black" :style="{ fontSize: getCartonFontPx(14) + 'px', transform: getPrintElemTransform('gross_weight') }">
                                                         GROSS WEIGHT: <span class="font-black">{{ pair[1].gross_weight }} kg</span>
                                                     </div>
                                                     <div class="font-bold text-black tracking-wider" :style="{ fontSize: getCartonFontPx(14) + 'px', transform: getPrintElemTransform('measurements') }">
@@ -7566,7 +7723,7 @@
                                                 </div>
 
                                                 <!-- Poka-Yoke Renk Rozeti (3.5 cm / 35 mm Çap) -->
-                                                <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                                <div v-if="printShowPokaBadge && activeCartonTemplate?.layout_json?.poka_badge_enabled !== false && hasCartonChannel(c)" class="shrink-0 flex items-center justify-center poka-yoke-badge"
                                                      :style="{ transform: getPrintElemTransform('poka_badge'), width: '35mm', height: '35mm', minWidth: '35mm', minHeight: '35mm' }">
                                                     <svg viewBox="0 0 100 100" class="w-full h-full block"
                                                          style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
@@ -7595,6 +7752,72 @@
                                 <div v-for="c in getPrintCartonsList()" :key="'single-prn-'+c.carton_id"
                                      class="koli-a4-landscape-page bg-white text-black shadow-2xl p-8 mb-8 rounded-lg flex flex-col justify-between print:shadow-none print:p-0 print:m-0 print:rounded-none"
                                      style="width: 250mm; min-height: 180mm; max-width: 100%; box-sizing: border-box; margin-left: auto; margin-right: auto; page-break-after: always; break-after: page;">
+                                    
+                                    <!-- SOLV ÖZEL TABLO FORMATI (1-E-1 EXCEL BİREBİR ŞABLONU) -->
+                                    <template v-if="isSolvLayout(c)">
+                                        <div class="p-6 flex flex-col justify-between relative bg-white h-full koli-etiket-card-box"
+                                             :class="[
+                                                 printBorderStyle === 'none' ? 'border-0' : (printBorderStyle === 'dashed' ? 'border-2 border-dashed border-black' : (printBorderStyle === 'double' ? 'border-2 border-double border-black' : 'border-2 border-black'))
+                                             ]"
+                                             style="font-family: Arial, Helvetica, sans-serif;">
+                                            <table class="w-full border-2 border-black border-collapse text-left font-sans bg-white" style="border: 2px solid black;">
+                                                <!-- SOLV Müşteri & Adres -->
+                                                <tr>
+                                                    <td colspan="100" class="border-2 border-black p-4 font-bold text-lg leading-relaxed text-black" style="border: 2px solid black;">
+                                                        <div class="whitespace-pre-line leading-normal">{{ getSolvAddressHeader(c) }}</div>
+                                                    </td>
+                                                </tr>
+                                                <!-- STYLE Nr. -->
+                                                <tr>
+                                                    <td class="border-2 border-black p-3 font-bold text-base text-black bg-gray-50/50" style="border: 2px solid black; width: 22%;">STYLE Nr.</td>
+                                                    <td colspan="99" class="border-2 border-black p-3 font-black text-xl text-black font-mono" style="border: 2px solid black;">
+                                                        {{ c.items && c.items[0] ? c.items[0].model : '' }}
+                                                    </td>
+                                                </tr>
+                                                <!-- COLOUR -->
+                                                <tr>
+                                                    <td class="border-2 border-black p-3 font-bold text-base text-black bg-gray-50/50" style="border: 2px solid black; width: 22%;">COLOUR</td>
+                                                    <td colspan="99" class="border-2 border-black p-3 font-black text-xl text-black font-mono" style="border: 2px solid black;">
+                                                        {{ c.items && c.items[0] ? c.items[0].color : '' }}
+                                                    </td>
+                                                </tr>
+                                                <!-- SIZE -->
+                                                <tr>
+                                                    <td class="border-2 border-black p-3 font-bold text-base text-black bg-gray-50/50" style="border: 2px solid black; width: 22%;">SIZE</td>
+                                                    <td v-for="sz in getCartonSizeHeaders(c)" :key="'solv-hdr-'+sz"
+                                                        class="border-2 border-black p-2 font-black text-center text-base text-black uppercase"
+                                                        :style="{ width: getSolvColWidth(c) }"
+                                                        style="border: 2px solid black;">
+                                                        {{ sz }}
+                                                    </td>
+                                                    <td class="border-2 border-black p-2 font-black text-center text-base text-black" style="border: 2px solid black; width: 14%;">Total</td>
+                                                </tr>
+                                                <!-- QUANTITY -->
+                                                <tr>
+                                                    <td class="border-2 border-black p-3 font-bold text-base text-black bg-gray-50/50" style="border: 2px solid black; width: 22%;">QUANTITY</td>
+                                                    <td v-for="sz in getCartonSizeHeaders(c)" :key="'solv-qty-'+sz"
+                                                        class="border-2 border-black p-2 font-black text-center text-xl text-black font-mono"
+                                                        :style="{ width: getSolvColWidth(c) }"
+                                                        style="border: 2px solid black;">
+                                                        {{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes ? c.items[0].sizes[sz] : '', c) }}
+                                                    </td>
+                                                    <td class="border-2 border-black p-2 font-black text-center text-xl text-black font-mono" style="border: 2px solid black; width: 14%;">
+                                                        {{ c.items && c.items[0] ? c.items[0].total_qty : '' }}
+                                                    </td>
+                                                </tr>
+                                                <!-- Carton Nr. -->
+                                                <tr>
+                                                    <td class="border-2 border-black p-3 font-bold text-base text-black bg-gray-50/50" style="border: 2px solid black; width: 22%;">Carton Nr.</td>
+                                                    <td colspan="99" class="border-2 border-black p-3 font-black text-2xl text-black font-mono" style="border: 2px solid black;">
+                                                        {{ c.carton_no }} <span v-if="c.group_count && c.group_count > 1" class="text-sm font-semibold text-gray-700">OF {{ c.group_count }}</span>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </template>
+                                    
+                                    <!-- STANDART / GENEL ETİKET KARTI -->
+                                    <template v-else>
                                     
                                     <div class="p-8 flex flex-col justify-between relative bg-white h-full koli-etiket-card-box"
                                          :class="[
@@ -7726,22 +7949,22 @@
                                         <!-- ALT BİLGİLER: KANAL (CARTON NO ÜSTÜNDE), CARTON NO, GROSS WEIGHT, MEASUREMENTS VE POKA-YOKE ROZETİ -->
                                         <div class="pt-2 flex items-center justify-between gap-4">
                                             <div class="space-y-2">
-                                                <div class="font-black uppercase tracking-wider text-black" :style="{ fontSize: getCartonFontPx(22) + 'px', transform: getPrintElemTransform('channel') }">
+                                                <div v-if="hasCartonChannel(c)" class="font-black uppercase tracking-wider text-black" :style="{ fontSize: getCartonFontPx(22) + 'px', transform: getPrintElemTransform('channel') }">
                                                     {{ c.channel }}
                                                 </div>
                                                 <div class="font-black tracking-wide text-black" :style="{ fontSize: getCartonFontPx(22) + 'px', transform: getPrintElemTransform('carton_no') }">
                                                     {{ c.carton_label_text || ('CARTON NO: ' + c.carton_no + ' OF ' + c.group_count) }}
                                                 </div>
-                                                <div class="font-bold text-black" :style="{ fontSize: getCartonFontPx(18) + 'px', transform: getPrintElemTransform('gross_weight') }">
+                                                <div v-if="hasCartonGrossWeight(c)" class="font-bold text-black" :style="{ fontSize: getCartonFontPx(18) + 'px', transform: getPrintElemTransform('gross_weight') }">
                                                     GROSS WEIGHT: <span class="font-black">{{ c.gross_weight }} kg</span>
                                                 </div>
-                                                <div class="font-bold text-black tracking-wider" :style="{ fontSize: getCartonFontPx(18) + 'px', transform: getPrintElemTransform('measurements') }">
-                                                    MEASUREMENTS: {{ c.measurements || '60X40X30' }}
+                                                <div v-if="activeCartonTemplate?.layout_json?.show_measurements !== false && c.measurements" class="font-bold text-black tracking-wider" :style="{ fontSize: getCartonFontPx(18) + 'px', transform: getPrintElemTransform('measurements') }">
+                                                    MEASUREMENTS: {{ c.measurements }}
                                                 </div>
                                             </div>
 
                                             <!-- POKA-YOKE RENK ROZETİ (3.5 CM / 35 MM ÇAP) -->
-                                            <div v-if="printShowPokaBadge" class="shrink-0 flex items-center justify-center poka-yoke-badge"
+                                            <div v-if="printShowPokaBadge && activeCartonTemplate?.layout_json?.poka_badge_enabled !== false && hasCartonChannel(c)" class="shrink-0 flex items-center justify-center poka-yoke-badge"
                                                  :style="{ transform: getPrintElemTransform('poka_badge'), width: '35mm', height: '35mm', minWidth: '35mm', minHeight: '35mm' }">
                                                 <svg viewBox="0 0 100 100" class="w-full h-full block"
                                                      style="width: 35mm; height: 35mm; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;">
@@ -7754,6 +7977,8 @@
                                         </div>
 
                                     </div>
+                                    </template>
+
 
                                 </div>
                             </template>
@@ -13025,23 +13250,24 @@
                             <th class="p-2 border-r border-slate-300 text-center min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">1 İÇ GRAMAJ</th>
                             <th class="p-2 border-r border-slate-300 text-right min-w-[95px] font-bold" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ 2 TOTAL</th>
                             <th class="p-2 border-r border-slate-300 text-right min-w-[95px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ TOPLAM</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">FASON</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KES.İŞT</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">AKS</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ETKOL</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">LOGO</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">BRİT</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">LASTİK</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">DÜĞME</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ÇITÇIT</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">DIGER</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KARGO</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">NAKLIYE</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ASTAR</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">DİKME</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">İLİK-DÜĞME</th>
-                            <th class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ÇITÇIT ÇAKIM</th>
+                            <th v-if="isBudgetCostColVisible('v_fason')" class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">FASON</th>
+                            <th v-if="isBudgetCostColVisible('v_kesim')" class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KES.İŞT</th>
+                            <th v-if="isBudgetCostColVisible('v_aks')" class="p-2 border-r border-slate-300 text-right min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">AKS</th>
+                            <th v-if="isBudgetCostColVisible('v_etkol')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ETKOL</th>
+                            <th v-if="isBudgetCostColVisible('v_logo')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">LOGO</th>
+                            <th v-if="isBudgetCostColVisible('v_nakis')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">NAKIŞ</th>
+                            <th v-if="isBudgetCostColVisible('v_brit')" class="p-2 border-r border-slate-300 text-right min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">BRİT</th>
+                            <th v-if="isBudgetCostColVisible('v_lastik')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">LASTİK</th>
+                            <th v-if="isBudgetCostColVisible('v_dugme')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">DÜĞME</th>
+                            <th v-if="isBudgetCostColVisible('v_citcit')" class="p-2 border-r border-slate-300 text-right min-w-[65px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ÇITÇIT</th>
+                            <th v-if="isBudgetCostColVisible('v_diger')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">DIGER</th>
+                            <th v-if="isBudgetCostColVisible('v_kargo')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KARGO</th>
+                            <th v-if="isBudgetCostColVisible('v_nakliye')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">NAKLIYE</th>
+                            <th v-if="isBudgetCostColVisible('v_kumas_extra')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">KUMAŞ</th>
+                            <th v-if="isBudgetCostColVisible('v_astar')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ASTAR</th>
+                            <th v-if="isBudgetCostColVisible('v_dikme')" class="p-2 border-r border-slate-300 text-right min-w-[70px]" style="background-color: #FFFF00 !important; color: #000000 !important;">DİKME</th>
+                            <th v-if="isBudgetCostColVisible('v_ilik_dugme')" class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">İLİK-DÜĞME</th>
+                            <th v-if="isBudgetCostColVisible('v_citcit_cakim')" class="p-2 border-r border-slate-300 text-right min-w-[75px]" style="background-color: #FFFF00 !important; color: #000000 !important;">ÇITÇIT ÇAKIM</th>
                             <th class="p-2 border-r border-slate-300 text-right min-w-[95px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">MALİYET TL</th>
                             <th class="p-2 border-r border-slate-300 text-right min-w-[95px] font-black" style="background-color: #FFFF00 !important; color: #000000 !important;">MALİYET EURO</th>
                             <th class="p-2 border-r border-slate-300 text-center min-w-[75px] font-bold" style="background-color: #FFFF00 !important; color: #000000 !important;">EURO</th>
@@ -13081,23 +13307,24 @@
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center text-slate-500">{{ r.fb2_gramaj || '-' }}</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-bold text-slate-800 dark:text-slate-200">{{ formatNumber2Dec(r.fb2_total) }}</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-black text-blue-600 dark:text-blue-400">{{ formatNumber2Dec(r.kumas_toplam) }} ₺</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_fason) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_kesim) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_aks) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_etkol) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_logo) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_brit) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_lastik) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_dugme) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_citcit) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_diger) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_kargo) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_nakliye) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_kumas_extra) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_astar) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_dikme) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_ilik_dugme) }}</td>
-                            <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_citcit_cakim) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_fason')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_fason) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_kesim')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_kesim) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_aks')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_aks) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_etkol')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_etkol) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_logo')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_logo) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_nakis')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_nakis) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_brit')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_brit) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_lastik')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_lastik) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_dugme')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_dugme) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_citcit')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_citcit) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_diger')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_diger) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_kargo')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_kargo) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_nakliye')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_nakliye) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_kumas_extra')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_kumas_extra) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_astar')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_astar) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_dikme')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_dikme) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_ilik_dugme')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_ilik_dugme) }}</td>
+                            <td v-if="isBudgetCostColVisible('v_citcit_cakim')" class="p-2 border-r border-slate-200 dark:border-slate-800 text-right">{{ formatNumber2Dec(r.v_citcit_cakim) }}</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-bold text-slate-900 dark:text-white">{{ formatNumber2Dec(r.maliyet_tl) }} ₺</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-right font-black text-amber-600 dark:text-amber-400">{{ formatCurrencyVal(r.maliyet_eur, '€') }}</td>
                             <td class="p-2 border-r border-slate-200 dark:border-slate-800 text-center font-bold text-slate-500">{{ formatNumber2Dec(r.eur_rate) }}</td>
@@ -13112,7 +13339,7 @@
                         <tr class="h-10 text-[11px]">
                             <td colspan="9" class="p-2.5 text-right border-r border-slate-300 dark:border-slate-700 tracking-wider">GENEL TOPLAM:</td>
                             <td class="p-2.5 text-center border-r border-slate-300 dark:border-slate-700 text-xs font-black">{{ (budgetTotals.total_qty || 0).toLocaleString('tr-TR') }}</td>
-                            <td colspan="29" class="p-2 border-r border-slate-300 dark:border-slate-700 bg-amber-50/50 dark:bg-slate-850"></td>
+                            <td :colspan="budgetMiddleColspan" class="p-2 border-r border-slate-300 dark:border-slate-700 bg-amber-50/50 dark:bg-slate-850"></td>
                             <td class="p-2.5 text-right border-r border-slate-300 dark:border-slate-700 font-black text-slate-900 dark:text-white">{{ formatNumber2Dec(budgetTotals.total_maliyet_tl) }} ₺</td>
                             <td class="p-2.5 text-right border-r border-slate-300 dark:border-slate-700 font-black text-amber-700 dark:text-amber-400">{{ formatCurrencyVal(budgetTotals.total_maliyet_eur, '€') }}</td>
                             <td class="p-2.5 text-right font-black text-emerald-700 dark:text-emerald-400">{{ formatCurrencyVal(budgetTotals.total_order, '€') }}</td>
@@ -14180,7 +14407,7 @@
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20261007_0105"></script>
+<script src="/static/js/app.js?v=20261022_1705_termin_fixed"></script>
 
 </body>
 </html>

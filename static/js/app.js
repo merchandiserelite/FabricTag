@@ -514,6 +514,7 @@ window.__texflowApp = createApp({
             let totalShippedQty = 0;
             let evalCutQty = 0;
             let evalShippedQty = 0;
+            let evalFirePieces = 0;
             let shippedOrdersCount = 0;
             let shippedOrdersPlannedQty = 0;
             let shippedOrdersActualQty = 0;
@@ -547,14 +548,27 @@ window.__texflowApp = createApp({
                 // Status & Sevkiyat Kontrolü
                 const st = String(item.status || '').toLowerCase();
                 const isShipped = st.includes('sevk') || st.includes('yükleme') || st.includes('shipped') || st.includes('gönderildi');
-                const cutQty = parseInt(item.cut_total_quantity || 0) || 0;
-                const shippedItemQty = parseInt(item.shipped_total_quantity || 0) || 0;
+                const cutQty = parseInt(item.cut_total_quantity || 0) || (item.sizes ? item.sizes.reduce((acc, z) => acc + (parseInt(z.cut_quantity || 0) || 0), 0) : 0);
+                const shippedItemQty = parseInt(item.shipped_total_quantity || 0) || (item.sizes ? item.sizes.reduce((acc, z) => acc + (parseInt(z.shipped_quantity || 0) || 0), 0) : 0);
                 
                 totalCutQty += cutQty;
                 if (shippedItemQty > 0) {
                     totalShippedQty += shippedItemQty;
                 } else if (isShipped) {
                     totalShippedQty += qty;
+                }
+
+                // 2. Kalite / Fire hesabı: Kesimi yapılmış modellerde gerçekleşen yükleme farkı
+                if (cutQty > 0) {
+                    const effShipped = shippedItemQty > 0 ? shippedItemQty : (isShipped ? qty : 0);
+                    evalCutQty += cutQty;
+                    evalShippedQty += effShipped;
+                    if (effShipped > 0) {
+                        const diff = cutQty - effShipped;
+                        if (diff > 0) {
+                            evalFirePieces += diff;
+                        }
+                    }
                 }
 
                 if (isShipped || shippedItemQty > 0) {
@@ -564,19 +578,13 @@ window.__texflowApp = createApp({
                     shippedOrdersPlannedQty += qty;
                     shippedOrdersActualQty += effectiveShippedQty;
 
-                    // 2. Kalite / Fire hesabı: Kesimi yapılmış ve sevk edilmiş siparişler üzerinden
-                    if (cutQty > 0) {
-                        evalCutQty += cutQty;
-                        evalShippedQty += effectiveShippedQty;
-                    }
-
                     // Yükleme Termin Başarısı Hesaplama (delivery_date vs shipping_date)
                     const dDelivery = parseDateFlexible(item.delivery_date);
                     const dShipping = parseDateFlexible(item.shipping_date);
                     if (dDelivery && dShipping) {
                         shippedWithDatesCount++;
                         // Teslimat günü sonuna kadar (23:59:59) sevk edilmişse zamanında kabul edilir
-                        const deliveryEnd = new Date(dDelivery.getTime() + (24 * 60 * 60 * 1000) - 1);
+                        const deliveryEnd = new Date(dDelivery.getFullYear(), dDelivery.getMonth(), dDelivery.getDate(), 23, 59, 59);
                         if (dShipping <= deliveryEnd) {
                             shippedOnTimeCount++;
                         }
@@ -679,9 +687,10 @@ window.__texflowApp = createApp({
                 : (totalPieces > 0 ? Math.round((totalShippedPieces / totalPieces) * 100) : 0);
 
             // 2. İkinci Kalite / Fire Oranı (Kesilen - Yüklenen / Kesilen)
-            const targetCutQty = evalCutQty > 0 ? evalCutQty : 0;
-            const targetShippedQty = evalCutQty > 0 ? evalShippedQty : 0;
-            const secondQualityPieces = Math.max(0, targetCutQty - targetShippedQty);
+            const targetCutQty = evalCutQty > 0 ? evalCutQty : totalCutQty;
+            const secondQualityPieces = evalFirePieces > 0 
+                ? evalFirePieces 
+                : (targetCutQty > 0 && evalShippedQty > 0 ? Math.max(0, targetCutQty - evalShippedQty) : 0);
             const secondQualityPercent = targetCutQty > 0 
                 ? Math.round(((secondQualityPieces) / targetCutQty) * 1000) / 10 
                 : 0;
@@ -732,8 +741,8 @@ window.__texflowApp = createApp({
                 netProfitTL: Math.round(netProfitEUR * numEurRate),
                 profitMargin,
                 actualCostCount,
-                totalCutQty: evalCutQty > 0 ? evalCutQty : totalCutQty,
-                totalShippedQty: evalCutQty > 0 ? evalShippedQty : totalShippedQty,
+                totalCutQty: totalCutQty,
+                totalShippedQty: totalShippedQty,
                 shippedOrdersCount,
                 shippedOrdersPlannedQty,
                 shippingDateSuccessPercent,
@@ -6466,20 +6475,22 @@ window.__texflowApp = createApp({
                 const rates = costData.exchangeRates || { EUR: 55.75, USD: 48.9, TL: 1.0 };
                 const eurRate = parseFloat(rates.EUR) || 55.75;
                 const fabrics = costData.fabrics || [];
-                const items = costData.items || [];
-
-                const getItemVal = (keywords) => {
-                    for (const it of items) {
-                        const n = (it.name || '').toLowerCase();
-                        if (keywords.some(k => n.includes(k.toLowerCase()))) {
-                            let v = it.total_tl;
-                            if (v === undefined || v === null || v === '') v = it.evaluated_price;
-                            if (v === undefined || v === null || v === '') v = it.price;
-                            const num = parseFloat(v);
-                            return isNaN(num) ? 0 : num;
-                        }
+                let items = costData.items || [];
+                if ((!items || items.length === 0) && Array.isArray(costData.cost_studies) && costData.cost_studies.length > 0) {
+                    const actIdx = typeof costData.active_study_index === 'number' ? costData.active_study_index : 0;
+                    const study = costData.cost_studies[actIdx] || costData.cost_studies[0];
+                    if (study && study.items) {
+                        items = study.items;
                     }
-                    return 0;
+                }
+
+                // Türkçe harf duyarlı normalizasyon (İ/I/ı ve noktalı harf uyumsuzluğunu önler)
+                const normalizeTr = (text) => {
+                    if (!text) return '';
+                    let str = text.toString().replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i').replace(/\u0307/g, '');
+                    const trMap = { 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c' };
+                    str = str.replace(/[ğüşöçĞÜŞÖÇ]/gi, m => trMap[m.toLowerCase()] || m);
+                    return str.toLowerCase().trim();
                 };
 
                 const fb1 = fabrics[0] || {};
@@ -6505,28 +6516,65 @@ window.__texflowApp = createApp({
 
                 const kumasToplam = parseFloat(costData.totals?.toplam_kumas_tl || (fb1Total + fb2Total + fb3Total)) || 0;
 
-                const vFason = getItemVal(['fason', 'dikim']);
-                const vKesim = getItemVal(['kesim']);
-                const vAks = getItemVal(['aksesuar', 'aks']);
-                const vEtkol = getItemVal(['etiket', 'kol', 'etkol']);
-                const vLogo = getItemVal(['logo', 'baskı', 'nakış']);
-                const vBrit = getItemVal(['brit']);
-                const vLastik = getItemVal(['lastik']);
-                const vDugme = getItemVal(['düğme', 'fermuar']);
-                const vCitcit = getItemVal(['çıtçıt']);
-                const vDiger = getItemVal(['diğer', 'tasarım', 'kalıp']);
-                const vKargo = getItemVal(['kargo']);
-                const vNakliye = getItemVal(['nakliye']);
-                const vKumasExtra = getItemVal(['yıkama', 'taş']) || (fb1Total && !getItemVal(['yıkama', 'taş']) ? fb1Total : 0);
-                const vAstar = getItemVal(['astar', 'tela']);
-                const vDikme = getItemVal(['dikme', 'el dikişi']);
-                const vIlikDugme = getItemVal(['ilik', 'ilik-düğme']);
-                const vCitcitCakim = getItemVal(['çakım', 'çıtçıt çakım']);
+                let vFason = 0, vKesim = 0, vAks = 0, vEtkol = 0, vLogo = 0, vNakis = 0;
+                let vBrit = 0, vLastik = 0, vDugme = 0, vCitcit = 0, vDiger = 0;
+                let vKargo = 0, vNakliye = 0, vKumasExtra = 0, vAstar = 0;
+                let vDikme = 0, vIlikDugme = 0, vCitcitCakim = 0;
+
+                for (const it of items) {
+                    const n = normalizeTr(it.name || '');
+                    let v = it.total_tl;
+                    if (v === undefined || v === null || v === '') v = it.evaluated_price;
+                    if (v === undefined || v === null || v === '') v = it.price;
+                    const num = parseFloat(v);
+                    const val = isNaN(num) ? 0 : num;
+                    if (val === 0) continue;
+
+                    const rawN = (it.name || '').toLowerCase();
+                    if (n.includes('ilik')) {
+                        vIlikDugme += val;
+                    } else if (n.includes('cakim') || rawN.includes('çakım') || rawN.includes('cakim')) {
+                        vCitcitCakim += val;
+                    } else if (n.includes('citcit') || rawN.includes('çıtçıt') || rawN.includes('citcit')) {
+                        vCitcit += val;
+                    } else if (n.includes('dugme') || rawN.includes('düğme') || n.includes('fermuar')) {
+                        vDugme += val;
+                    } else if (n.includes('fason') || n.includes('dikim')) {
+                        vFason += val;
+                    } else if (n.includes('kesim') || n.includes('pastal')) {
+                        vKesim += val;
+                    } else if (n.includes('etiket') || n.includes('etkol') || n.includes('kol')) {
+                        vEtkol += val;
+                    } else if (n.includes('logo')) {
+                        vLogo += val;
+                    } else if (n.includes('nakis') || n.includes('naki') || rawN.includes('nakış') || rawN.includes('nakis') || n.includes('baski') || rawN.includes('baskı') || n.includes('tas') || rawN.includes('taş')) {
+                        vNakis += val;
+                    } else if (n.includes('brit') || n.includes('birit') || n.includes('biye')) {
+                        vBrit += val;
+                    } else if (n.includes('lastik')) {
+                        vLastik += val;
+                    } else if (n.includes('kargo')) {
+                        vKargo += val;
+                    } else if (n.includes('nakliye') || n.includes('sevkiyat')) {
+                        vNakliye += val;
+                    } else if (n.includes('yikama') || rawN.includes('yıkama') || n.includes('apre') || n.includes('terbiye')) {
+                        vKumasExtra += val;
+                    } else if (n.includes('astar') || n.includes('tela') || n.includes('vatka')) {
+                        vAstar += val;
+                    } else if (n.includes('dikme') || n.includes('el dikisi') || rawN.includes('dikiş')) {
+                        vDikme += val;
+                    } else if (n.includes('aksesuar') || n.includes('aks') || n.includes('kapsul') || rawN.includes('kapsül')) {
+                        vAks += val;
+                    } else {
+                        vDiger += val;
+                    }
+                }
 
                 const totals = costData.totals || {};
                 let maliyetTL = parseFloat(totals.maliyet_1_tl || totals.maliyet_2_tl || 0) || 0;
                 if (maliyetTL === 0 && (kumasToplam > 0 || vFason > 0)) {
-                    maliyetTL = Math.round((kumasToplam + vFason + vKesim + vAks + vEtkol + vKargo + vNakliye + vDiger) * 1.06 * 100) / 100;
+                    const imalatSum = vFason + vKesim + vAks + vEtkol + vLogo + vNakis + vBrit + vLastik + vDugme + vCitcit + vDiger + vKargo + vNakliye + vKumasExtra + vAstar + vDikme + vIlikDugme + vCitcitCakim;
+                    maliyetTL = Math.round((kumasToplam + imalatSum) * 1.06 * 100) / 100;
                 }
                 const maliyetEUR = parseFloat(totals.maliyet_1_doviz || (eurRate > 0 ? Math.round((maliyetTL / eurRate) * 100) / 100 : 0)) || 0;
                 const price = parseFloat(totals.toplam_satis_doviz || s.unit_price || 0) || 0;
@@ -6605,6 +6653,7 @@ window.__texflowApp = createApp({
                     v_aks: vAks,
                     v_etkol: vEtkol,
                     v_logo: vLogo,
+                    v_nakis: vNakis,
                     v_brit: vBrit,
                     v_lastik: vLastik,
                     v_dugme: vDugme,
@@ -6637,6 +6686,29 @@ window.__texflowApp = createApp({
         const closeBudgetModal = () => {
             budgetModalOpen.value = false;
         };
+
+        const isBudgetCostColVisible = (colKey) => {
+            const list = budgetFilteredRows.value || [];
+            if (!list.length) return false;
+            return list.some(r => {
+                const v = parseFloat(r[colKey]);
+                return !isNaN(v) && v > 0;
+            });
+        };
+
+        const budgetMiddleColspan = computed(() => {
+            let count = 8; // PRICE (1) + KUMAŞ 1 FİYAT/CM/TOTAL (3) + KUMAŞ 2 FİYAT/GRAMAJ/TOTAL (3) + KUMAŞ TOPLAM (1)
+            const costKeys = [
+                'v_fason', 'v_kesim', 'v_aks', 'v_etkol', 'v_logo', 'v_nakis',
+                'v_brit', 'v_lastik', 'v_dugme', 'v_citcit', 'v_diger',
+                'v_kargo', 'v_nakliye', 'v_kumas_extra', 'v_astar', 'v_dikme',
+                'v_ilik_dugme', 'v_citcit_cakim'
+            ];
+            for (const k of costKeys) {
+                if (isBudgetCostColVisible(k)) count++;
+            }
+            return count;
+        });
 
         const budgetFilteredRows = computed(() => {
             const list = budgetRows.value || [];
@@ -6986,6 +7058,7 @@ window.__texflowApp = createApp({
             if (menuKey === 'audit_logs') loadGlobalAuditLogs();
             if (menuKey === 'dashboard') {
                 loadStats();
+                loadStyles().catch(() => {});
                 setTimeout(() => scrollToCurrentWeek(false), 120);
             }
             if (menuKey === 'kullanici_yonetimi') loadUsers();
@@ -7443,6 +7516,7 @@ window.__texflowApp = createApp({
                 const desc = String(s.description || '').toLowerCase();
                 const col = String(s.color_name || '').toLowerCase();
                 const colCode = String(s.color_code || '').toLowerCase();
+                const chan = String(s.channel || '').toLowerCase();
                 const art = String(s.fabric_article || '').toLowerCase();
                 const fType = String(s.fabric_type || '').toLowerCase();
                 const qName = String(s.fabric_quality_name_1 || '').toLowerCase();
@@ -7453,7 +7527,7 @@ window.__texflowApp = createApp({
                 const dispTitle2 = String(s.fabric_display_title_2 || '').toLowerCase();
 
                 return po.includes(q) || cust.includes(q) || brand.includes(q) || st.includes(q) ||
-                       desc.includes(q) || col.includes(q) || colCode.includes(q) || art.includes(q) ||
+                       desc.includes(q) || col.includes(q) || colCode.includes(q) || chan.includes(q) || art.includes(q) ||
                        fType.includes(q) || qName.includes(q) || qCode.includes(q) ||
                        fVar1.includes(q) || fVar2.includes(q) ||
                        dispTitle.includes(q) || dispTitle2.includes(q);
@@ -7943,6 +8017,9 @@ window.__texflowApp = createApp({
         // YÜKLEME ADETLERİ & SEVKİYAT ASORTİSİ
         // =========================================================================
         const shippingSearch = ref('');
+        watch(shippingSearch, () => {
+            nextTick(() => refreshIcons());
+        });
         const shippingSavingId = ref(null);
         const shippingSaveSuccessId = ref(null);
 
@@ -7959,6 +8036,7 @@ window.__texflowApp = createApp({
                 const desc = String(s.description || '').toLowerCase();
                 const col = String(s.color_name || '').toLowerCase();
                 const colCode = String(s.color_code || '').toLowerCase();
+                const chan = String(s.channel || '').toLowerCase();
                 const art = String(s.fabric_article || '').toLowerCase();
                 const fType = String(s.fabric_type || '').toLowerCase();
                 const qName = String(s.fabric_quality_name_1 || '').toLowerCase();
@@ -7969,7 +8047,7 @@ window.__texflowApp = createApp({
                 const dispTitle2 = String(s.fabric_display_title_2 || '').toLowerCase();
 
                 return po.includes(q) || cust.includes(q) || brand.includes(q) || st.includes(q) ||
-                       desc.includes(q) || col.includes(q) || colCode.includes(q) || art.includes(q) ||
+                       desc.includes(q) || col.includes(q) || colCode.includes(q) || chan.includes(q) || art.includes(q) ||
                        fType.includes(q) || qName.includes(q) || qCode.includes(q) ||
                        fVar1.includes(q) || fVar2.includes(q) ||
                        dispTitle.includes(q) || dispTitle2.includes(q);
@@ -8004,7 +8082,7 @@ window.__texflowApp = createApp({
         };
 
         const getShippingStyleDiff = (s) => {
-            return getShippingStyleCutTotal(s) - getShippingStyleShippedTotal(s);
+            return getShippingStyleShippedTotal(s) - getShippingStyleCutTotal(s);
         };
 
         let shippingDebounceTimer = null;
@@ -8027,10 +8105,13 @@ window.__texflowApp = createApp({
                     method: 'POST',
                     body: JSON.stringify({
                         style_id: s.id,
-                        sizes: sizesPayload
+                        sizes: sizesPayload,
+                        shipping_date: s.shipping_date || s.delivery_date || ''
                     })
                 });
                 s.shipping_date = res.shipping_date;
+                const newTotalShipped = (res.total_shipped_quantity !== undefined) ? res.total_shipped_quantity : (s.sizes || []).reduce((acc, z) => acc + (parseInt(z.shipped_quantity || 0) || 0), 0);
+                s.shipped_total_quantity = newTotalShipped;
                 shippingSaveSuccessId.value = s.id;
                 setTimeout(() => {
                     if (shippingSaveSuccessId.value === s.id) shippingSaveSuccessId.value = null;
@@ -11212,6 +11293,92 @@ window.__texflowApp = createApp({
             }).slice(0, 20);
         });
 
+        
+        const deleteCartonTemplate = async (templateId, templateName = '') => {
+            if (!confirm(`"${templateName || 'Bu şablon'}" koli üstü formatını silmek istediğinize emin misiniz?`)) return;
+            try {
+                const res = await apiFetch(`/api/carton-templates/${templateId}`, { method: 'DELETE' });
+                showToast('success', res.message || 'Şablon başarıyla silindi.');
+                await loadCartonTemplates();
+            } catch (err) {
+                showToast('error', err.message || 'Şablon silinemedi.');
+            }
+        };
+
+        const hasCartonChannel = computed(() => {
+            if (!packingData.value || !packingData.value.cartons) return false;
+            return packingData.value.cartons.some(c => c.channel && c.channel.trim() !== '');
+        });
+
+        const hasCartonGrossWeight = computed(() => {
+            if (!packingData.value || !packingData.value.cartons) return false;
+            return packingData.value.cartons.some(c => c.gross_weight && Number(c.gross_weight) > 0);
+        });
+
+        const isSolvLayout = (c = null) => {
+            const tpl = activeCartonTemplate.value;
+            if (!tpl) return false;
+            const tplStyle = tpl.layout_json?.template_style;
+            const custName = (tpl.customer_name || '').toUpperCase();
+            const cartonCust = (c && c.customer ? c.customer : (packingData.value?.customer || '')).toUpperCase();
+            return tplStyle === 'solv_classic' || custName.includes('SOLV') || cartonCust.includes('SOLV');
+        };
+
+        const isSolvDesigner = () => {
+            const tpl = designerTemplate.value;
+            if (!tpl) return false;
+            const tplStyle = tpl.layout_json?.template_style;
+            const custName = (tpl.customer_name || '').toUpperCase();
+            const tplName = (tpl.template_name || '').toUpperCase();
+            return tplStyle === 'solv_classic' || custName.includes('SOLV') || tplName.includes('SOLV');
+        };
+
+        const getSolvAddressHeader = (c = null) => {
+            const tpl = activeCartonTemplate.value;
+            if (tpl && tpl.layout_json && tpl.layout_json.address_full) {
+                return tpl.layout_json.address_full;
+            }
+            if (tpl && tpl.layout_json) {
+                const parts = [];
+                if (tpl.layout_json.header_title) parts.push(tpl.layout_json.header_title);
+                if (tpl.layout_json.address_line1) parts.push(tpl.layout_json.address_line1);
+                if (tpl.layout_json.address_line2) parts.push(tpl.layout_json.address_line2);
+                if (tpl.layout_json.address_line3) parts.push(tpl.layout_json.address_line3);
+                if (parts.length > 0) return parts.join('\n');
+            }
+            const lines = [];
+            const t = getCartonHeaderTitle(c);
+            if (t) lines.push(t);
+            const a1 = getCartonAddress1(c);
+            if (a1) lines.push(a1);
+            const a2 = getCartonAddress2(c);
+            if (a2) lines.push(a2);
+            const a3 = getCartonAddress3(c);
+            if (a3) lines.push(a3);
+            const res = lines.filter(Boolean).join('\n');
+            return res || "SOLV\nKetenstraat 146, 3061MJ\nRotterdam\nThe Netherlands";
+        };
+
+        const getSolvColWidth = (c = null) => {
+            const sizes = getCartonSizeHeaders(c);
+            if (!sizes || sizes.length === 0) return '15%';
+            const pct = (64 / sizes.length).toFixed(1);
+            return `${pct}%`;
+        };
+
+        const getSolvDesignerAddress = () => {
+            const tpl = designerTemplate.value;
+            if (!tpl || !tpl.layout_json) return "SOLV\nKetenstraat 146, 3061MJ\nRotterdam\nThe Netherlands";
+            if (tpl.layout_json.address_full) return tpl.layout_json.address_full;
+            const parts = [];
+            if (tpl.layout_json.header_title || tpl.customer_name) parts.push(tpl.layout_json.header_title || tpl.customer_name);
+            if (tpl.layout_json.address_line1) parts.push(tpl.layout_json.address_line1);
+            if (tpl.layout_json.address_line2) parts.push(tpl.layout_json.address_line2);
+            if (tpl.layout_json.address_line3) parts.push(tpl.layout_json.address_line3);
+            return parts.length > 0 ? parts.join('\n') : "SOLV\nKetenstraat 146, 3061MJ\nRotterdam\nThe Netherlands";
+        };
+
+
         const loadCartonTemplates = async (preferCustomer = null) => {
             try {
                 let url = '/api/carton-templates';
@@ -11246,9 +11413,11 @@ window.__texflowApp = createApp({
 
         const applyTemplateToPrintConfig = (tpl) => {
             if (!tpl) return;
+            try { localStorage.removeItem('texflow_carton_size_settings'); } catch(e) {}
+            printCustomBrand.value = (tpl.layout_json && tpl.layout_json.brand) || '';
             printPaperSize.value = tpl.paper_size || 'A4';
             printOrientation.value = tpl.orientation || 'landscape';
-            printItemsPerPage.value = tpl.items_per_page || (printPaperSize.value === 'A4' ? 2 : 1);
+            printItemsPerPage.value = tpl.items_per_page || 1;
             printShowGridLines.value = tpl.show_grid_lines !== false;
             printBorderStyle.value = tpl.border_style || 'solid';
             printBorderWidth.value = tpl.border_width || 2;
@@ -11482,7 +11651,7 @@ window.__texflowApp = createApp({
                     orientation: data.orientation || 'landscape',
                     width_mm: data.width_mm || 297,
                     height_mm: data.height_mm || 210,
-                    items_per_page: data.items_per_page || 2,
+                    items_per_page: data.items_per_page || 1,
                     border_style: data.border_style || 'solid',
                     border_width: data.border_width || 2,
                     show_grid_lines: data.show_grid_lines !== false,
@@ -12475,6 +12644,8 @@ window.__texflowApp = createApp({
             budgetTotals,
             openBudgetModal,
             closeBudgetModal,
+            isBudgetCostColVisible,
+            budgetMiddleColspan,
             exportBudgetExcel,
             formatCurrencyVal,
             formatNumber2Dec,
@@ -12581,6 +12752,10 @@ window.__texflowApp = createApp({
             printCustomWidth,
             printCustomHeight,
             loadCartonTemplates,
+            deleteCartonTemplate,
+            hasCartonChannel,
+            hasCartonGrossWeight,
+            isSolvLayout,
             selectCartonTemplate,
             applyTemplateToPrintConfig,
             onPrintPaperSizeChange,
@@ -12665,8 +12840,12 @@ window.__texflowApp = createApp({
             userFontPrefs,
             saveUserFontPrefs,
             resetUserFontPrefs,
-            applyUserFontPrefs
-        };
+            applyUserFontPrefs,
+            isSolvDesigner,
+            getSolvAddressHeader,
+            getSolvColWidth,
+            getSolvDesignerAddress,
+};
 
 
 

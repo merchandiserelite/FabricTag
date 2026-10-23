@@ -418,6 +418,35 @@ def init_db():
         VALUES (1, 'Standart / Genel', 'Argox / Termal Rulo 100x150 mm', 'Argox_100x150', 'portrait', 100, 150, 1, 'solid', 1, 1, 3, 0.95, ?, 0)
         """, (default_argox_layout,))
 
+        default_solv_layout = json.dumps({
+            "header_title": "SOLV",
+            "address_line1": "Ketenstraat 146, 3061MJ",
+            "address_line2": "Rotterdam",
+            "address_line3": "The Netherlands",
+            "brand": "SOLV",
+            "show_brand": False,
+            "measurements": "60X40X30",
+            "poka_badge_enabled": False,
+            "dual_variant_enabled": False,
+            "show_barcode": False,
+            "barcode_type": "CODE128",
+            "barcode_field": "carton_no",
+            "sticker_format": "A4_1up",
+            "col_style_w": 16,
+            "col_color_w": 14,
+            "col_total_w": 10,
+            "table_scale": 1.3,
+            "table_row_height": "large",
+            "detected_sizes": ["XS", "S", "M", "L", "XL"]
+        }, ensure_ascii=False)
+
+        cursor.execute("""
+        INSERT INTO carton_label_templates 
+        (company_id, customer_name, template_name, paper_size, orientation, width_mm, height_mm, items_per_page, border_style, border_width, show_grid_lines, margin_mm, font_scale, layout_json, is_default)
+        VALUES (1, 'SOLV', 'SOLV A4 Koli Üstü Şablonu (Yatay)', 'A4', 'landscape', 297, 210, 1, 'solid', 2, 1, 6, 1.0, ?, 1)
+        """, (default_solv_layout,))
+
+
     # Safe migrations for cut and shipping tracking
     cursor.execute("PRAGMA table_info(styles)")
     style_cols = [r[1] for r in cursor.fetchall()]
