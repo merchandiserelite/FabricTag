@@ -466,6 +466,10 @@ def init_db():
         cursor.execute("ALTER TABLE styles ADD COLUMN image_url_2 TEXT")
     if "brand" not in style_cols:
         cursor.execute("ALTER TABLE styles ADD COLUMN brand TEXT DEFAULT ''")
+    if "last_status_updated_by" not in style_cols:
+        cursor.execute("ALTER TABLE styles ADD COLUMN last_status_updated_by TEXT")
+    if "last_status_updated_at" not in style_cols:
+        cursor.execute("ALTER TABLE styles ADD COLUMN last_status_updated_at TEXT")
 
     cursor.execute("PRAGMA table_info(size_distributions)")
     size_cols = [r[1] for r in cursor.fetchall()]
