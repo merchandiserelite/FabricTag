@@ -263,7 +263,632 @@ window.__texflowApp = createApp({
                 const saved = localStorage.getItem('texflow_user_font_pref');
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    return {
+            
+        // =========================================================================
+        // NUMUNE & PPS TAKİBİ MODÜLÜ (SAMPLE & PPS TRACKING)
+        // =========================================================================
+        const samplesList = ref([]);
+        const samplesLoading = ref(false);
+        const sampleSearchQuery = ref('');
+        const sampleActiveFilterCol = ref(null);
+        const sampleFilterSearch = ref('');
+        const sampleColumnFilters = ref({});
+        const sampleSortCol = ref('id');
+        const sampleSortDir = ref('desc');
+        const selectedSampleIds = ref([]);
+        const sampleImageModalOpen = ref(false);
+        const activeSampleItem = ref(null);
+        const sampleImageSlot = ref(1);
+
+        const sampleTypesList = ref([
+            '1.Proto', '2.Proto', 'Fit Sample', '1.PPS', '2.PPS', 'SMS', 'Size Set', 'Shipment Sample'
+        ]);
+        const sampleStagesList = ref([
+            'Talep Oluşturuldu', 'Kumaş Bekliyor', 'Dikim Sırada', 'Yıkama/Boya', 'Taş/Baskı', 'Çakım', 'Ütü/Paket'
+        ]);
+        const newCustomSampleType = ref('');
+        const newCustomSampleStage = ref('');
+
+        const defaultSampleColumns = [
+            { key: 'select', title: '', width: 38, sortable: false, filterable: false, isFixed: true },
+            { key: 'image', title: 'Görsel', width: 68, sortable: false, filterable: false, align: 'center', isFixed: true },
+            { key: 'sample_type', title: 'Numune Türü', width: 125, sortable: true, filterable: true, align: 'center' },
+            { key: 'season', title: 'Sezon', width: 110, sortable: true, filterable: true, align: 'left' },
+            { key: 'customer_name', title: 'Müşteri', width: 135, sortable: true, filterable: true, align: 'left' },
+            { key: 'style_name', title: 'Model Adı', width: 145, sortable: true, filterable: true, align: 'left' },
+            { key: 'style_no', title: 'Model Kodu', width: 125, sortable: true, filterable: true, align: 'left' },
+            { key: 'request_date', title: 'Talep Tarihi', width: 105, sortable: true, filterable: true, align: 'center' },
+            { key: 'delivery_date', title: 'Teslim Tarihi', width: 115, sortable: true, filterable: true, align: 'center' },
+            { key: 'quantity_sizes', title: 'Adet ve Beden', width: 155, sortable: false, filterable: true, align: 'left' },
+            { key: 'fabric_info', title: 'Kumaşı', width: 165, sortable: true, filterable: true, align: 'left' },
+            { key: 'unit_meters', title: 'Birim Metraj', width: 100, sortable: true, filterable: false, align: 'center' },
+            { key: 'stage', title: 'İşlem Aşaması', width: 145, sortable: true, filterable: true, align: 'center' },
+            { key: 'actions', title: 'İşlem', width: 140, sortable: false, filterable: false, align: 'center', isFixedRight: true }
+        ];
+
+        const sampleColOrder = ref([]);
+        const sampleColWidths = ref({});
+
+        const initSampleColOrder = () => {
+            const savedOrder = localStorage.getItem('sample_col_order');
+            if (savedOrder) {
+                try {
+                    const parsed = JSON.parse(savedOrder);
+                    if (Array.isArray(parsed) && parsed.length) {
+                        const validKeys = defaultSampleColumns.map(c => c.key);
+                        const filtered = parsed.filter(k => validKeys.includes(k));
+                        validKeys.forEach(k => {
+                            if (!filtered.includes(k)) filtered.push(k);
+                        });
+                        sampleColOrder.value = filtered;
+                        return;
+                    }
+                } catch (e) {}
+            }
+            sampleColOrder.value = defaultSampleColumns.map(c => c.key);
+        };
+
+        const initSampleColWidths = () => {
+            const savedWidths = localStorage.getItem('sample_col_widths');
+            if (savedWidths) {
+                try {
+                    sampleColWidths.value = JSON.parse(savedWidths) || {};
+                } catch (e) {}
+            }
+        };
+
+        initSampleColOrder();
+        initSampleColWidths();
+
+        const displayedSampleColumns = computed(() => {
+            const order = sampleColOrder.value || [];
+            const colMap = new Map(defaultSampleColumns.map(c => [c.key, c]));
+            const cols = [];
+            order.forEach(k => {
+                if (colMap.has(k)) {
+                    const col = { ...colMap.get(k) };
+                    if (sampleColWidths.value[k]) {
+                        col.width = sampleColWidths.value[k];
+                    }
+                    cols.push(col);
+                }
+            });
+            return cols;
+        });
+
+        let sampleDraggedCol = null;
+        const onSampleColDragStart = (col, e) => {
+            if (col.key === 'select' || col.key === 'actions') return;
+            sampleDraggedCol = col.key;
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', col.key);
+            }
+        };
+
+        const onSampleColDragOver = (col, e) => {
+            if (col.key === 'select' || col.key === 'actions') return;
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        };
+
+        const onSampleColDrop = (targetCol, e) => {
+            if (!sampleDraggedCol || sampleDraggedCol === targetCol.key) return;
+            if (targetCol.key === 'select' || targetCol.key === 'actions') return;
+
+            const order = [...sampleColOrder.value];
+            const fromIdx = order.indexOf(sampleDraggedCol);
+            const toIdx = order.indexOf(targetCol.key);
+            if (fromIdx !== -1 && toIdx !== -1) {
+                order.splice(fromIdx, 1);
+                order.splice(toIdx, 0, sampleDraggedCol);
+                sampleColOrder.value = order;
+                localStorage.setItem('sample_col_order', JSON.stringify(order));
+            }
+            sampleDraggedCol = null;
+        };
+
+        const resetSampleColOrder = () => {
+            sampleColOrder.value = defaultSampleColumns.map(c => c.key);
+            sampleColWidths.value = {};
+            localStorage.removeItem('sample_col_order');
+            localStorage.removeItem('sample_col_widths');
+            showToast('Numune tablosu sütun düzeni varsayılana sıfırlandı.', 'info');
+        };
+
+        const startSampleColResize = (col, e) => {
+            const startX = e.clientX;
+            const startW = col.width || 100;
+
+            const onMouseMove = (moveEvent) => {
+                const diff = moveEvent.clientX - startX;
+                const newW = Math.max(45, startW + diff);
+                col.width = newW;
+                sampleColWidths.value[col.key] = newW;
+            };
+
+            const onMouseUp = () => {
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onMouseUp);
+                localStorage.setItem('sample_col_widths', JSON.stringify(sampleColWidths.value));
+            };
+
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        };
+
+        const loadSampleOptions = async () => {
+            try {
+                const res = await apiFetch('/api/samples/options');
+                if (res) {
+                    if (Array.isArray(res.sample_types) && res.sample_types.length) {
+                        sampleTypesList.value = res.sample_types;
+                    }
+                    if (Array.isArray(res.stages) && res.stages.length) {
+                        sampleStagesList.value = res.stages;
+                    }
+                }
+            } catch (err) {
+                console.warn('Sample options could not be loaded:', err);
+            }
+        };
+
+        const addNewCustomSampleType = async () => {
+            const val = String(newCustomSampleType.value || '').trim();
+            if (!val) return;
+            if (!sampleTypesList.value.includes(val)) {
+                sampleTypesList.value.push(val);
+                try {
+                    await apiFetch('/api/samples/options', {
+                        method: 'POST',
+                        body: JSON.stringify({ sample_types: sampleTypesList.value })
+                    });
+                    showToast(`Yeni numune türü eklendi: ${val}`, 'success');
+                } catch (err) {}
+            }
+            newCustomSampleType.value = '';
+        };
+
+        const addNewCustomSampleStage = async () => {
+            const val = String(newCustomSampleStage.value || '').trim();
+            if (!val) return;
+            if (!sampleStagesList.value.includes(val)) {
+                sampleStagesList.value.push(val);
+                try {
+                    await apiFetch('/api/samples/options', {
+                        method: 'POST',
+                        body: JSON.stringify({ stages: sampleStagesList.value })
+                    });
+                    showToast(`Yeni işlem aşaması eklendi: ${val}`, 'success');
+                } catch (err) {}
+            }
+            newCustomSampleStage.value = '';
+        };
+
+        const loadSamples = async () => {
+            samplesLoading.value = true;
+            try {
+                const res = await apiFetch('/api/samples');
+                if (Array.isArray(res)) {
+                    samplesList.value = res;
+                }
+            } catch (err) {
+                console.error('loadSamples error:', err);
+                showToast('Numune listesi yüklenemedi: ' + (err.message || err), 'error');
+            } finally {
+                samplesLoading.value = false;
+                refreshIcons();
+            }
+        };
+
+        const addNewSampleRow = async () => {
+            try {
+                const payload = {
+                    sample_type: sampleTypesList.value[0] || '1.Proto',
+                    season: '',
+                    customer_name: '',
+                    style_name: '',
+                    style_no: '',
+                    request_date: new Date().toLocaleDateString('tr-TR'),
+                    delivery_date: '',
+                    quantity_sizes: '',
+                    fabric_info: '',
+                    unit_meters: '',
+                    stage: sampleStagesList.value[0] || 'Talep Oluşturuldu',
+                    notes: ''
+                };
+                const res = await apiFetch('/api/samples', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                if (res && res.id) {
+                    samplesList.value.unshift(res);
+                    showToast('Yeni numune satırı eklendi.', 'success');
+                    refreshIcons();
+                }
+            } catch (err) {
+                console.error('addNewSampleRow error:', err);
+                showToast('Numune eklenemedi: ' + (err.message || err), 'error');
+            }
+        };
+
+        const updateSampleCell = async (sample, field, val) => {
+            if (!sample || !sample.id) return;
+            sample[field] = val;
+            try {
+                await apiFetch(`/api/samples/${sample.id}/update-cell`, {
+                    method: 'POST',
+                    body: JSON.stringify({ field, value: val })
+                });
+            } catch (err) {
+                console.error('updateSampleCell error:', err);
+            }
+        };
+
+        const updateSampleSmartDate = async (sample, field, rawInput) => {
+            if (!sample || !sample.id) return;
+            if (!rawInput || String(rawInput).trim() === '') {
+                sample[field] = '';
+                await updateSampleCell(sample, field, '');
+                return;
+            }
+            const formatted = parseSmartDate(rawInput);
+            sample[field] = formatted;
+            await updateSampleCell(sample, field, formatted);
+        };
+
+        const deleteSampleRow = async (sample) => {
+            if (!sample || !sample.id) return;
+            const ok = confirm(`"${sample.style_no || sample.style_name || sample.id}" nolu numune kaydını silmek istediğinize emin misiniz?`);
+            if (!ok) return;
+            try {
+                await apiFetch(`/api/samples/${sample.id}`, { method: 'DELETE' });
+                samplesList.value = samplesList.value.filter(s => s.id !== sample.id);
+                selectedSampleIds.value = selectedSampleIds.value.filter(id => id !== sample.id);
+                showToast('Numune kaydı silindi.', 'info');
+            } catch (err) {
+                console.error('deleteSampleRow error:', err);
+                showToast('Silinirken hata oluştu: ' + (err.message || err), 'error');
+            }
+        };
+
+        const openSampleImageModal = (sample) => {
+            activeSampleItem.value = sample;
+            sampleImageSlot.value = 1;
+            sampleImageModalOpen.value = true;
+            refreshIcons();
+        };
+
+        const uploadSampleImageSlot = async (slot, event) => {
+            const file = event.target.files && event.target.files[0];
+            if (!file || !activeSampleItem.value) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await apiFetch(`/api/samples/${activeSampleItem.value.id}/image?slot=${slot}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (res && res.image_url) {
+                    if (slot === 2) {
+                        activeSampleItem.value.image_url_2 = res.image_url;
+                    } else {
+                        activeSampleItem.value.image_url = res.image_url;
+                    }
+                    showToast('Görsel yüklendi.', 'success');
+                }
+            } catch (err) {
+                showToast('Görsel yüklenemedi: ' + (err.message || err), 'error');
+            } finally {
+                event.target.value = '';
+            }
+        };
+
+        const deleteSampleImageSlot = async (slot) => {
+            if (!activeSampleItem.value) return;
+            try {
+                await apiFetch(`/api/samples/${activeSampleItem.value.id}/image/${slot}`, { method: 'DELETE' });
+                if (slot === 2) {
+                    activeSampleItem.value.image_url_2 = null;
+                } else {
+                    activeSampleItem.value.image_url = null;
+                }
+                showToast('Görsel kaldırıldı.', 'info');
+            } catch (err) {}
+        };
+
+        const createCostFromSample = (sample) => {
+            if (!sample) return;
+            openCreateFreeCostModal();
+            freeCostHeader.value.customer_name = sample.customer_name || '';
+            freeCostHeader.value.season = sample.season || '';
+            freeCostHeader.value.model_no = sample.style_no || '';
+            freeCostHeader.value.color = sample.style_name || '';
+            freeCostHeader.value.fabric_name = sample.fabric_info || '';
+            if (sample.unit_meters) {
+                const mNum = parseFloat(String(sample.unit_meters).replace(',', '.')) || 0;
+                if (mNum > 0 && freeCostForm.value.fabrics && freeCostForm.value.fabrics[0]) {
+                    freeCostForm.value.fabrics[0].meters = mNum;
+                }
+            }
+            recalculateFreeCost();
+            showToast(`"${sample.style_no || sample.style_name || 'Numune'}" bilgileriyle serbest maliyet açıldı.`, 'success');
+        };
+
+        const toggleSampleSort = (colKey) => {
+            if (sampleSortCol.value === colKey) {
+                sampleSortDir.value = sampleSortDir.value === 'asc' ? 'desc' : 'asc';
+            } else {
+                sampleSortCol.value = colKey;
+                sampleSortDir.value = 'asc';
+            }
+        };
+
+        const toggleSampleFilterDropdown = (colKey) => {
+            if (sampleActiveFilterCol.value === colKey) {
+                sampleActiveFilterCol.value = null;
+            } else {
+                sampleActiveFilterCol.value = colKey;
+                sampleFilterSearch.value = '';
+            }
+            refreshIcons();
+        };
+
+        const getSampleDistinctValues = (colKey) => {
+            const set = new Set();
+            (samplesList.value || []).forEach(s => {
+                const v = s[colKey];
+                if (v !== undefined && v !== null && String(v).trim() !== '') {
+                    set.add(String(v).trim());
+                } else {
+                    set.add('(Boş)');
+                }
+            });
+            let arr = Array.from(set).sort();
+            if (sampleFilterSearch.value.trim()) {
+                const q = sampleFilterSearch.value.trim().toLowerCase();
+                arr = arr.filter(v => v.toLowerCase().includes(q));
+            }
+            return arr;
+        };
+
+        const isSampleValSelected = (colKey, val) => {
+            const selected = sampleColumnFilters.value[colKey];
+            if (!selected) return true;
+            return selected.includes(val);
+        };
+
+        const toggleSampleValSelection = (colKey, val, isChecked) => {
+            const allVals = getSampleDistinctValues(colKey);
+            let current = sampleColumnFilters.value[colKey] ? [...sampleColumnFilters.value[colKey]] : [...allVals];
+            if (isChecked) {
+                if (!current.includes(val)) current.push(val);
+            } else {
+                current = current.filter(v => v !== val);
+            }
+            sampleColumnFilters.value[colKey] = current;
+        };
+
+        const selectAllSampleForColumn = (colKey) => {
+            delete sampleColumnFilters.value[colKey];
+        };
+
+        const clearSampleColumnFilter = (colKey) => {
+            sampleColumnFilters.value[colKey] = [];
+        };
+
+        const clearAllSampleFilters = () => {
+            sampleColumnFilters.value = {};
+            sampleSearchQuery.value = '';
+            showToast('Tüm süzgeçler temizlendi.', 'info');
+        };
+
+        const hasActiveSampleFilter = (colKey) => {
+            return !!sampleColumnFilters.value[colKey];
+        };
+
+        const filteredSamplesList = computed(() => {
+            let list = samplesList.value || [];
+
+            if (sampleSearchQuery.value.trim()) {
+                const q = sampleSearchQuery.value.trim().toLowerCase();
+                list = list.filter(s => {
+                    return (
+                        (s.customer_name && s.customer_name.toLowerCase().includes(q)) ||
+                        (s.style_no && s.style_no.toLowerCase().includes(q)) ||
+                        (s.style_name && s.style_name.toLowerCase().includes(q)) ||
+                        (s.sample_type && s.sample_type.toLowerCase().includes(q)) ||
+                        (s.season && s.season.toLowerCase().includes(q)) ||
+                        (s.fabric_info && s.fabric_info.toLowerCase().includes(q)) ||
+                        (s.stage && s.stage.toLowerCase().includes(q)) ||
+                        (s.quantity_sizes && s.quantity_sizes.toLowerCase().includes(q))
+                    );
+                });
+            }
+
+            Object.keys(sampleColumnFilters.value).forEach(colKey => {
+                const allowed = sampleColumnFilters.value[colKey];
+                if (allowed) {
+                    list = list.filter(s => {
+                        const val = (s[colKey] !== undefined && s[colKey] !== null && String(s[colKey]).trim() !== '') 
+                            ? String(s[colKey]).trim() 
+                            : '(Boş)';
+                        return allowed.includes(val);
+                    });
+                }
+            });
+
+            if (sampleSortCol.value) {
+                const col = sampleSortCol.value;
+                const dir = sampleSortDir.value === 'asc' ? 1 : -1;
+                list = [...list].sort((a, b) => {
+                    let va = a[col] || '';
+                    let vb = b[col] || '';
+                    if (typeof va === 'number' && typeof vb === 'number') {
+                        return (va - vb) * dir;
+                    }
+                    return String(va).localeCompare(String(vb), 'tr') * dir;
+                });
+            }
+
+            return list;
+        });
+
+        const sampleMetrics = computed(() => {
+            const list = samplesList.value || [];
+            let inProgress = 0;
+            let completed = 0;
+            list.forEach(s => {
+                const st = String(s.stage || '').toLowerCase();
+                if (st.includes('ütü') || st.includes('sevk') || st.includes('tamam') || st.includes('onay')) {
+                    completed++;
+                } else {
+                    inProgress++;
+                }
+            });
+            return {
+                total: list.length,
+                inProgressCount: inProgress,
+                completedCount: completed
+            };
+        });
+
+        const getSampleStageBadgeClass = (stage) => {
+            const st = String(stage || '').toLowerCase();
+            if (st.includes('talep')) return 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20';
+            if (st.includes('kumaş')) return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+            if (st.includes('dikim')) return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20';
+            if (st.includes('yıkama') || st.includes('boya')) return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20';
+            if (st.includes('taş') || st.includes('baskı')) return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20';
+            if (st.includes('çakım')) return 'bg-pink-500/10 text-pink-600 dark:text-pink-400 border border-pink-500/20';
+            if (st.includes('ütü') || st.includes('paket') || st.includes('tamam')) return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
+            return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
+        };
+
+        const getSampleTypeBadgeClass = (stype) => {
+            const t = String(stype || '').toLowerCase();
+            if (t.includes('1.proto')) return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20';
+            if (t.includes('2.proto')) return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20';
+            if (t.includes('fit')) return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20';
+            if (t.includes('1.pps')) return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+            if (t.includes('2.pps')) return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20';
+            if (t.includes('sms')) return 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20';
+            if (t.includes('size')) return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
+            if (t.includes('shipment')) return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20';
+            return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
+        };
+
+        const isAllSamplesSelected = computed(() => {
+            const filtered = filteredSamplesList.value || [];
+            if (!filtered.length) return false;
+            return filtered.every(s => selectedSampleIds.value.includes(s.id));
+        });
+
+        const toggleSelectAllSamples = (isChecked) => {
+            const filtered = filteredSamplesList.value || [];
+            if (isChecked) {
+                const ids = new Set(selectedSampleIds.value);
+                filtered.forEach(s => ids.add(s.id));
+                selectedSampleIds.value = Array.from(ids);
+            } else {
+                const filterIds = new Set(filtered.map(s => s.id));
+                selectedSampleIds.value = selectedSampleIds.value.filter(id => !filterIds.has(id));
+            }
+        };
+
+        const toggleSelectSample = (id) => {
+            if (selectedSampleIds.value.includes(id)) {
+                selectedSampleIds.value = selectedSampleIds.value.filter(x => x !== id);
+            } else {
+                selectedSampleIds.value.push(id);
+            }
+        };
+
+        // Print Modal & Customization
+        const samplePrintModalOpen = ref(false);
+        const samplePrintOrientation = ref(localStorage.getItem('sample_print_orient') || 'landscape');
+        const samplePrintScale = ref(parseInt(localStorage.getItem('sample_print_scale')) || 95);
+
+        const samplePrintDefaultColWidths = {
+            image: 9,
+            sample_type: 10,
+            season: 9,
+            customer_name: 11,
+            style_no: 10,
+            style_name: 12,
+            request_date: 8,
+            delivery_date: 9,
+            quantity_sizes: 11,
+            fabric_info: 13,
+            unit_meters: 6,
+            stage: 10
+        };
+        const samplePrintColWidths = ref({ ...samplePrintDefaultColWidths });
+
+        const loadSamplePrintColWidths = () => {
+            const saved = localStorage.getItem('sample_print_col_widths_pct');
+            if (saved) {
+                try {
+                    samplePrintColWidths.value = Object.assign({}, samplePrintDefaultColWidths, JSON.parse(saved));
+                } catch (e) {}
+            }
+        };
+        loadSamplePrintColWidths();
+
+        const updateSamplePrintStyle = () => {
+            let el = document.getElementById('dynamic-sample-print-style');
+            if (!el) {
+                el = document.createElement('style');
+                el.id = 'dynamic-sample-print-style';
+                document.head.appendChild(el);
+            }
+            const orient = samplePrintOrientation.value === 'portrait' ? 'portrait' : 'landscape';
+            el.innerHTML = `@page { size: A4 ${orient} !important; margin: 6mm !important; }`;
+        };
+
+        const openSamplePrintModal = () => {
+            loadSamplePrintColWidths();
+            samplePrintModalOpen.value = true;
+            updateSamplePrintStyle();
+            refreshIcons();
+        };
+
+        const setSamplePrintOrientation = (orient) => {
+            samplePrintOrientation.value = orient;
+            localStorage.setItem('sample_print_orient', orient);
+            updateSamplePrintStyle();
+        };
+
+        const setSamplePrintScale = (scale) => {
+            samplePrintScale.value = scale;
+            localStorage.setItem('sample_print_scale', scale.toString());
+        };
+
+        const samplePrintRows = computed(() => {
+            const selected = selectedSampleIds.value;
+            const all = filteredSamplesList.value || [];
+            if (selected && selected.length) {
+                return all.filter(s => selected.includes(s.id));
+            }
+            return all;
+        });
+
+        const printSampleList = () => {
+            updateSamplePrintStyle();
+            setTimeout(() => {
+                window.print();
+            }, 60);
+        };
+
+        const exportSamplesExcel = () => {
+            const selected = selectedSampleIds.value;
+            let url = '/api/samples/export-excel';
+            if (selected && selected.length) {
+                url += `?ids=${selected.join(',')}`;
+            }
+            window.open(url, '_blank');
+        };
+
+        return {
                         fontFamily: parsed.fontFamily || defaultFontPrefs.fontFamily,
                         fontSize: parsed.fontSize || defaultFontPrefs.fontSize,
                         fontColorLight: parsed.fontColorLight || defaultFontPrefs.fontColorLight,
@@ -7271,6 +7896,10 @@ window.__texflowApp = createApp({
                 if (menuKey === 'ceki_koli') loadCartonTemplates();
             }
             if (menuKey === 'serbest_fiyat') loadFreeCostStudies();
+            if (menuKey === 'numune_takip') {
+                loadSamples();
+                loadSampleOptions();
+            }
             if (menuKey === 'fabrictag_entegrasyon') {
                 loadFabrics();
                 if (!styles.value || styles.value.length === 0) loadStyles().catch(() => {});
@@ -12622,6 +13251,66 @@ window.__texflowApp = createApp({
             getFabricArrivalAlertTextColor,
             getDefaultRates,
             getDefaultFabricWastage,
+            samplesList,
+            samplesLoading,
+            sampleSearchQuery,
+            sampleActiveFilterCol,
+            sampleFilterSearch,
+            sampleColumnFilters,
+            sampleSortCol,
+            sampleSortDir,
+            selectedSampleIds,
+            sampleImageModalOpen,
+            activeSampleItem,
+            sampleImageSlot,
+            sampleTypesList,
+            sampleStagesList,
+            newCustomSampleType,
+            newCustomSampleStage,
+            displayedSampleColumns,
+            onSampleColDragStart,
+            onSampleColDragOver,
+            onSampleColDrop,
+            resetSampleColOrder,
+            startSampleColResize,
+            loadSampleOptions,
+            addNewCustomSampleType,
+            addNewCustomSampleStage,
+            loadSamples,
+            addNewSampleRow,
+            updateSampleCell,
+            updateSampleSmartDate,
+            deleteSampleRow,
+            openSampleImageModal,
+            uploadSampleImageSlot,
+            deleteSampleImageSlot,
+            createCostFromSample,
+            toggleSampleSort,
+            toggleSampleFilterDropdown,
+            getSampleDistinctValues,
+            isSampleValSelected,
+            toggleSampleValSelection,
+            selectAllSampleForColumn,
+            clearSampleColumnFilter,
+            clearAllSampleFilters,
+            hasActiveSampleFilter,
+            filteredSamplesList,
+            sampleMetrics,
+            getSampleStageBadgeClass,
+            getSampleTypeBadgeClass,
+            isAllSamplesSelected,
+            toggleSelectAllSamples,
+            toggleSelectSample,
+            samplePrintModalOpen,
+            samplePrintOrientation,
+            samplePrintScale,
+            samplePrintColWidths,
+            samplePrintRows,
+            openSamplePrintModal,
+            setSamplePrintOrientation,
+            setSamplePrintScale,
+            printSampleList,
+            exportSamplesExcel,
             getPpsBadgeClass,
             updatePpsStatus,
             getDaysSinceDate,

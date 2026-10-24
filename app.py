@@ -5902,6 +5902,318 @@ def api_haftalik_program_excel(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
+# ----------------- NUMUNE & PPS TAKİBİ (SAMPLE & PPS TRACKING) -----------------
+SAMPLE_OPTIONS_FILE = Path("data") / "sample_options.json"
+
+DEFAULT_SAMPLE_OPTIONS = {
+    "sample_types": [
+        "1.Proto",
+        "2.Proto",
+        "Fit Sample",
+        "1.PPS",
+        "2.PPS",
+        "SMS",
+        "Size Set",
+        "Shipment Sample"
+    ],
+    "stages": [
+        "Talep Oluşturuldu",
+        "Kumaş Bekliyor",
+        "Dikim Sırada",
+        "Yıkama/Boya",
+        "Taş/Baskı",
+        "Çakım",
+        "Ütü/Paket"
+    ]
+}
+
+def get_saved_sample_options() -> Dict[str, Any]:
+    if SAMPLE_OPTIONS_FILE.exists():
+        try:
+            with open(SAMPLE_OPTIONS_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                return {
+                    "sample_types": saved.get("sample_types", DEFAULT_SAMPLE_OPTIONS["sample_types"]),
+                    "stages": saved.get("stages", DEFAULT_SAMPLE_OPTIONS["stages"])
+                }
+        except Exception as e:
+            print(f"[WARN] sample_options.json okunamadi: {e}")
+    return DEFAULT_SAMPLE_OPTIONS
+
+@app.get("/api/samples/options")
+def api_get_sample_options():
+    return get_saved_sample_options()
+
+@app.post("/api/samples/options")
+def api_save_sample_options(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+    try:
+        SAMPLE_OPTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        current = get_saved_sample_options()
+        if "sample_types" in payload and isinstance(payload["sample_types"], list):
+            current["sample_types"] = [str(x).strip() for x in payload["sample_types"] if str(x).strip()]
+        if "stages" in payload and isinstance(payload["stages"], list):
+            current["stages"] = [str(x).strip() for x in payload["stages"] if str(x).strip()]
+        with open(SAMPLE_OPTIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(current, f, ensure_ascii=False, indent=2)
+        return {"status": "success", "options": current}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/samples")
+def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
+    conn = get_db()
+    c = conn.cursor()
+    company_id = user.get("company_id", 1)
+    
+    query = """
+        SELECT id, company_id, image_url, image_url_2, sample_type, season, customer_name,
+               style_name, style_no, request_date, delivery_date, quantity_sizes,
+               fabric_info, unit_meters, stage, notes, created_by, created_at, updated_at
+        FROM sample_items
+        WHERE company_id = ?
+    """
+    params = [company_id]
+    
+    if search and search.strip():
+        q = f"%{search.strip().lower()}%"
+        query += """ AND (
+            LOWER(customer_name) LIKE ? OR
+            LOWER(style_no) LIKE ? OR
+            LOWER(style_name) LIKE ? OR
+            LOWER(sample_type) LIKE ? OR
+            LOWER(season) LIKE ? OR
+            LOWER(fabric_info) LIKE ? OR
+            LOWER(stage) LIKE ?
+        )"""
+        params.extend([q, q, q, q, q, q, q])
+        
+    query += " ORDER BY id DESC"
+    c.execute(query, params)
+    rows = c.fetchall()
+    
+    cols = [
+        "id", "company_id", "image_url", "image_url_2", "sample_type", "season", "customer_name",
+        "style_name", "style_no", "request_date", "delivery_date", "quantity_sizes",
+        "fabric_info", "unit_meters", "stage", "notes", "created_by", "created_at", "updated_at"
+    ]
+    samples = [dict(zip(cols, row)) for row in rows]
+    return samples
+
+@app.post("/api/samples")
+def api_create_sample(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+    conn = get_db()
+    c = conn.cursor()
+    company_id = user.get("company_id", 1)
+    created_by = user.get("full_name") or user.get("username") or "Kullanıcı"
+    
+    sample_type = str(payload.get("sample_type") or "1.Proto").strip()
+    season = str(payload.get("season") or "").strip()
+    customer_name = str(payload.get("customer_name") or "").strip()
+    style_name = str(payload.get("style_name") or "").strip()
+    style_no = str(payload.get("style_no") or "").strip()
+    request_date = str(payload.get("request_date") or "").strip()
+    delivery_date = str(payload.get("delivery_date") or "").strip()
+    quantity_sizes = str(payload.get("quantity_sizes") or "").strip()
+    fabric_info = str(payload.get("fabric_info") or "").strip()
+    unit_meters = str(payload.get("unit_meters") or "").strip()
+    stage = str(payload.get("stage") or "Talep Oluşturuldu").strip()
+    notes = str(payload.get("notes") or "").strip()
+    
+    c.execute("""
+        INSERT INTO sample_items (
+            company_id, sample_type, season, customer_name, style_name, style_no,
+            request_date, delivery_date, quantity_sizes, fabric_info, unit_meters,
+            stage, notes, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        company_id, sample_type, season, customer_name, style_name, style_no,
+        request_date, delivery_date, quantity_sizes, fabric_info, unit_meters,
+        stage, notes, created_by
+    ))
+    conn.commit()
+    new_id = c.lastrowid
+    
+    c.execute("SELECT * FROM sample_items WHERE id = ?", (new_id,))
+    row = c.fetchone()
+    col_names = [d[0] for d in c.description]
+    return dict(zip(col_names, row))
+
+@app.post("/api/samples/{sample_id}/update-cell")
+def api_update_sample_cell(sample_id: int, payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+    field = payload.get("field")
+    value = payload.get("value")
+    
+    allowed_fields = {
+        "sample_type", "season", "customer_name", "style_name", "style_no",
+        "request_date", "delivery_date", "quantity_sizes", "fabric_info",
+        "unit_meters", "stage", "notes"
+    }
+    if field not in allowed_fields:
+        raise HTTPException(status_code=400, detail=f"Geçersiz alan: {field}")
+        
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(f"UPDATE sample_items SET {field} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (value, sample_id))
+    conn.commit()
+    return {"status": "success", "field": field, "value": value}
+
+@app.delete("/api/samples/{sample_id}")
+def api_delete_sample(sample_id: int, user: Dict[str, Any] = Depends(require_user)):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("DELETE FROM sample_items WHERE id = ?", (sample_id,))
+    conn.commit()
+    return {"status": "success", "message": "Numune kaydı silindi."}
+
+@app.post("/api/samples/{sample_id}/image")
+async def api_upload_sample_image(
+    sample_id: int, 
+    slot: int = Query(1),
+    file: UploadFile = File(...), 
+    user: Dict[str, Any] = Depends(require_user)
+):
+    ext = Path(file.filename).suffix.lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+        raise HTTPException(status_code=400, detail="Geçersiz görsel formatı. Lütfen JPG veya PNG yükleyin.")
+    
+    filename = f"sample_{sample_id}_s{slot}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+    dest_path = STYLE_IMAGES_DIR / filename
+    
+    with open(dest_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    rel_url = f"/uploads/styles/{filename}"
+    col_name = "image_url_2" if slot == 2 else "image_url"
+    
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(f"UPDATE sample_items SET {col_name} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (rel_url, sample_id))
+    conn.commit()
+    return {"status": "success", "image_url": rel_url, "slot": slot}
+
+@app.delete("/api/samples/{sample_id}/image/{slot}")
+def api_delete_sample_image(sample_id: int, slot: int, user: Dict[str, Any] = Depends(require_user)):
+    col_name = "image_url_2" if slot == 2 else "image_url"
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(f"UPDATE sample_items SET {col_name} = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (sample_id,))
+    conn.commit()
+    return {"status": "success", "slot": slot}
+
+@app.get("/api/samples/export-excel")
+def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    conn = get_db()
+    c = conn.cursor()
+    company_id = user.get("company_id", 1)
+
+    query = """
+        SELECT id, sample_type, season, customer_name, style_name, style_no,
+               request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes
+        FROM sample_items
+        WHERE company_id = ?
+    """
+    params = [company_id]
+    if ids and ids.strip():
+        id_list = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
+        if id_list:
+            placeholders = ",".join(["?"] * len(id_list))
+            query += f" AND id IN ({placeholders})"
+            params.extend(id_list)
+
+    query += " ORDER BY id DESC"
+    c.execute(query, params)
+    rows = c.fetchall()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Numune ve PPS Takip"
+
+    ws.merge_cells("A1:L1")
+    title_cell = ws["A1"]
+    title_cell.value = f"NUMUNE VE PPS TAKİP ÇARŞAFI ({datetime.now().strftime('%d.%m.%Y %H:%M')})"
+    title_cell.font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
+    title_cell.fill = PatternFill(start_color="10B981", end_color="10B981", fill_type="solid")
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 32
+
+    headers = [
+        "Sıra", "Numune Türü", "Sezon", "Müşteri", "Model Adı", "Model Kodu",
+        "Talep Tarihi", "Teslim Tarihi", "Adet ve Beden", "Kumaşı", "Birim Metraj (m)", "İşlem Aşaması"
+    ]
+    ws.append([])
+    ws.append(headers)
+    ws.row_dimensions[3].height = 24
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    thin_border = Border(
+        left=Side(style="thin", color="CBD5E1"),
+        right=Side(style="thin", color="CBD5E1"),
+        top=Side(style="thin", color="CBD5E1"),
+        bottom=Side(style="thin", color="CBD5E1")
+    )
+
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=3, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
+
+    row_num = 4
+    for idx, r in enumerate(rows, 1):
+        row_data = [
+            idx,
+            r[1] or "",
+            r[2] or "",
+            r[3] or "",
+            r[4] or "",
+            r[5] or "",
+            r[6] or "",
+            r[7] or "",
+            r[8] or "",
+            r[9] or "",
+            r[10] or "",
+            r[11] or ""
+        ]
+        ws.append(row_data)
+        ws.row_dimensions[row_num].height = 20
+        fill_color = "F8FAFC" if idx % 2 == 0 else "FFFFFF"
+        row_fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+        
+        for c_idx in range(1, len(row_data) + 1):
+            cell = ws.cell(row=row_num, column=c_idx)
+            cell.fill = row_fill
+            cell.border = thin_border
+            if c_idx in [1, 7, 8, 11, 12]:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            else:
+                cell.alignment = Alignment(horizontal="left", vertical="center")
+        row_num += 1
+
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            if cell.row > 1 and cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+    output_stream = io.BytesIO()
+    wb.save(output_stream)
+    output_stream.seek(0)
+    filename = f"Numune_PPS_Takip_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return Response(
+        content=output_stream.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
 # ----------------- VARSAYILAN SİSTEM AYARLARI (CUSTOM DEFAULTS) -----------------
 CUSTOM_DEFAULTS_FILE = Path("data") / "custom_defaults.json"
 
