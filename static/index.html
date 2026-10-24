@@ -2272,10 +2272,12 @@
                             </button>
 
                             <!-- ÖZET YAZDIR BUTONU -->
-                            <button @click="openCarsafPrintModal"
-                                    class="h-9 px-3 rounded-xl btn-theme text-white text-xs font-bold flex items-center justify-center transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
+                            <button id="btn-ozet-yazdir"
+                                    @click="openCarsafPrintModal"
+                                    class="h-9 px-2.5 rounded-xl btn-theme text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
                                     title="İmalat formatında yazdır">
-                                <span>Özet Yazdır</span>
+                                <span>Özet</span>
+                                <span class="text-[9.5px] text-white/90 font-semibold">Yazdır</span>
                             </button>
 
 
@@ -2830,7 +2832,7 @@
                                         <td v-for="col in displayedColumns" :key="col.key"
                                             :class="[ {'text-center': col.align === 'center', [isDarkMode ? 'border-slate-800/60' : 'border-slate-200']: true}, getCellBgClass(item, false, col.isSizesCollapsedGroup || col.isFabricCollapsedHeader) ]"
                                             class="p-2 border-r overflow-hidden text-ellipsis whitespace-nowrap align-middle"
-                                            :style="[{ width: (col.width || 100) + 'px', maxWidth: (col.width || 100) + 'px' }, getStickyColumnStyle(col, false, item)]">
+                                            :style="[{ width: (col.width || 100) + 'px', maxWidth: (col.width || 100) + 'px' }, getStickyColumnStyle(col, false, item), getDeliveryDateAlertStyle(item, col)]">
                                             
                                             <!-- 1. Müşteri -->
                                             <template v-if="col.key === 'customer_name'">
@@ -2938,8 +2940,9 @@
                                                            :value="item.delivery_date"
                                                            @change="updateSmartDate(item, 'delivery_date', $event.target.value)"
                                                            placeholder="GG.AA"
-                                                           class="w-full bg-transparent border-0 outline-none text-xs font-mono font-semibold text-center hover:bg-slate-500/10 rounded px-1 py-0.5 transition"
-                                                           title="Teslimat tarihi girin (ör: 25.09 veya 25.09.2026)">
+                                                           class="w-full bg-transparent border-0 outline-none text-xs font-mono font-bold text-center hover:bg-black/5 dark:hover:bg-white/5 rounded px-1 py-0.5 transition"
+                                                           :style="{ color: getDeliveryDateTextColor(item, col) }"
+                                                           :title="getDeliveryDateTooltip(item)">
                                                 </div>
                                             </template>
 
@@ -3194,6 +3197,7 @@
                                             <template v-else-if="col.key === 'fabric_arrival_date'">
                                                 <div class="w-full flex items-center justify-center text-center">
                                                     <div class="w-full inline-flex items-center justify-center transition"
+                                                         :style="getFabricArrivalAlertStyle(item.fabric_arrival_date, item.fabric_received_meters)"
                                                          :class="getFabricArrivalDateStyleClass(item.fabric_arrival_date, item.fabric_received_meters)">
                                                         <input type="text"
                                                                data-is-date="true"
@@ -3201,7 +3205,7 @@
                                                                @change="updateSmartDate(item, 'fabric_arrival_date', $event.target.value)"
                                                                placeholder="GG.AA"
                                                                class="w-full bg-transparent border-0 outline-none text-xs font-mono text-center px-1 py-0.5 rounded transition font-extrabold"
-                                                               :class="getFabricArrivalDateStyleClass(item.fabric_arrival_date, item.fabric_received_meters) ? '!text-black font-extrabold' : (item.fabric_arrival_date ? (isDarkMode ? 'text-slate-100' : 'text-slate-900') : (isDarkMode ? 'text-slate-500' : 'text-slate-400'))"
+                                                               :style="{ color: getFabricArrivalAlertTextColor(item.fabric_arrival_date, item.fabric_received_meters) }"
                                                                title="Kumaş termin tarihi girin (ör: 20.09 veya 20.09.2026)">
                                                     </div>
                                                 </div>
@@ -3411,12 +3415,13 @@
                                              <template v-else-if="col.key === 'fabric_arrival_date_2'">
                                                  <div class="w-full flex items-center justify-center text-center">
                                                      <div class="w-full inline-flex items-center justify-center transition"
+                                                          :style="getFabricArrivalAlertStyle(item.fabric_arrival_date_2, item.fabric_received_meters_2)"
                                                           :class="getFabricArrivalDateStyleClass(item.fabric_arrival_date_2, item.fabric_received_meters_2)">
                                                          <input type="date"
                                                                 :value="formatDateForInput(item.fabric_arrival_date_2)"
                                                                 @change="updateCellWithLog(item.id, 'fabric_arrival_date_2', $event.target.value, 'Kumaş Termin Tarihi 2 Güncellendi')"
                                                                 class="w-full bg-transparent border-0 outline-none text-xs font-mono text-center cursor-pointer px-1 py-0.5 rounded transition font-extrabold"
-                                                                :class="getFabricArrivalDateStyleClass(item.fabric_arrival_date_2, item.fabric_received_meters_2) ? '!text-black font-extrabold' : (item.fabric_arrival_date_2 ? (isDarkMode ? 'text-slate-100' : 'text-slate-900') : (isDarkMode ? 'text-slate-500' : 'text-slate-400'))">
+                                                                :style="{ color: getFabricArrivalAlertTextColor(item.fabric_arrival_date_2, item.fabric_received_meters_2) }">
                                                      </div>
                                                  </div>
                                              </template>
@@ -8442,6 +8447,342 @@
                         </div>
                     </div>
                     
+                    <!-- ======================================================== -->
+                    <!-- KART: MALİYET ÇALIŞMASI VARSAYILAN ORANLARI -->
+                    <!-- ======================================================== -->
+                    <div class="p-6 rounded-2xl border transition shadow-sm space-y-5"
+                         :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                        <div class="flex items-start justify-between gap-4 border-b pb-4"
+                             :class="isDarkMode ? 'border-slate-800' : 'border-slate-100'">
+                            <div class="flex items-center gap-3">
+                                <div class="w-11 h-11 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
+                                    <i data-lucide="calculator" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-black tracking-tight" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                        Maliyet Çalışması Varsayılan Oranları
+                                    </h3>
+                                    <p class="text-xs text-slate-400 mt-0.5">
+                                        Yeni maliyet çalışması veya serbest maliyet açıldığında otomatik doldurulacak şirket standart fire, genel gider ve kâr oranları.
+                                    </p>
+                                </div>
+                            </div>
+                            <button type="button"
+                                    @click="saveCustomDefaults"
+                                    :disabled="savingDefaults"
+                                    class="btn-theme px-4 py-2 rounded-xl text-xs font-bold text-white shadow-sm flex items-center gap-1.5 hover:brightness-110 active:scale-95 transition shrink-0 cursor-pointer">
+                                <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                                <span>{{ savingDefaults ? 'Kaydediliyor...' : 'Oranları Kaydet' }}</span>
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <!-- 1. Kumaş Fire Oranı -->
+                            <div class="p-4 rounded-xl border flex flex-col justify-between"
+                                 :class="isDarkMode ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-50 border-slate-200/80'">
+                                <div>
+                                    <label class="block text-xs font-bold mb-1" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                        Kumaş Fire Default Oranı
+                                    </label>
+                                    <p class="text-[11px] text-slate-400 mb-2.5">Maliyet kumaş kalemleri ve yeni sipariş fire yüzdesi.</p>
+                                </div>
+                                <div class="relative">
+                                    <input type="number" step="0.1" min="0" max="100"
+                                           v-model.number="customDefaults.default_fabric_wastage"
+                                           class="w-full px-3 py-2 pr-8 rounded-lg text-sm font-mono font-bold border transition outline-none"
+                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white focus:border-indigo-500' : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-500'"
+                                           placeholder="5.0">
+                                    <span class="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                                </div>
+                            </div>
+
+                            <!-- 2. İmalat / Fason Fire Oranı -->
+                            <div class="p-4 rounded-xl border flex flex-col justify-between"
+                                 :class="isDarkMode ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-50 border-slate-200/80'">
+                                <div>
+                                    <label class="block text-xs font-bold mb-1" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                        İmalat / Fason Fire Oranı
+                                    </label>
+                                    <p class="text-[11px] text-slate-400 mb-2.5">Kesimhane, dikiş ve fason üretim fire yüzdesi.</p>
+                                </div>
+                                <div class="relative">
+                                    <input type="number" step="0.1" min="0" max="100"
+                                           v-model.number="customDefaults.default_manufacturing_wastage"
+                                           class="w-full px-3 py-2 pr-8 rounded-lg text-sm font-mono font-bold border transition outline-none"
+                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white focus:border-indigo-500' : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-500'"
+                                           placeholder="5.0">
+                                    <span class="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                                </div>
+                            </div>
+
+                            <!-- 3. Genel Gider Oranı -->
+                            <div class="p-4 rounded-xl border flex flex-col justify-between"
+                                 :class="isDarkMode ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-50 border-slate-200/80'">
+                                <div>
+                                    <label class="block text-xs font-bold mb-1" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                        Genel Gider (GG) Oranı
+                                    </label>
+                                    <p class="text-[11px] text-slate-400 mb-2.5">Yönetim, enerji ve fabrika genel gider payı.</p>
+                                </div>
+                                <div class="relative">
+                                    <input type="number" step="0.1" min="0" max="100"
+                                           v-model.number="customDefaults.default_overhead_rate"
+                                           class="w-full px-3 py-2 pr-8 rounded-lg text-sm font-mono font-bold border transition outline-none"
+                                           :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white focus:border-indigo-500' : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-500'"
+                                           placeholder="15.0">
+                                    <span class="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                                </div>
+                            </div>
+
+                            <!-- 4 & 5. MUP ve Komisyon Yan Yana -->
+                            <div class="p-4 rounded-xl border flex flex-col justify-between"
+                                 :class="isDarkMode ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-50 border-slate-200/80'">
+                                <div>
+                                    <label class="block text-xs font-bold mb-1" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                        MUP & Komisyon Oranları
+                                    </label>
+                                    <p class="text-[11px] text-slate-400 mb-2.5">Kâr marjı (MUP) ve aracı komisyonu.</p>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="relative">
+                                        <label class="block text-[10px] font-semibold text-slate-400 mb-1">MUP %</label>
+                                        <input type="number" step="0.1" min="0" max="100"
+                                               v-model.number="customDefaults.default_mup_rate"
+                                               class="w-full px-2.5 py-2 pr-7 rounded-lg text-xs font-mono font-bold border transition outline-none"
+                                               :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white focus:border-indigo-500' : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-500'"
+                                               placeholder="15.0">
+                                        <span class="absolute right-2.5 bottom-2.5 text-xs font-bold text-slate-400">%</span>
+                                    </div>
+                                    <div class="relative">
+                                        <label class="block text-[10px] font-semibold text-slate-400 mb-1">Komisyon %</label>
+                                        <input type="number" step="0.1" min="0" max="100"
+                                               v-model.number="customDefaults.default_commission_rate"
+                                               class="w-full px-2.5 py-2 pr-7 rounded-lg text-xs font-mono font-bold border transition outline-none"
+                                               :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white focus:border-indigo-500' : 'bg-white border-slate-300 text-slate-900 focus:border-indigo-500'"
+                                               placeholder="0.0">
+                                        <span class="absolute right-2.5 bottom-2.5 text-xs font-bold text-slate-400">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ======================================================== -->
+                    <!-- KART: ÇARŞAF LİSTESİ TERMİN & KUMAŞ UYARI RENKLERİ -->
+                    <!-- ======================================================== -->
+                    <div class="p-6 rounded-2xl border transition shadow-sm space-y-6"
+                         :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4"
+                             :class="isDarkMode ? 'border-slate-800' : 'border-slate-100'">
+                            <div class="flex items-center gap-3">
+                                <div class="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+                                    <i data-lucide="palette" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-black tracking-tight" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                        Çarşaf Listesi Termin & Kumaş Kalan Gün Uyarı Renkleri
+                                    </h3>
+                                    <p class="text-xs text-slate-400 mt-0.5">
+                                        Sipariş termin ve kumaş geliş tarihlerine kalan gün sayısına göre çarşaf tablosundaki görsel uyarıları ve dolgu renklerini özelleştirin.
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <!-- AKTİF / PASİF SWITCH -->
+                            <div class="flex items-center gap-3 shrink-0">
+                                <span class="text-xs font-bold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">Uyarı Renkleri:</span>
+                                <label class="relative inline-flex items-center cursor-pointer select-none">
+                                    <input type="checkbox" v-model="customDefaults.alerts_enabled" class="sr-only peer">
+                                    <div class="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
+                                    <span class="ml-2 text-xs font-bold" :class="customDefaults.alerts_enabled ? 'text-emerald-500' : 'text-slate-400'">
+                                        {{ customDefaults.alerts_enabled ? 'Aktif' : 'Pasif' }}
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- BÖLÜM 1: SİPARİŞ TERMİN UYARISI (HÜCRE DOLGU RENGİ) -->
+                            <div class="p-5 rounded-xl border space-y-4"
+                                 :class="isDarkMode ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/80 border-slate-200/90'">
+                                <div class="flex items-center justify-between border-b pb-2.5"
+                                     :class="isDarkMode ? 'border-slate-700/60' : 'border-slate-200'">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+                                        <h4 class="text-xs font-extrabold tracking-wide uppercase" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                            Sipariş Termin Hücresi (Dolgu Rengi)
+                                        </h4>
+                                    </div>
+                                    <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                                          :class="customDefaults.alerts_enabled ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 'bg-slate-500/10 text-slate-400'">
+                                        Çarşaf "Sipariş Termin" Sütunu
+                                    </span>
+                                </div>
+                                <p class="text-[11.5px] text-slate-400 leading-relaxed">
+                                    Termine kalan gün sayısı eşiklere ulaştığında, çarşaf listesindeki <b>sipariş termin hücresi</b> burada seçtiğiniz arka plan dolgu rengine döner.
+                                </p>
+
+                                <!-- Eşik 1: Yaklaşan Termin -->
+                                <div class="p-3.5 rounded-xl border space-y-2.5"
+                                     :class="isDarkMode ? 'bg-slate-900/60 border-slate-700/60' : 'bg-white border-slate-200'">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">1. Eşik (Yaklaşan Sipariş):</span>
+                                        <span class="text-[11px] text-slate-400">Normal Uyarı</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                                        <div class="flex items-center gap-2">
+                                            <input type="number" min="1" max="90"
+                                                   v-model.number="customDefaults.order_alert_days_1"
+                                                   class="w-16 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold text-center border outline-none"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">gün kala</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <input type="color" v-model="customDefaults.order_alert_color_1"
+                                                   class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0">
+                                            <input type="text" v-model="customDefaults.order_alert_color_1"
+                                                   class="w-20 px-2 py-1 rounded-md text-xs font-mono text-center border uppercase font-bold"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <!-- Canlı Önizleme -->
+                                            <div class="px-2.5 py-1 rounded text-[11px] font-mono font-bold shadow-sm border border-black/10 truncate max-w-[90px]"
+                                                 :style="{ backgroundColor: customDefaults.order_alert_color_1, color: getContrastTextColor(customDefaults.order_alert_color_1) }">
+                                                Önizleme
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Eşik 2: Kritik Termin -->
+                                <div class="p-3.5 rounded-xl border space-y-2.5"
+                                     :class="isDarkMode ? 'bg-slate-900/60 border-slate-700/60' : 'bg-white border-slate-200'">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold text-rose-500">2. Eşik (Kritik / Çok Yakın):</span>
+                                        <span class="text-[11px] text-rose-400 font-semibold">Acil Uyarı</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                                        <div class="flex items-center gap-2">
+                                            <input type="number" min="0" max="60"
+                                                   v-model.number="customDefaults.order_alert_days_2"
+                                                   class="w-16 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold text-center border outline-none"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">gün kala</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <input type="color" v-model="customDefaults.order_alert_color_2"
+                                                   class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0">
+                                            <input type="text" v-model="customDefaults.order_alert_color_2"
+                                                   class="w-20 px-2 py-1 rounded-md text-xs font-mono text-center border uppercase font-bold"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <!-- Canlı Önizleme -->
+                                            <div class="px-2.5 py-1 rounded text-[11px] font-mono font-bold shadow-sm border border-black/10 truncate max-w-[90px]"
+                                                 :style="{ backgroundColor: customDefaults.order_alert_color_2, color: getContrastTextColor(customDefaults.order_alert_color_2) }">
+                                                Önizleme
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- BÖLÜM 2: KUMAŞ TERMİN UYARISI -->
+                            <div class="p-5 rounded-xl border space-y-4"
+                                 :class="isDarkMode ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/80 border-slate-200/90'">
+                                <div class="flex items-center justify-between border-b pb-2.5"
+                                     :class="isDarkMode ? 'border-slate-700/60' : 'border-slate-200'">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-2.5 h-2.5 rounded-full bg-amber-500"></div>
+                                        <h4 class="text-xs font-extrabold tracking-wide uppercase" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                            Kumaş Termin Tarihi Uyarıları
+                                        </h4>
+                                    </div>
+                                    <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                                          :class="customDefaults.alerts_enabled ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-slate-500/10 text-slate-400'">
+                                        Çarşaf "Kumaş Termin" Sütunları
+                                    </span>
+                                </div>
+                                <p class="text-[11.5px] text-slate-400 leading-relaxed">
+                                    Kumaş depoya henüz ulaşmamışsa (gelen metraj 0), kumaş termin tarihine kalan güne göre ilgili hücre renklendirilir.
+                                </p>
+
+                                <!-- Eşik 1: Yaklaşan Kumaş -->
+                                <div class="p-3.5 rounded-xl border space-y-2.5"
+                                     :class="isDarkMode ? 'bg-slate-900/60 border-slate-700/60' : 'bg-white border-slate-200'">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">1. Eşik (Yaklaşan Kumaş):</span>
+                                        <span class="text-[11px] text-slate-400">Kumaş Yaklaşıyor</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                                        <div class="flex items-center gap-2">
+                                            <input type="number" min="1" max="90"
+                                                   v-model.number="customDefaults.fabric_alert_days_1"
+                                                   class="w-16 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold text-center border outline-none"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">gün kala</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <input type="color" v-model="customDefaults.fabric_alert_color_1"
+                                                   class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0">
+                                            <input type="text" v-model="customDefaults.fabric_alert_color_1"
+                                                   class="w-20 px-2 py-1 rounded-md text-xs font-mono text-center border uppercase font-bold"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <!-- Canlı Önizleme -->
+                                            <div class="px-2.5 py-1 rounded text-[11px] font-mono font-bold shadow-sm border border-black/10 truncate max-w-[90px]"
+                                                 :style="{ backgroundColor: customDefaults.fabric_alert_color_1, color: getContrastTextColor(customDefaults.fabric_alert_color_1) }">
+                                                Önizleme
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Eşik 2: Kritik / Geciken Kumaş -->
+                                <div class="p-3.5 rounded-xl border space-y-2.5"
+                                     :class="isDarkMode ? 'bg-slate-900/60 border-slate-700/60' : 'bg-white border-slate-200'">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-bold text-rose-500">2. Eşik (Kritik / Geciken Kumaş):</span>
+                                        <span class="text-[11px] text-rose-400 font-semibold">Acil Takip</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                                        <div class="flex items-center gap-2">
+                                            <input type="number" min="0" max="60"
+                                                   v-model.number="customDefaults.fabric_alert_days_2"
+                                                   class="w-16 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold text-center border outline-none"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">gün kala</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <input type="color" v-model="customDefaults.fabric_alert_color_2"
+                                                   class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0">
+                                            <input type="text" v-model="customDefaults.fabric_alert_color_2"
+                                                   class="w-20 px-2 py-1 rounded-md text-xs font-mono text-center border uppercase font-bold"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <!-- Canlı Önizleme -->
+                                            <div class="px-2.5 py-1 rounded text-[11px] font-mono font-bold shadow-sm border border-black/10 truncate max-w-[90px]"
+                                                 :style="{ backgroundColor: customDefaults.fabric_alert_color_2, color: getContrastTextColor(customDefaults.fabric_alert_color_2) }">
+                                                Önizleme
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ALT AKSİYON BUTONLARI -->
+                        <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-3 border-t"
+                             :class="isDarkMode ? 'border-slate-800' : 'border-slate-100'">
+                            <button type="button"
+                                    @click="resetCustomDefaultsToFactory"
+                                    class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer">
+                                Standart Fabrika Ayarlarına Dön
+                            </button>
+                            <button type="button"
+                                    @click="saveCustomDefaults"
+                                    :disabled="savingDefaults"
+                                    class="btn-theme px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-md flex items-center gap-2 hover:brightness-110 active:scale-95 transition cursor-pointer">
+                                <i data-lucide="save" class="w-4 h-4"></i>
+                                <span>{{ savingDefaults ? 'Kaydediliyor...' : 'Tüm Ayarları Kaydet' }}</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Üst Başlık & Hızlı Manuel Yedekleme Butonları -->
                     <div class="p-6 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition shadow-sm"
                          :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">

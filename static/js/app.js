@@ -2856,7 +2856,7 @@ window.__texflowApp = createApp({
                 currency: 'EUR',
                 unit_meters: '',
                 unit_grams: '',
-                fabric_wastage_percent: 5.0,
+                fabric_wastage_percent: getDefaultFabricWastage(),
                 fabric_ordered_meters: 0.0,
                 fabric_order_unit: 'M',
                 order_date: new Date().toISOString().split('T')[0],
@@ -3237,6 +3237,223 @@ window.__texflowApp = createApp({
 
 
 
+        
+        // -------------------------------------------------------------
+        // SİSTEM VARSAYILANLARI & RENK UYARILARI (CUSTOM DEFAULTS)
+        // -------------------------------------------------------------
+        const customDefaults = ref({
+            default_fabric_wastage: 5.0,
+            default_manufacturing_wastage: 5.0,
+            default_overhead_rate: 15.0,
+            default_mup_rate: 15.0,
+            default_commission_rate: 0.0,
+            alerts_enabled: true,
+            order_alert_days_1: 10,
+            order_alert_color_1: '#fed7aa',
+            order_alert_days_2: 3,
+            order_alert_color_2: '#f87171',
+            fabric_alert_days_1: 7,
+            fabric_alert_color_1: '#fef08a',
+            fabric_alert_days_2: 3,
+            fabric_alert_color_2: '#f87171'
+        });
+        const savingDefaults = ref(false);
+
+        const getDefaultRates = () => {
+            return {
+                imalat_fire: Number(customDefaults.value.default_manufacturing_wastage ?? 5.0),
+                kdv: 10,
+                gg: Number(customDefaults.value.default_overhead_rate ?? 15.0),
+                mup: Number(customDefaults.value.default_mup_rate ?? 15.0),
+                komis: Number(customDefaults.value.default_commission_rate ?? 0.0)
+            };
+        };
+
+        const getDefaultFabricWastage = () => {
+            return Number(customDefaults.value.default_fabric_wastage ?? 5.0);
+        };
+
+        const loadCustomDefaults = async () => {
+            try {
+                const cached = localStorage.getItem('texflow_custom_defaults');
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    Object.assign(customDefaults.value, parsed);
+                }
+            } catch (e) {
+                console.warn('Local custom defaults cache okunamadi:', e);
+            }
+
+            try {
+                const res = await apiFetch('/api/custom-defaults');
+                if (res && typeof res === 'object') {
+                    Object.assign(customDefaults.value, res);
+                    localStorage.setItem('texflow_custom_defaults', JSON.stringify(customDefaults.value));
+                }
+            } catch (err) {
+                console.warn('/api/custom-defaults yuklenemedi:', err);
+            }
+        };
+
+        const saveCustomDefaults = async () => {
+            savingDefaults.value = true;
+            try {
+                customDefaults.value.default_fabric_wastage = Number(customDefaults.value.default_fabric_wastage) || 0;
+                customDefaults.value.default_manufacturing_wastage = Number(customDefaults.value.default_manufacturing_wastage) || 0;
+                customDefaults.value.default_overhead_rate = Number(customDefaults.value.default_overhead_rate) || 0;
+                customDefaults.value.default_mup_rate = Number(customDefaults.value.default_mup_rate) || 0;
+                customDefaults.value.default_commission_rate = Number(customDefaults.value.default_commission_rate) || 0;
+                customDefaults.value.order_alert_days_1 = Number(customDefaults.value.order_alert_days_1) || 0;
+                customDefaults.value.order_alert_days_2 = Number(customDefaults.value.order_alert_days_2) || 0;
+                customDefaults.value.fabric_alert_days_1 = Number(customDefaults.value.fabric_alert_days_1) || 0;
+                customDefaults.value.fabric_alert_days_2 = Number(customDefaults.value.fabric_alert_days_2) || 0;
+
+                localStorage.setItem('texflow_custom_defaults', JSON.stringify(customDefaults.value));
+
+                const res = await apiFetch('/api/custom-defaults', {
+                    method: 'POST',
+                    body: JSON.stringify(customDefaults.value)
+                });
+                if (res && res.status === 'success') {
+                    showToast('Varsayılan ayarlar ve uyarı renkleri başarıyla kaydedildi.', 'success');
+                } else {
+                    showToast('Ayarlar yerel olarak kaydedildi.', 'info');
+                }
+            } catch (err) {
+                console.error('Custom defaults save error:', err);
+                showToast('Ayarlar kaydedilirken hata oluştu: ' + (err.message || err), 'error');
+            } finally {
+                savingDefaults.value = false;
+            }
+        };
+
+        const resetCustomDefaultsToFactory = () => {
+            customDefaults.value = {
+                default_fabric_wastage: 5.0,
+                default_manufacturing_wastage: 5.0,
+                default_overhead_rate: 15.0,
+                default_mup_rate: 15.0,
+                default_commission_rate: 0.0,
+                alerts_enabled: true,
+                order_alert_days_1: 10,
+                order_alert_color_1: '#fed7aa',
+                order_alert_days_2: 3,
+                order_alert_color_2: '#f87171',
+                fabric_alert_days_1: 7,
+                fabric_alert_color_1: '#fef08a',
+                fabric_alert_days_2: 3,
+                fabric_alert_color_2: '#f87171'
+            };
+            showToast('Varsayılan oranlar ve renkler fabrika ayarlarına döndürüldü. Kaydetmeyi unutmayın.', 'info');
+        };
+
+        const getContrastTextColor = (hex) => {
+            if (!hex || typeof hex !== 'string') return '#000000';
+            let cleanHex = hex.replace('#', '').trim();
+            if (cleanHex.length === 3) {
+                cleanHex = cleanHex.split('').map(c => c + c).join('');
+            }
+            if (cleanHex.length !== 6) return '#000000';
+            const r = parseInt(cleanHex.substring(0, 2), 16);
+            const g = parseInt(cleanHex.substring(2, 4), 16);
+            const b = parseInt(cleanHex.substring(4, 6), 16);
+            const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+            return (yiq >= 140) ? '#0f172a' : '#ffffff';
+        };
+
+        const getDeliveryDateAlertStyle = (item, col) => {
+            if (!item || !col || col.key !== 'delivery_date') return {};
+            if (!customDefaults.value.alerts_enabled) return {};
+            if (!item.delivery_date) return {};
+
+            const st = String(item.status || '').toLowerCase();
+            if (st.includes('bitti') || st.includes('sevk') || st.includes('tamam')) return {};
+
+            const remaining = getFabricArrivalDaysRemaining(item.delivery_date);
+            if (remaining === null) return {};
+
+            const d1 = Number(customDefaults.value.order_alert_days_1) || 10;
+            const d2 = Number(customDefaults.value.order_alert_days_2) || 3;
+            const minD = Math.min(d1, d2);
+            const maxD = Math.max(d1, d2);
+            const cCritical = (d1 <= d2) ? customDefaults.value.order_alert_color_1 : customDefaults.value.order_alert_color_2;
+            const cWarning = (d1 <= d2) ? customDefaults.value.order_alert_color_2 : customDefaults.value.order_alert_color_1;
+
+            if (remaining <= minD) {
+                return {
+                    backgroundColor: cCritical || '#f87171',
+                    transition: 'background-color 0.2s ease'
+                };
+            } else if (remaining <= maxD) {
+                return {
+                    backgroundColor: cWarning || '#fed7aa',
+                    transition: 'background-color 0.2s ease'
+                };
+            }
+            return {};
+        };
+
+        const getDeliveryDateTextColor = (item, col) => {
+            const style = getDeliveryDateAlertStyle(item, col);
+            if (style && style.backgroundColor) {
+                return getContrastTextColor(style.backgroundColor);
+            }
+            return isDarkMode.value ? '#f1f5f9' : '#0f172a';
+        };
+
+        const getDeliveryDateTooltip = (item) => {
+            if (!item || !item.delivery_date) return 'Teslimat tarihi girin (ör: 25.09)';
+            const rem = getFabricArrivalDaysRemaining(item.delivery_date);
+            if (rem === null) return `Teslimat Tarihi: ${item.delivery_date}`;
+            if (rem < 0) return `Teslimat Tarihi: ${item.delivery_date} (${Math.abs(rem)} gün gecikti!)`;
+            if (rem === 0) return `Teslimat Tarihi: ${item.delivery_date} (Bugün son gün!)`;
+            return `Teslimat Tarihi: ${item.delivery_date} (${rem} gün kaldı)`;
+        };
+
+        const getFabricArrivalAlertStyle = (dateStr, receivedMeters) => {
+            if (!customDefaults.value.alerts_enabled) return {};
+            const rec = parseFloat(receivedMeters) || 0;
+            if (rec > 0) return {};
+            const remaining = getFabricArrivalDaysRemaining(dateStr);
+            if (remaining === null) return {};
+
+            const d1 = Number(customDefaults.value.fabric_alert_days_1) || 7;
+            const d2 = Number(customDefaults.value.fabric_alert_days_2) || 3;
+            const minD = Math.min(d1, d2);
+            const maxD = Math.max(d1, d2);
+            const cCritical = (d1 <= d2) ? customDefaults.value.fabric_alert_color_1 : customDefaults.value.fabric_alert_color_2;
+            const cWarning = (d1 <= d2) ? customDefaults.value.fabric_alert_color_2 : customDefaults.value.fabric_alert_color_1;
+
+            if (remaining <= minD) {
+                const bg = cCritical || '#f87171';
+                return {
+                    backgroundColor: bg,
+                    color: getContrastTextColor(bg),
+                    borderRadius: '0.375rem',
+                    padding: '2px 4px',
+                    fontWeight: '800'
+                };
+            } else if (remaining <= maxD) {
+                const bg = cWarning || '#fef08a';
+                return {
+                    backgroundColor: bg,
+                    color: getContrastTextColor(bg),
+                    borderRadius: '0.375rem',
+                    padding: '2px 4px',
+                    fontWeight: '800'
+                };
+            }
+            return {};
+        };
+
+        const getFabricArrivalAlertTextColor = (dateStr, receivedMeters) => {
+            const style = getFabricArrivalAlertStyle(dateStr, receivedMeters);
+            if (style && style.backgroundColor) {
+                return getContrastTextColor(style.backgroundColor);
+            }
+            return isDarkMode.value ? '#f1f5f9' : '#0f172a';
+        };
+
         // KUMAŞ TERMİN TARİHİ & GELEN METRAJ HESAPLAMA & RENKLENDİRME
         const getFabricArrivalDaysRemaining = (dateStr) => {
             if (!dateStr || !String(dateStr).trim()) return null;
@@ -3277,18 +3494,21 @@ window.__texflowApp = createApp({
         };
 
         const getFabricArrivalDateStyleClass = (dateStr, receivedMeters) => {
+            if (!customDefaults.value.alerts_enabled) return '';
             const rec = parseFloat(receivedMeters) || 0;
-            if (rec > 0) {
-                // Kumaş depoya ulaştığı için termin uyarısı kalkar, normale döner
-                return '';
-            }
+            if (rec > 0) return '';
             const remaining = getFabricArrivalDaysRemaining(dateStr);
             if (remaining === null) return '';
-            if (remaining <= 3) {
-                return 'w-full bg-red-400 !text-black font-extrabold border border-red-500 shadow-sm animate-pulse rounded px-1.5 py-0.5';
+
+            const d1 = Number(customDefaults.value.fabric_alert_days_1) || 7;
+            const d2 = Number(customDefaults.value.fabric_alert_days_2) || 3;
+            const minD = Math.min(d1, d2);
+            if (remaining <= minD) {
+                return 'w-full border border-black/20 shadow-sm animate-pulse rounded px-1.5 py-0.5';
             }
-            if (remaining <= 7) {
-                return 'w-full bg-amber-300 !text-black font-extrabold border border-amber-400 shadow-sm rounded px-1.5 py-0.5';
+            const maxD = Math.max(d1, d2);
+            if (remaining <= maxD) {
+                return 'w-full border border-black/20 shadow-sm rounded px-1.5 py-0.5';
             }
             return '';
         };
@@ -10084,7 +10304,7 @@ window.__texflowApp = createApp({
                 targetCurrency: 'EUR',
                 exchangeRates: curRates,
                 rates_snapshot_date: currencyDate.value ? `${currencyDate.value} (TCMB Canlı)` : new Date().toLocaleDateString('tr-TR'),
-                rates: { imalat_fire: 5, kdv: 10, gg: 15, mup: 15, komis: 0 },
+                rates: getDefaultRates(),
                 fabrics: [
                     {
                         title: 'Ana Kumaş',
@@ -10097,7 +10317,7 @@ window.__texflowApp = createApp({
                         grams: 0,
                         price: 3.5,
                         currency: 'EUR',
-                        wastage_percent: 5,
+                        wastage_percent: getDefaultFabricWastage(),
                         total_tl: 0
                     }
                 ],
@@ -10645,6 +10865,7 @@ window.__texflowApp = createApp({
             applyGlobalZoom(zoomLevel.value);
             checkAuth();
             loadCurrencyRates();
+            loadCustomDefaults();
             setInterval(loadCurrencyRates, 15 * 60 * 1000);
             
             window.addEventListener('resize', () => {
@@ -12388,6 +12609,19 @@ window.__texflowApp = createApp({
             getFabricArrivalDaysRemaining,
             getFabricArrivalDateStyleClass,
             getFabricReceivedMetersClass,
+            customDefaults,
+            savingDefaults,
+            loadCustomDefaults,
+            saveCustomDefaults,
+            resetCustomDefaultsToFactory,
+            getContrastTextColor,
+            getDeliveryDateAlertStyle,
+            getDeliveryDateTextColor,
+            getDeliveryDateTooltip,
+            getFabricArrivalAlertStyle,
+            getFabricArrivalAlertTextColor,
+            getDefaultRates,
+            getDefaultFabricWastage,
             getPpsBadgeClass,
             updatePpsStatus,
             getDaysSinceDate,

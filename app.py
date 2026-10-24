@@ -5902,6 +5902,58 @@ def api_haftalik_program_excel(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
+# ----------------- VARSAYILAN SİSTEM AYARLARI (CUSTOM DEFAULTS) -----------------
+CUSTOM_DEFAULTS_FILE = Path("data") / "custom_defaults.json"
+
+DEFAULT_CUSTOM_SETTINGS = {
+    # Maliyet Çalışması Varsayılan Oranları
+    "default_fabric_wastage": 5.0,
+    "default_manufacturing_wastage": 5.0,
+    "default_overhead_rate": 15.0,
+    "default_mup_rate": 15.0,
+    "default_commission_rate": 0.0,
+    # Çarşaf Listesi Termin ve Kumaş Uyarı Renkleri
+    "alerts_enabled": True,
+    # Sipariş Termin Uyarısı
+    "order_alert_days_1": 10,
+    "order_alert_color_1": "#fed7aa",
+    "order_alert_days_2": 3,
+    "order_alert_color_2": "#f87171",
+    # Kumaş Termin Uyarısı
+    "fabric_alert_days_1": 7,
+    "fabric_alert_color_1": "#fef08a",
+    "fabric_alert_days_2": 3,
+    "fabric_alert_color_2": "#f87171"
+}
+
+@app.get("/api/custom-defaults")
+def api_get_custom_defaults():
+    if CUSTOM_DEFAULTS_FILE.exists():
+        try:
+            with open(CUSTOM_DEFAULTS_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                merged = {**DEFAULT_CUSTOM_SETTINGS, **saved}
+                return merged
+        except Exception as e:
+            print(f"[WARN] custom_defaults.json okunamadi: {e}")
+    return DEFAULT_CUSTOM_SETTINGS
+
+@app.post("/api/custom-defaults")
+def api_save_custom_defaults(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+    try:
+        CUSTOM_DEFAULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        current = api_get_custom_defaults()
+        for k, v in payload.items():
+            if k in DEFAULT_CUSTOM_SETTINGS:
+                current[k] = v
+        with open(CUSTOM_DEFAULTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(current, f, ensure_ascii=False, indent=2)
+        return {"status": "success", "message": "Varsayılan ayarlar başarıyla kaydedildi.", "defaults": current}
+    except Exception as e:
+        print(f"[ERROR] custom_defaults kaydetme hatasi: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ----------------- TAM SİSTEM YEDEKLEME & RESTORE (BACKUP) -----------------
 import backup_manager
 
