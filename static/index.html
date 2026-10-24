@@ -8109,11 +8109,12 @@
                         </div>
                     </div>
 
-                    <!-- MASTER NUMUNE & PPS TABLOSU -->
+                    <!-- MASTER NUMUNE & PPS TABLOSU (SAYFA SONUNA KADAR TAM UZANAN MODERN YAPI) -->
                     <div class="border rounded-2xl overflow-hidden shadow-sm flex flex-col flex-1"
+                         style="height: calc(100vh - 215px); min-height: 480px;"
                          :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
                         
-                        <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)] custom-scrollbar">
+                        <div class="overflow-auto custom-scrollbar flex-1 w-full h-full">
                             <table style="table-layout: fixed; width: max-content; min-width: 100%;" class="text-left text-xs border-collapse master-table">
                                 
                                 <!-- TABLE HEADER -->
@@ -8209,7 +8210,7 @@
 
                                                     <!-- Değer Listesi Checkbox'ları -->
                                                     <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1 pr-1">
-                                                        <label v-for="val in getSampleDistinctValues(col.key)" :key="val"
+                                                        <label v-for="val in getSampleFilteredDistinctValues(col.key)" :key="val"
                                                                class="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-slate-800/40 cursor-pointer text-xs transition">
                                                             <input type="checkbox"
                                                                    :checked="isSampleValSelected(col.key, val)"
@@ -8268,8 +8269,32 @@
                                 <tbody class="divide-y" :class="isDarkMode ? 'divide-slate-800/80 font-sans' : 'divide-slate-200 font-sans'">
                                     
                                     <tr v-if="filteredSamplesList.length === 0">
-                                        <td :colspan="displayedSampleColumns.length" class="py-12 text-center text-sm text-slate-400 italic">
-                                            Kayıtlı numune bulunamadı. "+ Yeni Numune" düğmesini kullanarak ilk kaydınızı oluşturabilirsiniz.
+                                        <td :colspan="displayedSampleColumns.length" class="py-24 text-center">
+                                            <div class="max-w-md mx-auto flex flex-col items-center justify-center gap-3">
+                                                <div class="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center shadow-inner">
+                                                    <i data-lucide="layers" class="w-7 h-7"></i>
+                                                </div>
+                                                <div>
+                                                    <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">Kayıtlı Numune Bulunamadı</h4>
+                                                    <p class="text-xs text-slate-400 mt-1">
+                                                        {{ sampleSearchQuery ? 'Arama kriterlerinize uygun numune kaydı bulunamadı.' : 'Henüz sisteme eklenmiş bir numune veya PPS kaydı yok.' }}
+                                                    </p>
+                                                </div>
+                                                <div class="flex items-center gap-2 mt-1">
+                                                    <button v-if="sampleSearchQuery || Object.keys(sampleColumnFilters).length"
+                                                            @click="clearAllSampleFilters"
+                                                            type="button"
+                                                            class="px-3 py-1.5 rounded-xl border border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer">
+                                                        Süzgeçleri Temizle
+                                                    </button>
+                                                    <button @click="addNewSampleRow"
+                                                            type="button"
+                                                            class="btn-theme px-4 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shadow-md hover:brightness-110 active:scale-95 transition cursor-pointer">
+                                                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                                                        <span>Yeni Numune Ekle</span>
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </td>
                                     </tr>
 
@@ -8394,12 +8419,29 @@
                                                        title="Adet ve bedenleri istediğiniz formatta yazabilirsiniz">
                                             </template>
 
-                                            <!-- 10. KUMAŞI -->
+                                            <!-- 10. KUMAŞI (FABRICTAG ENTEGRELİ) -->
                                             <template v-else-if="col.key === 'fabric_info'">
-                                                <input :value="sample.fabric_info"
-                                                       @change="updateSampleCell(sample, 'fabric_info', $event.target.value)"
-                                                       placeholder="Kumaş..."
-                                                       class="w-full bg-transparent border-0 outline-none text-xs font-medium hover:bg-slate-500/10 focus:bg-slate-500/10 rounded px-1.5 py-1 transition truncate">
+                                                <div class="flex items-center gap-1 w-full group/fab">
+                                                    <input :value="sample.fabric_info"
+                                                           @change="updateSampleCell(sample, 'fabric_info', $event.target.value)"
+                                                           placeholder="Kumaş bilgisi / FT..."
+                                                           class="flex-1 min-w-0 bg-transparent border-0 outline-none text-xs font-medium hover:bg-slate-500/10 focus:bg-slate-500/10 rounded px-1.5 py-1 transition truncate">
+                                                    <button @click="openSampleFabricModal(sample)"
+                                                            type="button"
+                                                            class="shrink-0 px-1.5 py-0.5 rounded-lg border text-[10px] font-bold transition flex items-center gap-1 cursor-pointer select-none"
+                                                            :class="sample.fabrictag_id ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-emerald-500'"
+                                                            :title="sample.fabrictag_id ? 'FabricTag ile Bağlı (Kartela ID: #' + sample.fabrictag_id + ') - Değiştirmek için tıklayın' : 'FabricTag Kumaş Deposundan Seç & Ata'">
+                                                        <i data-lucide="layers" class="w-3 h-3 text-emerald-500"></i>
+                                                        <span class="text-[9px] font-mono">FT</span>
+                                                    </button>
+                                                    <button v-if="sample.fabrictag_id"
+                                                            @click="clearSampleFabricLink(sample)"
+                                                            type="button"
+                                                            class="hidden group-hover/fab:inline-flex shrink-0 p-0.5 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                                                            title="FabricTag Bağlantısını Kaldır">
+                                                        <i data-lucide="x" class="w-2.5 h-2.5"></i>
+                                                    </button>
+                                                </div>
                                             </template>
 
                                             <!-- 11. BİRİM METRAJI -->
@@ -8409,6 +8451,24 @@
                                                        placeholder="0.00"
                                                        type="text"
                                                        class="w-full bg-transparent border-0 outline-none text-xs font-mono font-bold text-center hover:bg-slate-500/10 rounded px-1 py-1 transition">
+                                            </template>
+
+                                            <!-- 11.1. KRİTİK / NOTLAR (2-3 KELİME GÖSTERİM, TIKLAYINCA MODERN POPUP) -->
+                                            <template v-else-if="col.key === 'critique'">
+                                                <div class="flex items-center gap-1.5 cursor-pointer group/crit px-1 py-1 rounded hover:bg-slate-500/10 transition select-none"
+                                                     @click="openSampleCritiqueModal(sample)"
+                                                     title="Numune kritiğini görüntüle veya düzenle">
+                                                    <div v-if="sample.critique" class="flex items-center gap-1 min-w-0">
+                                                        <i data-lucide="message-square" class="w-3.5 h-3.5 text-amber-500 shrink-0"></i>
+                                                        <span class="text-xs text-slate-700 dark:text-slate-200 font-medium truncate max-w-[115px]">
+                                                            {{ getShortCritique(sample.critique) }}
+                                                        </span>
+                                                    </div>
+                                                    <div v-else class="text-[11px] text-slate-400 dark:text-slate-500 italic flex items-center gap-1 group-hover/crit:text-amber-500">
+                                                        <i data-lucide="file-pen" class="w-3 h-3"></i>
+                                                        <span>+ Kritik Ekle</span>
+                                                    </div>
+                                                </div>
                                             </template>
 
                                             <!-- 12. İŞLEM AŞAMASI -->
@@ -8586,6 +8646,34 @@
                                     </button>
                                 </div>
 
+                                <!-- Sütun Oranları (%) Açılır Menüsü (Width Adjustments) -->
+                                <div class="relative group/samplewidths">
+                                    <button class="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                            title="Her sütunun genişlik oranını (%) ayarlayın">
+                                        <i data-lucide="columns" class="w-3.5 h-3.5 text-emerald-400"></i>
+                                        <span>Sütun Genişlikleri (%)</span>
+                                    </button>
+                                    <div class="hidden group-hover/samplewidths:flex absolute right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3 z-50 flex-col gap-1 min-w-[290px] text-xs text-slate-200">
+                                        <div class="text-[10.5px] font-black uppercase text-slate-400 pb-1 border-b border-slate-800 flex justify-between items-center">
+                                            <span>Sütun Genişlik Oranları</span>
+                                            <span class="text-emerald-400 font-mono">Toplam %{{ Object.values(samplePrintColWidths).reduce((a,b)=>a+b,0) }}</span>
+                                        </div>
+                                        <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                                            <div v-for="(val, colKey) in samplePrintColWidths" :key="colKey" class="flex items-center justify-between gap-2 py-0.5">
+                                                <span class="text-slate-300 font-medium text-[11px] truncate">{{ getSamplePrintColTitle(colKey) }}:</span>
+                                                <div class="flex items-center gap-1 shrink-0">
+                                                    <button @click="adjustSamplePrintColWidth(colKey, -1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-red-500 hover:text-white font-bold text-center leading-none cursor-pointer">-</button>
+                                                    <span class="w-8 text-center font-mono font-bold text-emerald-400 text-xs">%{{ val }}</span>
+                                                    <button @click="adjustSamplePrintColWidth(colKey, 1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-white font-bold text-center leading-none cursor-pointer">+</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button @click="resetSamplePrintColWidths" class="mt-1 pt-1.5 border-t border-slate-800 text-[10.5px] text-center text-amber-400 hover:underline font-bold cursor-pointer">
+                                            Varsayılan Genişliklere Sıfırla
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <!-- Excel İndir -->
                                 <button @click="exportSamplesExcel"
                                         class="px-3 py-1.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition">
@@ -8633,46 +8721,49 @@
                                     </div>
                                 </div>
 
-                                <!-- Kağıt Tablosu -->
-                                <table class="w-full text-left border-collapse border border-slate-400 text-xs">
+                                <!-- Kağıt Tablosu (Tam Sığdırılmış, Taşmayı Önleyen, Sütun Oranları Ayarlanabilir) -->
+                                <table style="table-layout: fixed; width: 100%; max-width: 100%; box-sizing: border-box; word-break: break-word;"
+                                       class="w-full text-left border-collapse border border-slate-400 text-xs">
                                     <thead>
-                                        <tr class="bg-slate-100 border-b border-slate-400 text-[10.5px] font-black uppercase text-slate-800">
-                                            <th class="p-2 border-r border-slate-400 text-center w-10">Sıra</th>
-                                            <th class="p-2 border-r border-slate-400 text-center w-14">Görsel</th>
-                                            <th class="p-2 border-r border-slate-400 text-center w-20">Numune Türü</th>
-                                            <th class="p-2 border-r border-slate-400 w-20">Sezon</th>
-                                            <th class="p-2 border-r border-slate-400 w-24">Müşteri</th>
-                                            <th class="p-2 border-r border-slate-400 w-24">Model Kodu</th>
-                                            <th class="p-2 border-r border-slate-400 w-28">Model Adı</th>
-                                            <th class="p-2 border-r border-slate-400 text-center w-18">Talep T.</th>
-                                            <th class="p-2 border-r border-slate-400 text-center w-18">Teslim T.</th>
-                                            <th class="p-2 border-r border-slate-400 w-24">Adet & Beden</th>
-                                            <th class="p-2 border-r border-slate-400 w-28">Kumaşı</th>
-                                            <th class="p-2 border-r border-slate-400 text-center w-14">Metraj</th>
-                                            <th class="p-2 text-center w-24">Aşama</th>
+                                        <tr class="bg-slate-100 border-b border-slate-400 text-[10px] font-black uppercase text-slate-800">
+                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.index || 4) + '%' }">Sıra</th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.image || 6) + '%' }">Görsel</th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.sample_type || 9) + '%' }">Numune Türü</th>
+                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.season || 8) + '%' }">Sezon</th>
+                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.customer_name || 10) + '%' }">Müşteri</th>
+                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.style_no || 9) + '%' }">Model Kodu</th>
+                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.style_name || 11) + '%' }">Model Adı</th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.request_date || 7) + '%' }">Talep T.</th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.delivery_date || 7) + '%' }">Teslim T.</th>
+                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.quantity_sizes || 8) + '%' }">Adet & Beden</th>
+                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.fabric_info || 9) + '%' }">Kumaşı</th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.unit_meters || 4) + '%' }">Metraj</th>
+                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.critique || 8) + '%' }">Kritik / Not</th>
+                                            <th class="p-1.5 text-center" :style="{ width: (samplePrintColWidths.stage || 6) + '%' }">Aşama</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-300">
-                                        <tr v-for="(s, idx) in samplePrintRows" :key="'pr-'+s.id" class="text-[11px] leading-tight">
-                                            <td class="p-2 border-r border-slate-300 text-center font-mono font-bold">{{ idx + 1 }}</td>
+                                        <tr v-for="(s, idx) in samplePrintRows" :key="'pr-'+s.id" class="text-[10px] leading-tight">
+                                            <td class="p-1.5 border-r border-slate-300 text-center font-mono font-bold">{{ idx + 1 }}</td>
                                             <td class="p-1 border-r border-slate-300 text-center">
-                                                <div class="w-10 h-10 mx-auto rounded border border-slate-300 overflow-hidden flex items-center justify-center bg-slate-50">
+                                                <div class="w-8 h-8 mx-auto rounded border border-slate-300 overflow-hidden flex items-center justify-center bg-slate-50">
                                                     <img v-if="s.image_url" :src="s.image_url" class="w-full h-full object-cover">
                                                     <span v-else class="text-[8px] text-slate-400 font-bold">-</span>
                                                 </div>
                                             </td>
-                                            <td class="p-2 border-r border-slate-300 text-center font-bold">{{ s.sample_type || '-' }}</td>
-                                            <td class="p-2 border-r border-slate-300 font-medium">{{ s.season || '-' }}</td>
-                                            <td class="p-2 border-r border-slate-300 font-bold">{{ s.customer_name || '-' }}</td>
-                                            <td class="p-2 border-r border-slate-300 font-mono font-bold">{{ s.style_no || '-' }}</td>
-                                            <td class="p-2 border-r border-slate-300 font-semibold">{{ s.style_name || '-' }}</td>
-                                            <td class="p-2 border-r border-slate-300 text-center font-mono">{{ s.request_date || '-' }}</td>
-                                            <td class="p-2 border-r border-slate-300 text-center font-mono font-bold">{{ s.delivery_date || '-' }}</td>
-                                            <td class="p-2 border-r border-slate-300 font-medium">{{ s.quantity_sizes || '-' }}</td>
-                                            <td class="p-2 border-r border-slate-300 text-[10px]">{{ s.fabric_info || '-' }}</td>
-                                            <td class="p-2 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters || '-' }}</td>
-                                            <td class="p-2 text-center font-bold">
-                                                <span class="px-2 py-0.5 rounded text-[10px] border border-slate-400 bg-slate-50">{{ s.stage || 'Talep' }}</span>
+                                            <td class="p-1.5 border-r border-slate-300 text-center font-bold">{{ s.sample_type || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 font-medium">{{ s.season || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 font-bold">{{ s.customer_name || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 font-mono font-bold">{{ s.style_no || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 font-semibold">{{ s.style_name || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 text-center font-mono">{{ s.request_date || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 text-center font-mono font-bold">{{ s.delivery_date || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 font-medium">{{ s.quantity_sizes || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 text-[9.5px]">{{ s.fabric_info || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 text-[9.5px]">{{ s.critique || s.notes || '-' }}</td>
+                                            <td class="p-1.5 text-center font-semibold text-slate-900">
+                                                <span>{{ s.stage || '-' }}</span>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -10515,6 +10606,195 @@
             </div>
 
 
+        </div>
+    </div>
+
+
+
+    <!-- ========================================================================= -->
+    <!-- MODAL: FABRICTAG KUMAŞ KARTELASI SEÇİMİ (NUMUNE MODÜLÜ İÇİN) -->
+    <!-- ========================================================================= -->
+    <div v-if="sampleFabricModalOpen" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 select-none">
+        <div class="w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+             :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'">
+            
+            <!-- Modal Header -->
+            <div class="px-5 py-4 border-b flex items-center justify-between shrink-0"
+                 :class="isDarkMode ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 flex items-center justify-center">
+                        <i data-lucide="layers" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-base font-black tracking-tight">FabricTag Kumaş Kartelası Seç & Ata</h3>
+                        <p class="text-xs text-slate-400">
+                            {{ activeSampleFabricItem?.customer_name }} - {{ activeSampleFabricItem?.style_name }} ({{ activeSampleFabricItem?.style_no }})
+                        </p>
+                    </div>
+                </div>
+                <button @click="closeSampleFabricModal"
+                        class="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Arama Kutusu -->
+            <div class="p-4 border-b shrink-0" :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
+                <div class="relative">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+                    <input v-model="sampleFabricSearch"
+                           @input="onSampleFabricSearchInput"
+                           type="text"
+                           placeholder="Kumaş adı, kalite kodu, kompozisyon, renk veya tedarikçi ara..."
+                           class="w-full pl-9 pr-8 py-2 rounded-xl text-xs font-medium border outline-none transition shadow-sm"
+                           :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-emerald-500'">
+                    <button v-if="sampleFabricSearch" @click="sampleFabricSearch = ''; searchSampleFabrics()"
+                            class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-200">
+                        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Kumaş Listesi -->
+            <div class="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-2">
+                <div v-if="sampleFabricLoading" class="py-12 text-center text-xs text-slate-400 flex flex-col items-center gap-2">
+                    <i data-lucide="loader-2" class="w-6 h-6 animate-spin text-emerald-500"></i>
+                    <span>FabricTag deposunda aranıyor...</span>
+                </div>
+
+                <div v-else-if="!sampleFabricsList || !sampleFabricsList.length" class="py-12 text-center text-xs text-slate-400">
+                    <i data-lucide="inbox" class="w-8 h-8 mx-auto text-slate-500 mb-2 opacity-50"></i>
+                    <span>Eşleşen FabricTag kartelası bulunamadı.</span>
+                </div>
+
+                <div v-else class="space-y-2">
+                    <div v-for="f in sampleFabricsList" :key="f.id"
+                         @click="assignSampleFabric(f)"
+                         class="p-3 rounded-xl border transition flex items-center justify-between gap-3 cursor-pointer group hover:border-emerald-500/60"
+                         :class="isDarkMode ? 'bg-slate-950/40 border-slate-800 hover:bg-slate-800/60' : 'bg-white border-slate-200 hover:bg-emerald-50/40'">
+                        <div class="flex items-start gap-3 min-w-0">
+                            <div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0 font-mono text-[10px] font-bold">
+                                #{{ f.id }}
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-bold text-xs" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
+                                        {{ f.quality_name || f.quality_code || f.internal_code }}
+                                    </span>
+                                    <span v-if="f.quality_code" class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                                        {{ f.quality_code }}
+                                    </span>
+                                    <span v-if="f.internal_code && f.internal_code !== f.quality_code" class="text-[10px] font-mono text-slate-500">
+                                        [{{ f.internal_code }}]
+                                    </span>
+                                </div>
+                                <div class="text-[11px] text-slate-400 mt-0.5 truncate">
+                                    <span v-if="f.composition" class="font-medium text-slate-300">{{ f.composition }}</span>
+                                    <span v-if="f.color"> • Renk: {{ f.color }}</span>
+                                    <span v-if="f.company_name"> • Tedarikçi: {{ f.company_name }}</span>
+                                    <span v-if="f.weight"> • {{ f.weight }} gr/m²</span>
+                                    <span v-if="f.width"> • En: {{ f.width }} cm</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="button"
+                                class="shrink-0 px-3 py-1.5 rounded-lg btn-theme text-white text-xs font-bold shadow-sm transition opacity-80 group-hover:opacity-100 flex items-center gap-1">
+                            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                            <span>Seç & Ata</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-3 border-t flex items-center justify-between text-xs shrink-0"
+                 :class="isDarkMode ? 'border-slate-800 bg-slate-950/60 text-slate-400' : 'border-slate-200 bg-slate-50 text-slate-600'">
+                <span>FabricTag Canlı Entegrasyonu</span>
+                <button @click="closeSampleFabricModal" class="px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-xs font-bold transition">
+                    Kapat
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL: NUMUNE KRİTİK / NOTLAR (MODERN AÇILIR PENCERE) -->
+    <!-- ========================================================================= -->
+    <div v-if="sampleCritiqueModalOpen" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 select-none">
+        <div class="w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col"
+             :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'">
+            
+            <!-- Modal Header -->
+            <div class="px-5 py-4 border-b flex items-center justify-between shrink-0"
+                 :class="isDarkMode ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center">
+                        <i data-lucide="message-square" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-base font-black tracking-tight">Numune Kritiği & Revizyon Notları</h3>
+                        <p class="text-xs text-slate-400">
+                            {{ activeSampleCritiqueItem?.customer_name }} • {{ activeSampleCritiqueItem?.style_name }} ({{ activeSampleCritiqueItem?.style_no }}) - {{ activeSampleCritiqueItem?.sample_type }}
+                        </p>
+                    </div>
+                </div>
+                <button @click="closeSampleCritiqueModal"
+                        class="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-5 space-y-4">
+                
+                <!-- Hızlı Kritik Şablonları / Etiketleri -->
+                <div>
+                    <label class="block text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                        Hızlı Kritik Ekle:
+                    </label>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button v-for="tag in ['Kalıp Onaylandı', 'Kalıp Boyu 2cm Kısalacak', 'Kumaş Revizesi Bekleniyor', 'Fit Onayı Alındı', 'Ölçü Farkı Var', 'Dikiş/İşçilik Temizlensin', 'Baskı/Nakış Düzeltilecek', 'Yıkama Rengi Doğru']"
+                                :key="tag"
+                                type="button"
+                                @click="applyCritiquePreset(tag)"
+                                class="text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition cursor-pointer select-none"
+                                :class="isDarkMode ? 'bg-slate-800/70 border-slate-700 text-slate-300 hover:border-amber-500/60 hover:text-amber-400' : 'bg-slate-100 border-slate-200 text-slate-700 hover:border-amber-500 hover:text-amber-600'">
+                            + {{ tag }}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Kritik Metin Alanı -->
+                <div>
+                    <label class="block text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                        Ayrıntılı Numune Kritiği & Notlar:
+                    </label>
+                    <textarea v-model="sampleCritiqueText"
+                              rows="6"
+                              placeholder="Numune prova sonuçları, müşteri yorumları, kalıp düzeltmeleri, kumaş çekme payları veya dikim notlarını buraya yazabilirsiniz..."
+                              class="w-full p-3 text-xs font-medium rounded-xl border outline-none transition focus:ring-1 focus:ring-amber-500 custom-scrollbar"
+                              :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"></textarea>
+                    <p class="text-[10px] text-slate-400 mt-1 italic">
+                        İpucu: Tablo görünümünde kritiğin ilk 2-3 kelimesi özet olarak listelenir, tıklandığında bu pencerede tam metin görüntülenir.
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-5 py-3 border-t flex items-center justify-between text-xs shrink-0"
+                 :class="isDarkMode ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'">
+                <button type="button" @click="closeSampleCritiqueModal"
+                        class="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 font-bold transition">
+                    Vazgeç
+                </button>
+                <button type="button" @click="saveSampleCritique"
+                        class="btn-theme px-5 py-2 rounded-xl text-white font-bold shadow-md hover:brightness-110 active:scale-95 transition flex items-center gap-1.5">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                    <span>Kritiği Kaydet</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -14830,7 +15110,7 @@
                             <input v-model.number="freeCostForm.exchangeRates.EUR"
                                    @input="recalculateFreeCost"
                                    type="number" step="0.01"
-                                   class="w-14 text-xs font-bold font-mono px-1 py-0.5 rounded border focus:outline-none focus:ring-1 focus:ring-emerald-500 text-right"
+                                   class="w-20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-xs font-bold font-mono px-2 py-0.5 rounded border focus:outline-none focus:ring-1 focus:ring-emerald-500 text-center"
                                    :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
                         </div>
 
@@ -14840,7 +15120,7 @@
                             <input v-model.number="freeCostForm.exchangeRates.USD"
                                    @input="recalculateFreeCost"
                                    type="number" step="0.01"
-                                   class="w-14 text-xs font-bold font-mono px-1 py-0.5 rounded border focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                                   class="w-20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-xs font-bold font-mono px-2 py-0.5 rounded border focus:outline-none focus:ring-1 focus:ring-blue-500 text-center"
                                    :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
                         </div>
 
@@ -14850,7 +15130,7 @@
                             <input v-model.number="freeCostForm.exchangeRates.GBP"
                                    @input="recalculateFreeCost"
                                    type="number" step="0.01"
-                                   class="w-14 text-xs font-bold font-mono px-1 py-0.5 rounded border focus:outline-none focus:ring-1 focus:ring-purple-500 text-right"
+                                   class="w-20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-xs font-bold font-mono px-2 py-0.5 rounded border focus:outline-none focus:ring-1 focus:ring-purple-500 text-center"
                                    :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
                         </div>
                     </div>

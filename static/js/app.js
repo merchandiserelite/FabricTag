@@ -12358,6 +12358,7 @@ window.__texflowApp = createApp({
         const newCustomSampleType = ref('');
         const newCustomSampleStage = ref('');
 
+        // SÜTUN TANIMLARI (KRİTİK / NOT SÜTUNU EKLENDİ)
         const defaultSampleColumns = [
             { key: 'select', title: '', width: 38, sortable: false, filterable: false, isFixed: true },
             { key: 'image', title: 'Görsel', width: 68, sortable: false, filterable: false, align: 'center', isFixed: true },
@@ -12369,8 +12370,9 @@ window.__texflowApp = createApp({
             { key: 'request_date', title: 'Talep Tarihi', width: 105, sortable: true, filterable: true, align: 'center' },
             { key: 'delivery_date', title: 'Teslim Tarihi', width: 115, sortable: true, filterable: true, align: 'center' },
             { key: 'quantity_sizes', title: 'Adet ve Beden', width: 155, sortable: false, filterable: true, align: 'left' },
-            { key: 'fabric_info', title: 'Kumaşı', width: 165, sortable: true, filterable: true, align: 'left' },
+            { key: 'fabric_info', title: 'Kumaşı', width: 175, sortable: true, filterable: true, align: 'left' },
             { key: 'unit_meters', title: 'Birim Metraj', width: 100, sortable: true, filterable: false, align: 'center' },
+            { key: 'critique', title: 'Kritik / Not', width: 145, sortable: false, filterable: false, align: 'left' },
             { key: 'stage', title: 'İşlem Aşaması', width: 145, sortable: true, filterable: true, align: 'center' },
             { key: 'actions', title: 'İşlem', width: 140, sortable: false, filterable: false, align: 'center', isFixedRight: true }
         ];
@@ -12387,7 +12389,11 @@ window.__texflowApp = createApp({
                         const validKeys = defaultSampleColumns.map(c => c.key);
                         const filtered = parsed.filter(k => validKeys.includes(k));
                         validKeys.forEach(k => {
-                            if (!filtered.includes(k)) filtered.push(k);
+                            if (!filtered.includes(k)) {
+                                const actIdx = filtered.indexOf('actions');
+                                if (actIdx !== -1) filtered.splice(actIdx, 0, k);
+                                else filtered.push(k);
+                            }
                         });
                         sampleColOrder.value = filtered;
                         return;
@@ -12476,15 +12482,143 @@ window.__texflowApp = createApp({
             };
 
             const onMouseUp = () => {
-                window.removeEventListener('mousemove', onMouseMove);
-                window.removeEventListener('mouseup', onMouseUp);
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
                 localStorage.setItem('sample_col_widths', JSON.stringify(sampleColWidths.value));
             };
 
-            window.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('mouseup', onMouseUp);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
         };
 
+        // FABRICTAG KUMAŞ ENTEGRASYONU
+        const sampleFabricModalOpen = ref(false);
+        const activeSampleFabricItem = ref(null);
+        const sampleFabricSearch = ref('');
+        const sampleFabricsList = ref([]);
+        const sampleFabricLoading = ref(false);
+
+        const openSampleFabricModal = (sample) => {
+            activeSampleFabricItem.value = sample;
+            sampleFabricSearch.value = sample.fabric_info || '';
+            sampleFabricModalOpen.value = true;
+            searchSampleFabrics();
+            refreshIcons();
+        };
+
+        const closeSampleFabricModal = () => {
+            sampleFabricModalOpen.value = false;
+            activeSampleFabricItem.value = null;
+        };
+
+        let sampleFabricDebounce = null;
+        const onSampleFabricSearchInput = () => {
+            if (sampleFabricDebounce) clearTimeout(sampleFabricDebounce);
+            sampleFabricDebounce = setTimeout(() => {
+                searchSampleFabrics();
+            }, 250);
+        };
+
+        const searchSampleFabrics = async () => {
+            sampleFabricLoading.value = true;
+            try {
+                const q = sampleFabricSearch.value ? `?q=${encodeURIComponent(sampleFabricSearch.value.trim())}` : '';
+                const res = await apiFetch(`/api/fabrictag/fabrics${q}`);
+                sampleFabricsList.value = Array.isArray(res) ? res : [];
+            } catch (err) {
+                sampleFabricsList.value = [];
+            } finally {
+                sampleFabricLoading.value = false;
+                refreshIcons();
+            }
+        };
+
+        const assignSampleFabric = async (fabric) => {
+            if (!activeSampleFabricItem.value || !fabric) return;
+            const code = fabric.quality_code || fabric.internal_code || '';
+            const name = fabric.quality_name || '';
+            const comp = fabric.composition ? `(${fabric.composition})` : '';
+            const displayTitle = [code, name, comp].filter(Boolean).join(' ');
+            
+            activeSampleFabricItem.value.fabric_info = displayTitle;
+            activeSampleFabricItem.value.fabrictag_id = fabric.id;
+
+            try {
+                await apiFetch(`/api/samples/${activeSampleFabricItem.value.id}/update-cell`, {
+                    method: 'POST',
+                    body: JSON.stringify({ field: 'fabric_info', value: displayTitle })
+                });
+                await apiFetch(`/api/samples/${activeSampleFabricItem.value.id}/update-cell`, {
+                    method: 'POST',
+                    body: JSON.stringify({ field: 'fabrictag_id', value: fabric.id })
+                });
+                showToast(`FabricTag kumaşı atandı: ${name || code}`, 'success');
+            } catch (err) {
+                showToast('Kumaş atanırken bir hata oluştu.', 'error');
+            }
+            sampleFabricModalOpen.value = false;
+        };
+
+        const clearSampleFabricLink = async (sample) => {
+            sample.fabrictag_id = null;
+            try {
+                await apiFetch(`/api/samples/${sample.id}/update-cell`, {
+                    method: 'POST',
+                    body: JSON.stringify({ field: 'fabrictag_id', value: null })
+                });
+                showToast('FabricTag bağlantısı kaldırıldı.', 'info');
+            } catch (err) {}
+        };
+
+        // KRİTİK / NOTLAR MODALI (MODERN AÇILIR PENCERE)
+        const sampleCritiqueModalOpen = ref(false);
+        const activeSampleCritiqueItem = ref(null);
+        const sampleCritiqueText = ref('');
+
+        const openSampleCritiqueModal = (sample) => {
+            activeSampleCritiqueItem.value = sample;
+            sampleCritiqueText.value = sample.critique || sample.notes || '';
+            sampleCritiqueModalOpen.value = true;
+            refreshIcons();
+        };
+
+        const closeSampleCritiqueModal = () => {
+            sampleCritiqueModalOpen.value = false;
+            activeSampleCritiqueItem.value = null;
+        };
+
+        const applyCritiquePreset = (preset) => {
+            if (!sampleCritiqueText.value.trim()) {
+                sampleCritiqueText.value = preset;
+            } else {
+                sampleCritiqueText.value += ' • ' + preset;
+            }
+        };
+
+        const saveSampleCritique = async () => {
+            if (!activeSampleCritiqueItem.value) return;
+            const val = sampleCritiqueText.value.trim();
+            activeSampleCritiqueItem.value.critique = val;
+            try {
+                await apiFetch(`/api/samples/${activeSampleCritiqueItem.value.id}/update-cell`, {
+                    method: 'POST',
+                    body: JSON.stringify({ field: 'critique', value: val })
+                });
+                showToast('Numune kritiği kaydedildi.', 'success');
+            } catch (err) {
+                showToast('Kritik kaydedilirken hata oluştu.', 'error');
+            }
+            sampleCritiqueModalOpen.value = false;
+        };
+
+        const getShortCritique = (text) => {
+            if (!text) return '';
+            const words = String(text).trim().split(/\s+/);
+            if (words.length <= 3) return words.join(' ');
+            return words.slice(0, 3).join(' ') + '...';
+        };
+
+        // NUMUNE SEÇENEKLERİ (TÜRLER VE AŞAMALAR)
         const loadSampleOptions = async () => {
             try {
                 const res = await apiFetch('/api/samples/options');
@@ -12496,9 +12630,7 @@ window.__texflowApp = createApp({
                         sampleStagesList.value = res.stages;
                     }
                 }
-            } catch (err) {
-                console.warn('Sample options could not be loaded:', err);
-            }
+            } catch (err) {}
         };
 
         const addNewCustomSampleType = async () => {
@@ -12511,6 +12643,9 @@ window.__texflowApp = createApp({
                         method: 'POST',
                         body: JSON.stringify({ sample_types: sampleTypesList.value })
                     });
+                    if (sampleColumnFilters.value['sample_type'] && !sampleColumnFilters.value['sample_type'].includes(val)) {
+                        sampleColumnFilters.value['sample_type'].push(val);
+                    }
                     showToast(`Yeni numune türü eklendi: ${val}`, 'success');
                 } catch (err) {}
             }
@@ -12527,22 +12662,23 @@ window.__texflowApp = createApp({
                         method: 'POST',
                         body: JSON.stringify({ stages: sampleStagesList.value })
                     });
+                    if (sampleColumnFilters.value['stage'] && !sampleColumnFilters.value['stage'].includes(val)) {
+                        sampleColumnFilters.value['stage'].push(val);
+                    }
                     showToast(`Yeni işlem aşaması eklendi: ${val}`, 'success');
                 } catch (err) {}
             }
             newCustomSampleStage.value = '';
         };
 
+        // VERİ YÜKLEME VE YÖNETİM
         const loadSamples = async () => {
             samplesLoading.value = true;
             try {
                 const res = await apiFetch('/api/samples');
-                if (Array.isArray(res)) {
-                    samplesList.value = res;
-                }
+                samplesList.value = Array.isArray(res) ? res : [];
             } catch (err) {
-                console.error('loadSamples error:', err);
-                showToast('Numune listesi yüklenemedi: ' + (err.message || err), 'error');
+                samplesList.value = [];
             } finally {
                 samplesLoading.value = false;
                 refreshIcons();
@@ -12551,63 +12687,64 @@ window.__texflowApp = createApp({
 
         const addNewSampleRow = async () => {
             try {
+                const today = new Date().toLocaleDateString('tr-TR');
                 const payload = {
-                    sample_type: sampleTypesList.value[0] || '1.Proto',
+                    sample_type: '1.Proto',
                     season: '',
                     customer_name: '',
                     style_name: '',
                     style_no: '',
-                    request_date: new Date().toLocaleDateString('tr-TR'),
+                    request_date: today,
                     delivery_date: '',
                     quantity_sizes: '',
                     fabric_info: '',
                     unit_meters: '',
-                    stage: sampleStagesList.value[0] || 'Talep Oluşturuldu',
+                    stage: 'Talep Oluşturuldu',
+                    critique: '',
                     notes: ''
                 };
-                const res = await apiFetch('/api/samples', {
+                const created = await apiFetch('/api/samples', {
                     method: 'POST',
                     body: JSON.stringify(payload)
                 });
-                if (res && res.id) {
-                    samplesList.value.unshift(res);
+                if (created && created.id) {
+                    samplesList.value.unshift(created);
                     showToast('Yeni numune satırı eklendi.', 'success');
                     refreshIcons();
                 }
             } catch (err) {
-                console.error('addNewSampleRow error:', err);
-                showToast('Numune eklenemedi: ' + (err.message || err), 'error');
+                showToast('Numune satırı eklenirken hata oluştu.', 'error');
             }
         };
 
-        const updateSampleCell = async (sample, field, val) => {
-            if (!sample || !sample.id) return;
-            sample[field] = val;
+        const updateSampleCell = async (sample, field, value) => {
+            const valStr = value !== undefined && value !== null ? String(value).trim() : '';
+            if (sample[field] === valStr) return;
+            sample[field] = valStr;
             try {
                 await apiFetch(`/api/samples/${sample.id}/update-cell`, {
                     method: 'POST',
-                    body: JSON.stringify({ field, value: val })
+                    body: JSON.stringify({ field, value: valStr })
                 });
             } catch (err) {
-                console.error('updateSampleCell error:', err);
+                showToast(`Hücre güncellenemedi: ${field}`, 'error');
             }
         };
 
-        const updateSampleSmartDate = async (sample, field, rawInput) => {
-            if (!sample || !sample.id) return;
-            if (!rawInput || String(rawInput).trim() === '') {
-                sample[field] = '';
-                await updateSampleCell(sample, field, '');
-                return;
+        const updateSampleSmartDate = (sample, field, event) => {
+            let raw = (event.target ? event.target.value : event) || '';
+            let formatted = smartFormatDateInput(raw);
+            if (formatted) {
+                sample[field] = formatted;
+                updateSampleCell(sample, field, formatted);
+                if (event.target) event.target.value = formatted;
+            } else {
+                updateSampleCell(sample, field, raw);
             }
-            const formatted = parseSmartDate(rawInput);
-            sample[field] = formatted;
-            await updateSampleCell(sample, field, formatted);
         };
 
         const deleteSampleRow = async (sample) => {
-            if (!sample || !sample.id) return;
-            const ok = confirm(`"${sample.style_no || sample.style_name || sample.id}" nolu numune kaydını silmek istediğinize emin misiniz?`);
+            const ok = confirm(`"${sample.style_name || sample.style_no || 'Bu'}" numune kaydını silmek istediğinize emin misiniz?`);
             if (!ok) return;
             try {
                 await apiFetch(`/api/samples/${sample.id}`, { method: 'DELETE' });
@@ -12615,74 +12752,95 @@ window.__texflowApp = createApp({
                 selectedSampleIds.value = selectedSampleIds.value.filter(id => id !== sample.id);
                 showToast('Numune kaydı silindi.', 'info');
             } catch (err) {
-                console.error('deleteSampleRow error:', err);
-                showToast('Silinirken hata oluştu: ' + (err.message || err), 'error');
+                showToast('Numune silinirken hata oluştu.', 'error');
             }
         };
 
-        const openSampleImageModal = (sample) => {
+        // GÖRSEL MODALI & YÜKLEME
+        const openSampleImageModal = (sample, slot = 1) => {
             activeSampleItem.value = sample;
-            sampleImageSlot.value = 1;
+            sampleImageSlot.value = slot;
             sampleImageModalOpen.value = true;
             refreshIcons();
         };
 
-        const uploadSampleImageSlot = async (slot, event) => {
+        const uploadSampleImageSlot = async (event, slot = 1) => {
             const file = event.target.files && event.target.files[0];
             if (!file || !activeSampleItem.value) return;
+
             const formData = new FormData();
             formData.append('file', file);
+
             try {
                 const res = await apiFetch(`/api/samples/${activeSampleItem.value.id}/image?slot=${slot}`, {
                     method: 'POST',
                     body: formData
                 });
                 if (res && res.image_url) {
-                    if (slot === 2) {
-                        activeSampleItem.value.image_url_2 = res.image_url;
-                    } else {
-                        activeSampleItem.value.image_url = res.image_url;
+                    if (slot === 1) activeSampleItem.value.image_url = res.image_url;
+                    else activeSampleItem.value.image_url_2 = res.image_url;
+                    
+                    const itemInList = samplesList.value.find(s => s.id === activeSampleItem.value.id);
+                    if (itemInList) {
+                        if (slot === 1) itemInList.image_url = res.image_url;
+                        else itemInList.image_url_2 = res.image_url;
                     }
-                    showToast('Görsel yüklendi.', 'success');
+                    showToast(`Numune görseli ${slot} yüklendi.`, 'success');
                 }
             } catch (err) {
-                showToast('Görsel yüklenemedi: ' + (err.message || err), 'error');
-            } finally {
-                event.target.value = '';
+                showToast('Görsel yüklenirken hata oluştu.', 'error');
             }
         };
 
-        const deleteSampleImageSlot = async (slot) => {
+        const deleteSampleImageSlot = async (slot = 1) => {
             if (!activeSampleItem.value) return;
             try {
                 await apiFetch(`/api/samples/${activeSampleItem.value.id}/image/${slot}`, { method: 'DELETE' });
-                if (slot === 2) {
-                    activeSampleItem.value.image_url_2 = null;
-                } else {
-                    activeSampleItem.value.image_url = null;
-                }
-                showToast('Görsel kaldırıldı.', 'info');
-            } catch (err) {}
-        };
+                if (slot === 1) activeSampleItem.value.image_url = null;
+                else activeSampleItem.value.image_url_2 = null;
 
-        const createCostFromSample = (sample) => {
-            if (!sample) return;
-            openCreateFreeCostModal();
-            freeCostHeader.value.customer_name = sample.customer_name || '';
-            freeCostHeader.value.season = sample.season || '';
-            freeCostHeader.value.model_no = sample.style_no || '';
-            freeCostHeader.value.color = sample.style_name || '';
-            freeCostHeader.value.fabric_name = sample.fabric_info || '';
-            if (sample.unit_meters) {
-                const mNum = parseFloat(String(sample.unit_meters).replace(',', '.')) || 0;
-                if (mNum > 0 && freeCostForm.value.fabrics && freeCostForm.value.fabrics[0]) {
-                    freeCostForm.value.fabrics[0].meters = mNum;
+                const itemInList = samplesList.value.find(s => s.id === activeSampleItem.value.id);
+                if (itemInList) {
+                    if (slot === 1) itemInList.image_url = null;
+                    else itemInList.image_url_2 = null;
                 }
+                showToast(`Görsel ${slot} silindi.`, 'info');
+            } catch (err) {
+                showToast('Görsel silinirken hata oluştu.', 'error');
             }
-            recalculateFreeCost();
-            showToast(`"${sample.style_no || sample.style_name || 'Numune'}" bilgileriyle serbest maliyet açıldı.`, 'success');
         };
 
+        // SERBEST MALİYETE AKTARIM
+        const createCostFromSample = (sample) => {
+            setActiveMenu('serbest_fiyat');
+            setTimeout(() => {
+                resetFreeCostForm();
+                freeCostForm.value.customer_name = sample.customer_name || '';
+                freeCostForm.value.style_name = sample.style_name || '';
+                freeCostForm.value.style_no = sample.style_no || '';
+                freeCostForm.value.season = sample.season || '';
+                
+                if (sample.fabric_info) {
+                    if (freeCostForm.value.fabrics && freeCostForm.value.fabrics.length > 0) {
+                        freeCostForm.value.fabrics[0].name = sample.fabric_info;
+                        if (sample.unit_meters) {
+                            const m = parseFloat(String(sample.unit_meters).replace(',', '.'));
+                            if (!isNaN(m) && m > 0) freeCostForm.value.fabrics[0].unit_meter = m;
+                        }
+                    }
+                }
+                if (sample.image_url) {
+                    freeCostForm.value.image_url = sample.image_url;
+                }
+                if (sample.critique || sample.notes) {
+                    freeCostForm.value.notes = (sample.critique || sample.notes || '');
+                }
+                isFreeCostModalOpen.value = true;
+                showToast(`Numune bilgileri aktarıldı: ${sample.style_name || sample.style_no}`, 'success');
+            }, 120);
+        };
+
+        // SIRALAMA VE SÜZGEÇ (FILTER) MANTIĞI
         const toggleSampleSort = (colKey) => {
             if (sampleSortCol.value === colKey) {
                 sampleSortDir.value = sampleSortDir.value === 'asc' ? 'desc' : 'asc';
@@ -12704,6 +12862,11 @@ window.__texflowApp = createApp({
 
         const getSampleDistinctValues = (colKey) => {
             const set = new Set();
+            if (colKey === 'sample_type') {
+                (sampleTypesList.value || []).forEach(t => set.add(t));
+            } else if (colKey === 'stage') {
+                (sampleStagesList.value || []).forEach(st => set.add(st));
+            }
             (samplesList.value || []).forEach(s => {
                 const v = s[colKey];
                 if (v !== undefined && v !== null && String(v).trim() !== '') {
@@ -12712,9 +12875,13 @@ window.__texflowApp = createApp({
                     set.add('(Boş)');
                 }
             });
-            let arr = Array.from(set).sort();
-            if (sampleFilterSearch.value.trim()) {
-                const q = sampleFilterSearch.value.trim().toLowerCase();
+            return Array.from(set).sort();
+        };
+
+        const getSampleFilteredDistinctValues = (colKey) => {
+            let arr = getSampleDistinctValues(colKey);
+            const q = (sampleFilterSearch.value || '').trim().toLowerCase();
+            if (q) {
                 arr = arr.filter(v => v.toLowerCase().includes(q));
             }
             return arr;
@@ -12752,9 +12919,10 @@ window.__texflowApp = createApp({
         };
 
         const hasActiveSampleFilter = (colKey) => {
-            return !!sampleColumnFilters.value[colKey];
+            return sampleColumnFilters.value[colKey] !== undefined;
         };
 
+        // FİLTRELENMİŞ LİSTE
         const filteredSamplesList = computed(() => {
             let list = samplesList.value || [];
 
@@ -12769,7 +12937,8 @@ window.__texflowApp = createApp({
                         (s.season && s.season.toLowerCase().includes(q)) ||
                         (s.fabric_info && s.fabric_info.toLowerCase().includes(q)) ||
                         (s.stage && s.stage.toLowerCase().includes(q)) ||
-                        (s.quantity_sizes && s.quantity_sizes.toLowerCase().includes(q))
+                        (s.quantity_sizes && s.quantity_sizes.toLowerCase().includes(q)) ||
+                        (s.critique && s.critique.toLowerCase().includes(q))
                     );
                 });
             }
@@ -12792,8 +12961,10 @@ window.__texflowApp = createApp({
                 list = [...list].sort((a, b) => {
                     let va = a[col] || '';
                     let vb = b[col] || '';
-                    if (typeof va === 'number' && typeof vb === 'number') {
-                        return (va - vb) * dir;
+                    if (col === 'id' || col === 'unit_meters') {
+                        const na = parseFloat(String(va).replace(',', '.')) || 0;
+                        const nb = parseFloat(String(vb).replace(',', '.')) || 0;
+                        return (na - nb) * dir;
                     }
                     return String(va).localeCompare(String(vb), 'tr') * dir;
                 });
@@ -12802,19 +12973,224 @@ window.__texflowApp = createApp({
             return list;
         });
 
+        // İSTATİSTİKLER (METRICS)
         const sampleMetrics = computed(() => {
             const list = samplesList.value || [];
-            let inProgress = 0;
-            let completed = 0;
-            list.forEach(s => {
-                const st = String(s.stage || '').toLowerCase();
-                if (st.includes('ütü') || st.includes('sevk') || st.includes('tamam') || st.includes('onay')) {
-                    completed++;
-                } else {
-                    inProgress++;
+            const total = list.length;
+            const inProgressCount = list.filter(s => s.stage && (
+                s.stage.includes('Dikim') || s.stage.includes('Kumaş') || s.stage.includes('Yıkama') || s.stage.includes('Baskı') || s.stage.includes('Çakım')
+            )).length;
+            const completedCount = list.filter(s => s.stage && (s.stage.includes('Ütü') || s.stage.includes('Tamam') || s.stage.includes('Teslim'))).length;
+            return { total, inProgressCount, completedCount };
+        });
+
+        const getSampleStageBadgeClass = (stage) => {
+            if (!stage) return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+            const s = stage.toLowerCase();
+            if (s.includes('tamam') || s.includes('ütü') || s.includes('paket') || s.includes('teslim')) {
+                return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+            }
+            if (s.includes('dikim')) {
+                return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+            }
+            if (s.includes('kumaş')) {
+                return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
+            }
+            if (s.includes('yıkama') || s.includes('boya') || s.includes('taş') || s.includes('baskı')) {
+                return 'bg-purple-500/10 text-purple-500 border-purple-500/20';
+            }
+            if (s.includes('çakım')) {
+                return 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20';
+            }
+            return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+        };
+
+        const getSampleTypeBadgeClass = (type) => {
+            if (!type) return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+            const t = type.toLowerCase();
+            if (t.includes('proto')) return 'bg-sky-500/10 text-sky-500 border-sky-500/20';
+            if (t.includes('pps')) return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+            if (t.includes('sms')) return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+            if (t.includes('fit')) return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+            return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+        };
+
+        // ÇOKLU SEÇİM
+        const isAllSamplesSelected = computed(() => {
+            const list = filteredSamplesList.value || [];
+            if (!list.length) return false;
+            return list.every(s => selectedSampleIds.value.includes(s.id));
+        });
+
+        const toggleSelectAllSamples = (isChecked) => {
+            if (isChecked) {
+                const ids = (filteredSamplesList.value || []).map(s => s.id);
+                selectedSampleIds.value = Array.from(new Set([...selectedSampleIds.value, ...ids]));
+            } else {
+                const currentFilteredIds = (filteredSamplesList.value || []).map(s => s.id);
+                selectedSampleIds.value = selectedSampleIds.value.filter(id => !currentFilteredIds.includes(id));
+            }
+        };
+
+        const toggleSelectSample = (sampleId) => {
+            const idx = selectedSampleIds.value.indexOf(sampleId);
+            if (idx === -1) {
+                selectedSampleIds.value.push(sampleId);
+            } else {
+                selectedSampleIds.value.splice(idx, 1);
+            }
+        };
+
+        // A4 YAZDIRMA & ÖNİZLEME (ORAN AYARLARI & TAŞMAYI ÖNLEYEN DÜZEN)
+        const samplePrintModalOpen = ref(false);
+        const samplePrintOrientation = ref('landscape');
+        const samplePrintScale = ref(100);
+
+        const defaultSamplePrintColWidths = {
+            index: 4,
+            image: 6,
+            sample_type: 9,
+            season: 8,
+            customer_name: 10,
+            style_no: 9,
+            style_name: 11,
+            request_date: 7,
+            delivery_date: 7,
+            quantity_sizes: 8,
+            fabric_info: 9,
+            unit_meters: 4,
+            critique: 8,
+            stage: 6
+        };
+
+        const samplePrintColWidths = ref({ ...defaultSamplePrintColWidths });
+
+        const initSamplePrintColWidths = () => {
+            const saved = localStorage.getItem('sample_print_col_widths');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    samplePrintColWidths.value = { ...defaultSamplePrintColWidths, ...parsed };
+                    return;
+                } catch (e) {}
+            }
+            samplePrintColWidths.value = { ...defaultSamplePrintColWidths };
+        };
+
+        initSamplePrintColWidths();
+
+        const adjustSamplePrintColWidth = (colKey, delta) => {
+            const current = samplePrintColWidths.value[colKey] || defaultSamplePrintColWidths[colKey] || 8;
+            const updated = Math.max(2, Math.min(35, current + delta));
+            samplePrintColWidths.value[colKey] = updated;
+            localStorage.setItem('sample_print_col_widths', JSON.stringify(samplePrintColWidths.value));
+        };
+
+        const getSamplePrintColTitle = (key) => {
+            const titles = {
+                index: 'Sıra',
+                image: 'Görsel',
+                sample_type: 'Numune Türü',
+                season: 'Sezon',
+                customer_name: 'Müşteri',
+                style_no: 'Model Kodu',
+                style_name: 'Model Adı',
+                request_date: 'Talep T.',
+                delivery_date: 'Teslim T.',
+                quantity_sizes: 'Adet & Beden',
+                fabric_info: 'Kumaşı',
+                unit_meters: 'Metraj',
+                critique: 'Kritik / Not',
+                stage: 'Aşama'
+            };
+            return titles[key] || key;
+        };
+
+        const resetSamplePrintColWidths = () => {
+            samplePrintColWidths.value = { ...defaultSamplePrintColWidths };
+            localStorage.removeItem('sample_print_col_widths');
+            showToast('Yazdırma sütun genişlikleri varsayılana sıfırlandı.', 'info');
+        };
+
+        const updateSamplePrintStyle = () => {
+            let el = document.getElementById('sample-dynamic-print-css');
+            if (!el) {
+                el = document.createElement('style');
+                el.id = 'sample-dynamic-print-css';
+                document.head.appendChild(el);
+            }
+            const orient = samplePrintOrientation.value === 'portrait' ? 'portrait' : 'landscape';
+            const scale = (samplePrintScale.value || 100) / 100;
+            el.innerHTML = `
+                @media print {
+                    @page {
+                        size: A4 ${orient};
+                        margin: 6mm;
+                    }
+                    body {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                    #sample-print-sheet {
+                        zoom: ${scale} !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        box-sizing: border-box !important;
+                    }
                 }
-            });
-            return {
+            `;
+        };
+
+        const openSamplePrintModal = () => {
+            const savedOrient = localStorage.getItem('sample_print_orientation');
+            if (savedOrient) samplePrintOrientation.value = savedOrient;
+            const savedScale = localStorage.getItem('sample_print_scale');
+            if (savedScale) samplePrintScale.value = parseInt(savedScale) || 100;
+            initSamplePrintColWidths();
+            samplePrintModalOpen.value = true;
+            updateSamplePrintStyle();
+            refreshIcons();
+        };
+
+        const setSamplePrintOrientation = (orient) => {
+            samplePrintOrientation.value = orient;
+            localStorage.setItem('sample_print_orientation', orient);
+            updateSamplePrintStyle();
+        };
+
+        const setSamplePrintScale = (scale) => {
+            samplePrintScale.value = scale;
+            localStorage.setItem('sample_print_scale', scale.toString());
+            updateSamplePrintStyle();
+        };
+
+        const samplePrintRows = computed(() => {
+            const selected = selectedSampleIds.value;
+            const all = filteredSamplesList.value || [];
+            if (selected && selected.length) {
+                return all.filter(s => selected.includes(s.id));
+            }
+            return all;
+        });
+
+        const printSampleList = () => {
+            updateSamplePrintStyle();
+            setTimeout(() => {
+                window.print();
+            }, 60);
+        };
+
+        const exportSamplesExcel = () => {
+            const selected = selectedSampleIds.value;
+            let url = '/api/samples/export-excel';
+            if (selected && selected.length) {
+                url += `?ids=${selected.join(',')}`;
+            }
+            window.open(url, '_blank');
+        };
+
+
+        return {
                 total: list.length,
                 inProgressCount: inProgress,
                 completedCount: completed
@@ -13311,6 +13687,30 @@ window.__texflowApp = createApp({
             setSamplePrintScale,
             printSampleList,
             exportSamplesExcel,
+            getSampleFilteredDistinctValues,
+            sampleFabricModalOpen,
+            activeSampleFabricItem,
+            sampleFabricSearch,
+            sampleFabricsList,
+            sampleFabricLoading,
+            openSampleFabricModal,
+            closeSampleFabricModal,
+            onSampleFabricSearchInput,
+            searchSampleFabrics,
+            assignSampleFabric,
+            clearSampleFabricLink,
+            sampleCritiqueModalOpen,
+            activeSampleCritiqueItem,
+            sampleCritiqueText,
+            openSampleCritiqueModal,
+            closeSampleCritiqueModal,
+            applyCritiquePreset,
+            saveSampleCritique,
+            getShortCritique,
+            defaultSamplePrintColWidths,
+            adjustSamplePrintColWidth,
+            resetSamplePrintColWidths,
+            getSamplePrintColTitle,
             getPpsBadgeClass,
             updatePpsStatus,
             getDaysSinceDate,

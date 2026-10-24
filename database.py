@@ -467,11 +467,21 @@ def init_db():
         unit_meters TEXT,
         stage TEXT DEFAULT 'Talep Oluşturuldu',
         notes TEXT,
+        critique TEXT,
+        fabrictag_id INTEGER,
         created_by TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
+    # Migration for sample_items columns
+    cursor.execute("PRAGMA table_info(sample_items)")
+    existing_sample_cols = [r[1] for r in cursor.fetchall()]
+    if "critique" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN critique TEXT")
+    if "fabrictag_id" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN fabrictag_id INTEGER")
 
     cursor.execute("SELECT COUNT(*) FROM sample_items")
     if cursor.fetchone()[0] == 0:

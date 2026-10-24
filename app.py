@@ -5968,7 +5968,7 @@ def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends
     query = """
         SELECT id, company_id, image_url, image_url_2, sample_type, season, customer_name,
                style_name, style_no, request_date, delivery_date, quantity_sizes,
-               fabric_info, unit_meters, stage, notes, created_by, created_at, updated_at
+               fabric_info, unit_meters, stage, notes, critique, fabrictag_id, created_by, created_at, updated_at
         FROM sample_items
         WHERE company_id = ?
     """
@@ -5994,7 +5994,7 @@ def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends
     cols = [
         "id", "company_id", "image_url", "image_url_2", "sample_type", "season", "customer_name",
         "style_name", "style_no", "request_date", "delivery_date", "quantity_sizes",
-        "fabric_info", "unit_meters", "stage", "notes", "created_by", "created_at", "updated_at"
+        "fabric_info", "unit_meters", "stage", "notes", "critique", "fabrictag_id", "created_by", "created_at", "updated_at"
     ]
     samples = [dict(zip(cols, row)) for row in rows]
     return samples
@@ -6018,17 +6018,23 @@ def api_create_sample(payload: Dict[str, Any], user: Dict[str, Any] = Depends(re
     unit_meters = str(payload.get("unit_meters") or "").strip()
     stage = str(payload.get("stage") or "Talep Oluşturuldu").strip()
     notes = str(payload.get("notes") or "").strip()
+    critique = str(payload.get("critique") or "").strip()
+    fabrictag_id = payload.get("fabrictag_id")
+    try:
+        fabrictag_id = int(fabrictag_id) if fabrictag_id is not None and str(fabrictag_id).strip() != "" else None
+    except Exception:
+        fabrictag_id = None
     
     c.execute("""
         INSERT INTO sample_items (
             company_id, sample_type, season, customer_name, style_name, style_no,
             request_date, delivery_date, quantity_sizes, fabric_info, unit_meters,
-            stage, notes, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            stage, notes, critique, fabrictag_id, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         company_id, sample_type, season, customer_name, style_name, style_no,
         request_date, delivery_date, quantity_sizes, fabric_info, unit_meters,
-        stage, notes, created_by
+        stage, notes, critique, fabrictag_id, created_by
     ))
     conn.commit()
     new_id = c.lastrowid
@@ -6046,7 +6052,7 @@ def api_update_sample_cell(sample_id: int, payload: Dict[str, Any], user: Dict[s
     allowed_fields = {
         "sample_type", "season", "customer_name", "style_name", "style_no",
         "request_date", "delivery_date", "quantity_sizes", "fabric_info",
-        "unit_meters", "stage", "notes"
+        "unit_meters", "stage", "notes", "critique", "fabrictag_id"
     }
     if field not in allowed_fields:
         raise HTTPException(status_code=400, detail=f"Geçersiz alan: {field}")
@@ -6112,7 +6118,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
 
     query = """
         SELECT id, sample_type, season, customer_name, style_name, style_no,
-               request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes
+               request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes, critique
         FROM sample_items
         WHERE company_id = ?
     """
@@ -6142,7 +6148,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
 
     headers = [
         "Sıra", "Numune Türü", "Sezon", "Müşteri", "Model Adı", "Model Kodu",
-        "Talep Tarihi", "Teslim Tarihi", "Adet ve Beden", "Kumaşı", "Birim Metraj (m)", "İşlem Aşaması"
+        "Talep Tarihi", "Teslim Tarihi", "Adet ve Beden", "Kumaşı", "Birim Metraj (m)", "İşlem Aşaması", "Kritik / Notlar"
     ]
     ws.append([])
     ws.append(headers)
@@ -6166,6 +6172,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
 
     row_num = 4
     for idx, r in enumerate(rows, 1):
+        critique_val = str(r[13] if len(r) > 13 and r[13] is not None else (r[12] or "")).strip()
         row_data = [
             idx,
             r[1] or "",
@@ -6178,7 +6185,8 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
             r[8] or "",
             r[9] or "",
             r[10] or "",
-            r[11] or ""
+            r[11] or "",
+            critique_val
         ]
         ws.append(row_data)
         ws.row_dimensions[row_num].height = 20
