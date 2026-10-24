@@ -12358,7 +12358,7 @@ window.__texflowApp = createApp({
         const newCustomSampleType = ref('');
         const newCustomSampleStage = ref('');
 
-        // SÜTUN TANIMLARI (KRİTİK / NOT SÜTUNU EKLENDİ)
+        // SÜTUN TANIMLARI
         const defaultSampleColumns = [
             { key: 'select', title: '', width: 38, sortable: false, filterable: false, isFixed: true },
             { key: 'image', title: 'Görsel', width: 68, sortable: false, filterable: false, align: 'center', isFixed: true },
@@ -13079,13 +13079,6 @@ window.__texflowApp = createApp({
 
         initSamplePrintColWidths();
 
-        const adjustSamplePrintColWidth = (colKey, delta) => {
-            const current = samplePrintColWidths.value[colKey] || defaultSamplePrintColWidths[colKey] || 8;
-            const updated = Math.max(2, Math.min(35, current + delta));
-            samplePrintColWidths.value[colKey] = updated;
-            localStorage.setItem('sample_print_col_widths', JSON.stringify(samplePrintColWidths.value));
-        };
-
         const getSamplePrintColTitle = (key) => {
             const titles = {
                 index: 'Sıra',
@@ -13104,6 +13097,13 @@ window.__texflowApp = createApp({
                 stage: 'Aşama'
             };
             return titles[key] || key;
+        };
+
+        const adjustSamplePrintColWidth = (colKey, delta) => {
+            const current = samplePrintColWidths.value[colKey] || defaultSamplePrintColWidths[colKey] || 8;
+            const updated = Math.max(2, Math.min(35, current + delta));
+            samplePrintColWidths.value[colKey] = updated;
+            localStorage.setItem('sample_print_col_widths', JSON.stringify(samplePrintColWidths.value));
         };
 
         const resetSamplePrintColWidths = () => {
@@ -13190,150 +13190,7 @@ window.__texflowApp = createApp({
         };
 
 
-        return {
-                total: list.length,
-                inProgressCount: inProgress,
-                completedCount: completed
-            };
-        });
-
-        const getSampleStageBadgeClass = (stage) => {
-            const st = String(stage || '').toLowerCase();
-            if (st.includes('talep')) return 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20';
-            if (st.includes('kumaş')) return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
-            if (st.includes('dikim')) return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20';
-            if (st.includes('yıkama') || st.includes('boya')) return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20';
-            if (st.includes('taş') || st.includes('baskı')) return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20';
-            if (st.includes('çakım')) return 'bg-pink-500/10 text-pink-600 dark:text-pink-400 border border-pink-500/20';
-            if (st.includes('ütü') || st.includes('paket') || st.includes('tamam')) return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
-            return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
-        };
-
-        const getSampleTypeBadgeClass = (stype) => {
-            const t = String(stype || '').toLowerCase();
-            if (t.includes('1.proto')) return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20';
-            if (t.includes('2.proto')) return 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20';
-            if (t.includes('fit')) return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20';
-            if (t.includes('1.pps')) return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
-            if (t.includes('2.pps')) return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20';
-            if (t.includes('sms')) return 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20';
-            if (t.includes('size')) return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
-            if (t.includes('shipment')) return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20';
-            return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
-        };
-
-        const isAllSamplesSelected = computed(() => {
-            const filtered = filteredSamplesList.value || [];
-            if (!filtered.length) return false;
-            return filtered.every(s => selectedSampleIds.value.includes(s.id));
-        });
-
-        const toggleSelectAllSamples = (isChecked) => {
-            const filtered = filteredSamplesList.value || [];
-            if (isChecked) {
-                const ids = new Set(selectedSampleIds.value);
-                filtered.forEach(s => ids.add(s.id));
-                selectedSampleIds.value = Array.from(ids);
-            } else {
-                const filterIds = new Set(filtered.map(s => s.id));
-                selectedSampleIds.value = selectedSampleIds.value.filter(id => !filterIds.has(id));
-            }
-        };
-
-        const toggleSelectSample = (id) => {
-            if (selectedSampleIds.value.includes(id)) {
-                selectedSampleIds.value = selectedSampleIds.value.filter(x => x !== id);
-            } else {
-                selectedSampleIds.value.push(id);
-            }
-        };
-
-        const samplePrintModalOpen = ref(false);
-        const samplePrintOrientation = ref(localStorage.getItem('sample_print_orient') || 'landscape');
-        const samplePrintScale = ref(parseInt(localStorage.getItem('sample_print_scale')) || 95);
-
-        const samplePrintDefaultColWidths = {
-            image: 9,
-            sample_type: 10,
-            season: 9,
-            customer_name: 11,
-            style_no: 10,
-            style_name: 12,
-            request_date: 8,
-            delivery_date: 9,
-            quantity_sizes: 11,
-            fabric_info: 13,
-            unit_meters: 6,
-            stage: 10
-        };
-        const samplePrintColWidths = ref({ ...samplePrintDefaultColWidths });
-
-        const loadSamplePrintColWidths = () => {
-            const saved = localStorage.getItem('sample_print_col_widths_pct');
-            if (saved) {
-                try {
-                    samplePrintColWidths.value = Object.assign({}, samplePrintDefaultColWidths, JSON.parse(saved));
-                } catch (e) {}
-            }
-        };
-        loadSamplePrintColWidths();
-
-        const updateSamplePrintStyle = () => {
-            let el = document.getElementById('dynamic-sample-print-style');
-            if (!el) {
-                el = document.createElement('style');
-                el.id = 'dynamic-sample-print-style';
-                document.head.appendChild(el);
-            }
-            const orient = samplePrintOrientation.value === 'portrait' ? 'portrait' : 'landscape';
-            el.innerHTML = `@page { size: A4 ${orient} !important; margin: 6mm !important; }`;
-        };
-
-        const openSamplePrintModal = () => {
-            loadSamplePrintColWidths();
-            samplePrintModalOpen.value = true;
-            updateSamplePrintStyle();
-            refreshIcons();
-        };
-
-        const setSamplePrintOrientation = (orient) => {
-            samplePrintOrientation.value = orient;
-            localStorage.setItem('sample_print_orient', orient);
-            updateSamplePrintStyle();
-        };
-
-        const setSamplePrintScale = (scale) => {
-            samplePrintScale.value = scale;
-            localStorage.setItem('sample_print_scale', scale.toString());
-        };
-
-        const samplePrintRows = computed(() => {
-            const selected = selectedSampleIds.value;
-            const all = filteredSamplesList.value || [];
-            if (selected && selected.length) {
-                return all.filter(s => selected.includes(s.id));
-            }
-            return all;
-        });
-
-        const printSampleList = () => {
-            updateSamplePrintStyle();
-            setTimeout(() => {
-                window.print();
-            }, 60);
-        };
-
-        const exportSamplesExcel = () => {
-            const selected = selectedSampleIds.value;
-            let url = '/api/samples/export-excel';
-            if (selected && selected.length) {
-                url += `?ids=${selected.join(',')}`;
-            }
-            window.open(url, '_blank');
-        };
-
-
-        return {
+return {
             currentUser,
             token,
             loading,
