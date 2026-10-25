@@ -343,6 +343,36 @@
             contain-intrinsic-size: 1px 38px;
         }
 
+        
+        /* WORD STİLİ KRİTİK EDİTÖRÜ LİSTE VE MADDE İMLERİ */
+        #sample-critique-editor ul,
+        .critique-content ul,
+        .critique-rendered-content ul {
+            list-style-type: disc !important;
+            margin-left: 1.5rem !important;
+            padding-left: 0.5rem !important;
+            display: block !important;
+            margin-top: 0.25rem !important;
+            margin-bottom: 0.25rem !important;
+        }
+        #sample-critique-editor ol,
+        .critique-content ol,
+        .critique-rendered-content ol {
+            list-style-type: decimal !important;
+            margin-left: 1.5rem !important;
+            padding-left: 0.5rem !important;
+            display: block !important;
+            margin-top: 0.25rem !important;
+            margin-bottom: 0.25rem !important;
+        }
+        #sample-critique-editor li,
+        .critique-content li,
+        .critique-rendered-content li {
+            display: list-item !important;
+            list-style: inherit !important;
+            margin-bottom: 0.25rem !important;
+        }
+
         @media print {
             @page {
                 margin: 6mm;
@@ -375,7 +405,8 @@
             #fabric-ledger-modal,
             #free-cost-modal,
             #koli-etiket-print-modal,
-            #sample-print-modal {
+            #sample-print-modal,
+            #sample-talep-modal {
                 position: absolute !important;
                 left: 0 !important;
                 top: 0 !important;
@@ -416,9 +447,70 @@
             #sample-print-modal,
             #sample-print-modal *,
             #sample-print-sheet,
-            #sample-print-sheet * {
+            #sample-print-sheet *,
+            
+            #sample-talep-modal *,
+            #sample-talep-sheet,
+            #sample-talep-sheet * {
                 visibility: visible !important;
             }
+            /* SAMPLE TALEP MODAL VE A4 SAYFASI YAZDIRMA */
+            #sample-talep-modal .no-print {
+                display: none !important;
+                visibility: hidden !important;
+            }
+            #sample-talep-modal > div {
+                background: white !important;
+                border: none !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+                display: block !important;
+            }
+            #sample-talep-modal .overflow-y-auto {
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                display: block !important;
+            }
+            #sample-talep-sheet {
+                width: 100% !important;
+                max-width: 100% !important;
+                height: 275mm !important;
+                min-height: 275mm !important;
+                max-height: 280mm !important;
+                margin: 0 auto !important;
+                padding: 4mm 6mm !important;
+                box-shadow: none !important;
+                border: none !important;
+                border-radius: 0 !important;
+                background: white !important;
+                color: black !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
+                box-sizing: border-box !important;
+                page-break-after: avoid !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            #sample-talep-imza-section {
+                margin-top: auto !important;
+                padding-top: 3mm !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+
             #kumas-bilgi-print-modal > div:not(.no-print),
             #carsaf-print-modal > div:not(.no-print),
             #haftalik-program-print-modal > div:not(.no-print),
@@ -875,6 +967,9 @@
                     display: none !important;
                 }
             }
+
+            
+            
 
             /* FabricTag / Kumaştag tarzı serbest sürükleme ve tıklama görsel efektleri */
             .interactive-canvas-elem {
@@ -2295,15 +2390,27 @@
                                 <span class="text-[9.5px] text-white/90 font-semibold">Yönet / Sil</span>
                             </button>
 
-                            <!-- AKILLI KAYDIRMA (FREEZE PANES) CHECKBOX -->
-                            <label class="h-9 px-2.5 rounded-xl btn-theme text-white text-[10.5px] font-bold flex items-center gap-1.5 cursor-pointer transition shadow-md hover:brightness-110 active:scale-95 select-none"
-                                   title="Müşteri ve Kumaş 1 arasındaki sütunları ekranda sabit tutarak sağa doğru rahatça kaydırmayı sağlar">
-                                <input type="checkbox" v-model="isSmartScrollEnabled" @change="saveSmartScrollPref" class="rounded accent-emerald-600 cursor-pointer w-3.5 h-3.5">
-                                <div class="flex flex-col text-left leading-tight">
-                                    <span class="text-white">Akıllı</span>
-                                    <span class="text-[9.5px] text-white/90 font-normal">Kaydırma</span>
-                                </div>
-                            </label>
+                            <!-- KANALLARI TOPLA BUTONU -->
+                            <button id="btn-kanallari-topla"
+                                    type="button"
+                                    @click="toggleCarsafConsolidateChannels"
+                                    class="h-9 px-2.5 rounded-xl text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
+                                    :class="carsafConsolidateChannels ? 'btn-theme-contrast' : 'btn-theme'"
+                                    title="Aynı model ve renge ait farklı kanallardaki siparişleri tek satırda birleştirip toplar">
+                                <span>Kanalları</span>
+                                <span class="text-[9.5px] text-white/90 font-semibold">Topla</span>
+                            </button>
+
+                            <!-- AKILLI KAYDIRMA (FREEZE PANES) BUTONU (TİKSİZ) -->
+                            <button id="btn-akilli-kaydirma"
+                                    type="button"
+                                    @click="toggleSmartScroll"
+                                    class="h-9 px-2.5 rounded-xl text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
+                                    :class="isSmartScrollEnabled ? 'btn-theme' : 'btn-theme-contrast'"
+                                    title="Müşteri ve Kumaş 1 arasındaki sütunları ekranda sabit tutarak sağa doğru rahatça kaydırmayı sağlar">
+                                <span>Akıllı</span>
+                                <span class="text-[9.5px] text-white/90 font-semibold">Kaydırma</span>
+                            </button>
                         </div>
                     </div>
 
@@ -2857,12 +2964,21 @@
 
                                             <!-- 2.1 Kanal (YAZILANLARDAN OTOMATİK TAMAMLAMALI & SERBEST GİRİŞ) -->
                                             <template v-else-if="col.key === 'channel'">
-                                                <input :value="item.channel"
-                                                       list="dl-channels"
-                                                       @change="onChannelChange(item, $event)"
-                                                       @keydown.enter="$event.target.blur()"
-                                                       class="w-full bg-transparent border-0 outline-none focus:bg-slate-500/10 hover:bg-slate-500/5 px-1 py-0.5 rounded text-xs font-semibold transition truncate"
-                                                       placeholder="Kanal...">
+                                                <div class="flex items-center gap-1 w-full overflow-hidden">
+                                                    <input :value="item.channel"
+                                                           list="dl-channels"
+                                                           :readonly="carsafConsolidateChannels"
+                                                           @change="carsafConsolidateChannels ? null : onChannelChange(item, $event)"
+                                                           @keydown.enter="$event.target.blur()"
+                                                           class="w-full bg-transparent border-0 outline-none focus:bg-slate-500/10 hover:bg-slate-500/5 px-1 py-0.5 rounded text-xs font-semibold transition truncate"
+                                                           :title="item.channel"
+                                                           placeholder="Kanal...">
+                                                    <span v-if="carsafConsolidateChannels && item._consolidatedCount > 1"
+                                                          class="px-1.5 py-0.2 rounded text-[9px] font-extrabold btn-theme-contrast text-white shadow-xs shrink-0"
+                                                          :title="item._consolidatedCount + ' kanal siparişi birleştirildi'">
+                                                        {{ item._consolidatedCount }}K
+                                                    </span>
+                                                </div>
                                             </template>
 
                                             <!-- 3. PO No (ELLE DEĞİŞTİRİLEBİLİR) -->
@@ -3045,7 +3161,8 @@
                                             <template v-else-if="col.isSizeColumn">
                                                 <div class="flex items-center justify-center text-center mx-auto">
                                                     <input :value="item.size_map ? (item.size_map[col.sizeName] !== undefined ? item.size_map[col.sizeName] : '') : ''"
-                                                           @change="updateSingleSizeInline(item, col.sizeName, $event.target.value)"
+                                                           :readonly="carsafConsolidateChannels"
+                                                           @change="carsafConsolidateChannels ? null : updateSingleSizeInline(item, col.sizeName, $event.target.value)"
                                                            type="number" min="0" placeholder="-"
                                                            class="w-full bg-transparent border-0 outline-none text-center font-mono font-bold text-xs hover:bg-slate-500/10 rounded px-1 py-0.5 transition"
                                                            :class="item.size_map && item.size_map[col.sizeName] > 0 ? (isDarkMode ? 'text-emerald-400 font-extrabold' : 'text-emerald-700 font-extrabold') : (isDarkMode ? 'text-slate-400' : 'text-slate-400')">
@@ -6721,6 +6838,7 @@
 
                                                 </div>
 
+                                                </div>
                                             </template>
 
                                         </div>
@@ -8487,6 +8605,15 @@
                                             <template v-else-if="col.key === 'actions'">
                                                 <div class="flex items-center justify-center gap-1.5">
                                                     
+                                                    <!-- TALEP YAZDIR BUTONU -->
+                                                    <button type="button"
+                                                            @click="openSampleTalepModal(sample)"
+                                                            class="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10.5px] font-bold flex items-center gap-1 shadow-sm hover:brightness-110 active:scale-95 transition cursor-pointer select-none"
+                                                            title="Numune Talep Kartını Görüntüle, Yazdır & Excel'e Aktar">
+                                                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+                                                        <span>Talep Yazdır</span>
+                                                    </button>
+
                                                     <!-- MALİYET OLUŞTUR BUTONU -->
                                                     <button type="button"
                                                             @click="createCostFromSample(sample)"
@@ -8647,30 +8774,64 @@
                                 </div>
 
                                 <!-- Sütun Oranları (%) Açılır Menüsü (Width Adjustments) -->
-                                <div class="relative group/samplewidths">
-                                    <button class="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5 shadow-sm"
-                                            title="Her sütunun genişlik oranını (%) ayarlayın">
+                                <div class="relative">
+                                    <button @click="sampleWidthsDropdownOpen = !sampleWidthsDropdownOpen"
+                                            class="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                            title="Her sütunun genişlik oranını (%) ayarlayın veya tablodan kenarları sürükleyin">
                                         <i data-lucide="columns" class="w-3.5 h-3.5 text-emerald-400"></i>
                                         <span>Sütun Genişlikleri (%)</span>
+                                        <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400 transition-transform" :class="{ 'rotate-180': sampleWidthsDropdownOpen }"></i>
                                     </button>
-                                    <div class="hidden group-hover/samplewidths:flex absolute right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3 z-50 flex-col gap-1 min-w-[290px] text-xs text-slate-200">
-                                        <div class="text-[10.5px] font-black uppercase text-slate-400 pb-1 border-b border-slate-800 flex justify-between items-center">
+
+                                    <!-- Dış Tıklamayla Kapatma Katmanı -->
+                                    <div v-if="sampleWidthsDropdownOpen"
+                                         class="fixed inset-0 z-40 bg-transparent cursor-default"
+                                         @click="sampleWidthsDropdownOpen = false"></div>
+
+                                    <!-- Sütun Genişlikleri Açılır Paneli -->
+                                    <div v-if="sampleWidthsDropdownOpen"
+                                         class="absolute right-0 top-full mt-1.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3.5 z-50 flex flex-col gap-2 min-w-[320px] text-xs text-slate-200">
+                                        <div class="text-[10.5px] font-black uppercase text-slate-400 pb-1.5 border-b border-slate-800 flex justify-between items-center">
                                             <span>Sütun Genişlik Oranları</span>
-                                            <span class="text-emerald-400 font-mono">Toplam %{{ Object.values(samplePrintColWidths).reduce((a,b)=>a+b,0) }}</span>
+                                            <span class="text-emerald-400 font-mono font-bold">Toplam %{{ Object.values(samplePrintColWidths).reduce((a,b)=>a+b,0) }}</span>
                                         </div>
-                                        <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1 pr-1">
-                                            <div v-for="(val, colKey) in samplePrintColWidths" :key="colKey" class="flex items-center justify-between gap-2 py-0.5">
+                                        <div class="text-[10px] text-slate-400 leading-tight bg-slate-950/80 p-2 rounded-lg border border-slate-800">
+                                            💡 Tablo başlıklarındaki kenar çizgilerini farenizle sürükleyerek de sütunları doğrudan canlı genişletip daraltabilirsiniz.
+                                        </div>
+                                        <div class="max-h-64 overflow-y-auto custom-scrollbar space-y-1.5 pr-1 py-1">
+                                            <div v-for="(val, colKey) in samplePrintColWidths" :key="colKey"
+                                                 class="flex items-center justify-between gap-2 py-0.5 hover:bg-slate-800/40 px-1.5 rounded transition">
                                                 <span class="text-slate-300 font-medium text-[11px] truncate">{{ getSamplePrintColTitle(colKey) }}:</span>
                                                 <div class="flex items-center gap-1 shrink-0">
-                                                    <button @click="adjustSamplePrintColWidth(colKey, -1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-red-500 hover:text-white font-bold text-center leading-none cursor-pointer">-</button>
-                                                    <span class="w-8 text-center font-mono font-bold text-emerald-400 text-xs">%{{ val }}</span>
-                                                    <button @click="adjustSamplePrintColWidth(colKey, 1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-white font-bold text-center leading-none cursor-pointer">+</button>
+                                                    <button @click="adjustSamplePrintColWidth(colKey, -1)"
+                                                            class="w-5 h-5 rounded bg-slate-800 hover:bg-red-500 hover:text-white font-bold text-center leading-none cursor-pointer"
+                                                            title="1% Daralt">-</button>
+                                                    <div class="relative flex items-center">
+                                                         <input type="number"
+                                                                min="2"
+                                                                max="45"
+                                                                :value="samplePrintColWidths[colKey]"
+                                                                @input="setSamplePrintColWidthManual(colKey, $event.target.value)"
+                                                                @keydown.enter="$event.target.blur()"
+                                                                class="w-12 text-center font-mono font-bold text-emerald-400 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded px-1 py-0.5 text-xs outline-none">
+                                                         <span class="text-[10px] text-slate-500 ml-0.5 font-mono">%</span>
+                                                    </div>
+                                                    <button @click="adjustSamplePrintColWidth(colKey, 1)"
+                                                            class="w-5 h-5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-white font-bold text-center leading-none cursor-pointer"
+                                                            title="1% Genişlet">+</button>
                                                 </div>
                                             </div>
                                         </div>
-                                        <button @click="resetSamplePrintColWidths" class="mt-1 pt-1.5 border-t border-slate-800 text-[10.5px] text-center text-amber-400 hover:underline font-bold cursor-pointer">
-                                            Varsayılan Genişliklere Sıfırla
-                                        </button>
+                                        <div class="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
+                                            <button @click="distributeSamplePrintColWidths"
+                                                    class="text-[10.5px] text-indigo-400 hover:text-indigo-300 hover:underline font-bold cursor-pointer">
+                                                ⚖️ %100'e Otomatik Dengele
+                                            </button>
+                                            <button @click="resetSamplePrintColWidths"
+                                                    class="text-[10.5px] text-amber-400 hover:text-amber-300 hover:underline font-bold cursor-pointer">
+                                                Sıfırla
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -8726,20 +8887,62 @@
                                        class="w-full text-left border-collapse border border-slate-400 text-xs">
                                     <thead>
                                         <tr class="bg-slate-100 border-b border-slate-400 text-[10px] font-black uppercase text-slate-800">
-                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.index || 4) + '%' }">Sıra</th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.image || 6) + '%' }">Görsel</th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.sample_type || 9) + '%' }">Numune Türü</th>
-                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.season || 8) + '%' }">Sezon</th>
-                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.customer_name || 10) + '%' }">Müşteri</th>
-                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.style_no || 9) + '%' }">Model Kodu</th>
-                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.style_name || 11) + '%' }">Model Adı</th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.request_date || 7) + '%' }">Talep T.</th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.delivery_date || 7) + '%' }">Teslim T.</th>
-                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.quantity_sizes || 8) + '%' }">Adet & Beden</th>
-                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.fabric_info || 9) + '%' }">Kumaşı</th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center" :style="{ width: (samplePrintColWidths.unit_meters || 4) + '%' }">Metraj</th>
-                                            <th class="p-1.5 border-r border-slate-400" :style="{ width: (samplePrintColWidths.critique || 8) + '%' }">Kritik / Not</th>
-                                            <th class="p-1.5 text-center" :style="{ width: (samplePrintColWidths.stage || 6) + '%' }">Aşama</th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.index || 4) + '%' }">
+                                                <span>Sıra</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('index', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.image || 6) + '%' }">
+                                                <span>Görsel</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('image', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.sample_type || 9) + '%' }">
+                                                <span>Numune Türü</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('sample_type', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.season || 8) + '%' }">
+                                                <span>Sezon</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('season', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.customer_name || 10) + '%' }">
+                                                <span>Müşteri</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('customer_name', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_no || 9) + '%' }">
+                                                <span>Model Kodu</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('style_no', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_name || 11) + '%' }">
+                                                <span>Model Adı</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('style_name', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.request_date || 7) + '%' }">
+                                                <span>Talep T.</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('request_date', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.delivery_date || 7) + '%' }">
+                                                <span>Teslim T.</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('delivery_date', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.quantity_sizes || 8) + '%' }">
+                                                <span>Adet & Beden</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('quantity_sizes', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info || 9) + '%' }">
+                                                <span>Kumaşı</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('fabric_info', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters || 4) + '%' }">
+                                                <span>Metraj</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('unit_meters', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.critique || 8) + '%' }">
+                                                <span>Kritik / Not</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('critique', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1.5 text-center relative select-none" :style="{ width: (samplePrintColWidths.stage || 6) + '%' }">
+                                                <span>Aşama</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('stage', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-300">
@@ -8761,7 +8964,11 @@
                                             <td class="p-1.5 border-r border-slate-300 font-medium">{{ s.quantity_sizes || '-' }}</td>
                                             <td class="p-1.5 border-r border-slate-300 text-[9.5px]">{{ s.fabric_info || '-' }}</td>
                                             <td class="p-1.5 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 text-[9.5px]">{{ s.critique || s.notes || '-' }}</td>
+                                            <td class="p-1.5 border-r border-slate-300 text-[9.5px] overflow-hidden" :title="getCleanCritique(s.critique || s.notes)">
+                                                <div class="truncate w-full block font-normal leading-tight text-slate-800">
+                                                    {{ getCleanCritique(s.critique || s.notes) || '-' }}
+                                                </div>
+                                            </td>
                                             <td class="p-1.5 text-center font-semibold text-slate-900">
                                                 <span>{{ s.stage || '-' }}</span>
                                             </td>
@@ -8769,21 +8976,7 @@
                                     </tbody>
                                 </table>
 
-                                <!-- İmza Alanı -->
-                                <div class="mt-8 pt-6 border-t border-slate-300 grid grid-cols-3 gap-4 text-center text-xs">
-                                    <div>
-                                        <div class="font-bold text-slate-700">Hazırlayan (MT)</div>
-                                        <div class="mt-8 border-b border-dashed border-slate-400 w-32 mx-auto"></div>
-                                    </div>
-                                    <div>
-                                        <div class="font-bold text-slate-700">Modelhane / Numune Şefi</div>
-                                        <div class="mt-8 border-b border-dashed border-slate-400 w-32 mx-auto"></div>
-                                    </div>
-                                    <div>
-                                        <div class="font-bold text-slate-700">Üretim / Kalite Onay</div>
-                                        <div class="mt-8 border-b border-dashed border-slate-400 w-32 mx-auto"></div>
-                                    </div>
-                                </div>
+
 
                             </div>
                         </div>
@@ -8791,7 +8984,238 @@
                     </div>
                 </div>
 
-                <!-- 7. SUPER ADMIN PANEL -->
+                
+                <!-- ========================================================================= -->
+                <!-- MODAL: TEKİL NUMUNE TALEP FORMU (TALEP YAZDIR & EXCEL'E AKTAR) -->
+                <!-- ========================================================================= -->
+                <div v-if="sampleTalepModalOpen && activeTalepSample"
+                     id="sample-talep-modal"
+                     class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col p-2 sm:p-4 overflow-hidden select-none">
+                    <div class="bg-slate-900 border border-slate-700 w-full max-w-4xl mx-auto rounded-2xl flex flex-col h-full shadow-2xl overflow-hidden">
+                        
+                        <!-- Modal Üst Araç Çubuğu (Yazdırma, Excel, Kapatma) -->
+                        <div class="px-5 py-3 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between shrink-0 no-print">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
+                                    <i data-lucide="file-text" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h2 class="text-sm sm:text-base font-black text-white tracking-tight uppercase">
+                                        {{ getTalepHeaderTitle(activeTalepSample?.sample_type) }}
+                                    </h2>
+                                    <p class="text-xs text-slate-400">
+                                        {{ activeTalepSample?.customer_name }} • {{ activeTalepSample?.style_name }} ({{ activeTalepSample?.style_no }})
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <!-- Excel'e Aktar -->
+                                <button type="button"
+                                        @click="exportTalepExcel(activeTalepSample?.id)"
+                                        class="px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm">
+                                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                                    <span>Excel'e Aktar</span>
+                                </button>
+
+                                <!-- Yazdır Butonu -->
+                                <button type="button"
+                                        @click="printSingleTalep"
+                                        class="btn-theme px-4 py-1.5 rounded-xl text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md">
+                                    <i data-lucide="printer" class="w-4 h-4"></i>
+                                    <span>Yazdır (A4)</span>
+                                </button>
+
+                                <!-- Kapat Butonu -->
+                                <button type="button"
+                                        @click="closeSampleTalepModal"
+                                        class="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
+                                        title="Kapat (Esc)">
+                                    <i data-lucide="x" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Kağıt Önizleme Alanı (A4 Beyaz Sayfa) -->
+                        <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950 flex justify-center custom-scrollbar">
+                            <div id="sample-talep-sheet"
+                                 class="bg-white text-slate-900 shadow-2xl p-6 sm:p-8 transition-all w-full max-w-[210mm] min-h-[297mm] flex flex-col justify-between font-sans print:shadow-none print:m-0 print:p-6 print:w-full print:max-w-none print:min-h-0 print:h-auto">
+                                
+                                <div class="space-y-4">
+                                    
+                                    <!-- 1. En Üstte Ortalanmış Dinamik Başlık (BAŞLIK EN ÜSTTE VE ORTALI) -->
+                                    <div class="border-b-2 border-slate-900 pb-3 text-center">
+
+                                        <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 uppercase">
+                                            {{ getTalepHeaderTitle(activeTalepSample?.sample_type) }}
+                                        </h1>
+                                        <p class="text-xs font-semibold text-slate-600 mt-0.5">
+                                            Modelhane ve Numune Üretim Talep Formu
+                                        </p>
+
+                                        <!-- Meta Bilgi Şeridi -->
+                                        <div class="mt-2.5 pt-2 border-t border-slate-200 flex items-center justify-between text-xs text-slate-700 font-medium">
+                                            <div><span class="text-slate-500 font-semibold">Form No:</span> <b class="font-mono text-slate-900">#SMP-{{ activeTalepSample?.id }}</b></div>
+                                            <div><span class="text-slate-500 font-semibold">Tarih:</span> <b class="font-mono">{{ activeTalepSample?.request_date || new Date().toLocaleDateString('tr-TR') }}</b></div>
+                                            <div><span class="text-slate-500 font-semibold">Hedef Teslim:</span> <b class="font-mono text-amber-700">{{ activeTalepSample?.delivery_date || '-' }}</b></div>
+                                            
+                                        </div>
+                                    </div>
+
+                                    <!-- 2. Model Kartı: Görsel ve Teknik Detaylar (İki Kolon) -->
+                                    <div class="grid grid-cols-12 gap-5 items-stretch">
+                                        <!-- Model Görseli -->
+                                        <div class="col-span-4 border border-slate-300 rounded-xl p-2 bg-slate-50 flex flex-col items-center justify-center min-h-[190px]">
+                                            <img v-if="activeTalepSample?.image_url"
+                                                 :src="activeTalepSample.image_url"
+                                                 class="max-h-48 max-w-full object-contain rounded-lg shadow-xs"
+                                                 alt="Model Görseli">
+                                            <div v-else class="flex flex-col items-center justify-center text-slate-400 p-4 text-center">
+                                                <i data-lucide="image" class="w-10 h-10 stroke-[1.2] mb-1"></i>
+                                                <span class="text-[11px] font-semibold">Model Görseli Eklenmedi</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Model ve Sipariş Parametreleri Tablosu -->
+                                        <div class="col-span-8 flex flex-col justify-between">
+                                            <table class="w-full text-xs border border-slate-300 border-collapse">
+                                                <tbody>
+                                                    <tr class="border-b border-slate-200">
+                                                        <td class="w-24 p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Müşteri</td>
+                                                        <td class="p-1.5 font-black text-slate-900">{{ activeTalepSample?.customer_name || '-' }}</td>
+                                                    </tr>
+                                                    <tr class="border-b border-slate-200">
+                                                        <td class="w-24 p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Model Kodu</td>
+                                                        <td class="p-1.5 font-mono font-bold text-slate-900">{{ activeTalepSample?.style_no || '-' }}</td>
+                                                    </tr>
+                                                    <tr class="border-b border-slate-200">
+                                                        <td class="w-24 p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Model Adı</td>
+                                                        <td class="p-1.5 font-bold text-slate-900">{{ activeTalepSample?.style_name || '-' }}</td>
+                                                    </tr>
+                                                    <tr class="border-b border-slate-200">
+                                                        <td class="w-24 p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Sezon</td>
+                                                        <td class="p-1.5 font-medium text-slate-800">{{ activeTalepSample?.season || '-' }}</td>
+                                                    </tr>
+                                                    <tr class="border-b border-slate-200">
+                                                        <td class="w-24 p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200 align-top">Kumaş</td>
+                                                        <td class="p-1.5 text-xs text-slate-900 leading-relaxed">
+                                                            <!-- Yan yana kumaş parametreleri: Kumaşçı, Kalite, Kalite Adı, Varyant, Renk, En, Karışım -->
+                                                            <div v-if="getTalepFabricParts(activeTalepSample).length > 0" class="flex flex-wrap items-center gap-x-3.5 gap-y-1">
+                                                                <span v-for="(p, pidx) in getTalepFabricParts(activeTalepSample)" :key="pidx" class="whitespace-nowrap">
+                                                                    <b class="text-slate-600 font-semibold">{{ p.label }}:</b> <span class="font-bold text-slate-900 ml-0.5">{{ p.val }}</span>
+                                                                </span>
+                                                                <span v-if="activeTalepSample?.fabrictag_id" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">
+                                                                    FabricTag #{{ activeTalepSample.fabrictag_id }}
+                                                                </span>
+                                                            </div>
+                                                            <div v-else-if="activeTalepSample?.fabric_info" class="font-medium text-slate-900 flex items-center gap-1.5">
+                                                                <span>{{ activeTalepSample.fabric_info }}</span>
+                                                                <span v-if="activeTalepSample?.fabrictag_id" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">
+                                                                    FabricTag #{{ activeTalepSample.fabrictag_id }}
+                                                                </span>
+                                                            </div>
+                                                            <div v-else class="text-slate-400 italic">-</div>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="w-24 p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Birim Metraj</td>
+                                                        <td class="p-1.5 font-mono font-bold text-slate-900">{{ activeTalepSample?.unit_meters ? activeTalepSample.unit_meters + ' m' : '-' }}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <!-- 3. Beden ve Adet Dökümü -->
+                                    <div class="border border-slate-300 rounded-xl overflow-hidden">
+                                        <div class="bg-slate-800 text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider flex items-center justify-between">
+                                            <span>Adet ve Beden Dağılımı</span>
+                                            <span v-if="parseTalepSizes(activeTalepSample?.quantity_sizes).total > 0" class="text-amber-300 font-bold">
+                                                Toplam: {{ parseTalepSizes(activeTalepSample?.quantity_sizes).total }} Adet
+                                            </span>
+                                        </div>
+                                        
+                                        <!-- Beden Tablosu -->
+                                        <div class="p-3 bg-white">
+                                            <div v-if="parseTalepSizes(activeTalepSample?.quantity_sizes).items.length > 0" class="overflow-x-auto">
+                                                <table class="w-full text-center border-collapse border border-slate-300 text-xs">
+                                                    <thead>
+                                                        <tr class="bg-slate-100 font-bold text-slate-700">
+                                                            <th class="p-1.5 border border-slate-300 text-left bg-slate-200/60">Beden</th>
+                                                            <th v-for="(it, idx) in parseTalepSizes(activeTalepSample?.quantity_sizes).items" :key="idx"
+                                                                class="p-1.5 border border-slate-300 min-w-[48px]">
+                                                                {{ it.size }}
+                                                            </th>
+                                                            <th class="p-1.5 border border-slate-300 bg-amber-50 text-amber-900 font-black">TOPLAM</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr class="font-bold text-slate-900">
+                                                            <td class="p-1.5 border border-slate-300 text-left bg-slate-100 text-slate-700 font-medium">Miktar</td>
+                                                            <td v-for="(it, idx) in parseTalepSizes(activeTalepSample?.quantity_sizes).items" :key="idx"
+                                                                class="p-1.5 border border-slate-300 font-mono text-sm">
+                                                                {{ it.qty }}
+                                                            </td>
+                                                            <td class="p-1.5 border border-slate-300 bg-amber-50 text-emerald-700 font-black font-mono text-sm">
+                                                                {{ parseTalepSizes(activeTalepSample?.quantity_sizes).total }} Adet
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            
+                                            <div v-if="activeTalepSample?.quantity_sizes" class="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded p-2">
+                                                <span class="font-bold text-slate-700">Adet / Beden Notu:</span>
+                                                <span class="font-medium text-slate-900 ml-1">{{ activeTalepSample.quantity_sizes }}</span>
+                                            </div>
+                                            <div v-else-if="parseTalepSizes(activeTalepSample?.quantity_sizes).items.length === 0" class="text-xs italic text-slate-400 py-1">
+                                                Adet ve beden bilgisi belirtilmedi.
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 4. Numune Kritikleri & Revizyon Notları (Word Tarzı Biçimlendirmeli) -->
+                                    <div class="border border-slate-300 rounded-xl overflow-hidden">
+                                        <div class="bg-slate-800 text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider flex items-center justify-between">
+                                            <span>Numune Kritiği & Revizyon Notları</span>
+                                            <span class="text-[10px] font-normal text-slate-300">Prova ve Müşteri Yorumları</span>
+                                        </div>
+                                        <div class="p-4 bg-slate-50/60 min-h-[140px]">
+                                            <div v-if="activeTalepSample?.critique || activeTalepSample?.notes"
+                                                 class="text-xs sm:text-[13px] leading-relaxed text-slate-900 critique-content select-text"
+                                                 v-html="activeTalepSample.critique || activeTalepSample.notes">
+                                            </div>
+                                            <div v-else class="text-xs italic text-slate-400 py-4 text-center">
+                                                Bu numune talebi için henüz bir kritik veya revizyon notu girilmemiştir.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 5. İmza ve Onay Bölümü -->
+                                <div id="sample-talep-imza-section" class="mt-auto pt-4 border-t-2 border-slate-900 grid grid-cols-3 gap-6 text-center text-xs">
+                                    <div class="border border-slate-300 rounded-lg p-2.5 bg-slate-50">
+                                        <div class="font-bold text-slate-800">Talebi Hazırlayan (MT)</div>
+                                        <div class="mt-7 border-b border-dashed border-slate-400 w-32 mx-auto"></div>
+                                        <div class="text-[10px] text-slate-400 mt-1">İmza / Tarih</div>
+                                    </div>
+                                    <div class="border border-slate-300 rounded-lg p-2.5 bg-slate-50">
+                                        <div class="font-bold text-slate-800">Modelhane / Atölye Şefi</div>
+                                        <div class="mt-7 border-b border-dashed border-slate-400 w-32 mx-auto"></div>
+                                        <div class="text-[10px] text-slate-400 mt-1">İmza / Tarih</div>
+                                    </div>
+                                    <div class="border border-slate-300 rounded-lg p-2.5 bg-slate-50">
+                                        <div class="font-bold text-slate-800">Müşteri / Satış Onayı</div>
+                                        <div class="mt-7 border-b border-dashed border-slate-400 w-32 mx-auto"></div>
+                                        <div class="text-[10px] text-slate-400 mt-1">İmza / Tarih</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+<!-- 7. SUPER ADMIN PANEL -->
                 <section v-if="activeMenu === 'superadmin_panel' && currentUser.role === 'superadmin'" class="space-y-6 max-w-4xl mx-auto">
                     <div class="p-6 rounded-2xl border border-amber-500/30" :class="isDarkMode ? 'bg-slate-900' : 'bg-white shadow-sm'">
                         <div class="flex items-center gap-3 mb-4">
@@ -10719,10 +11143,10 @@
     </div>
 
     <!-- ========================================================================= -->
-    <!-- MODAL: NUMUNE KRİTİK / NOTLAR (MODERN AÇILIR PENCERE) -->
+    <!-- MODAL: NUMUNE KRİTİK / NOTLAR (WORD ÖZELLİKLİ MODERN AÇILIR PENCERE) -->
     <!-- ========================================================================= -->
     <div v-if="sampleCritiqueModalOpen" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 select-none">
-        <div class="w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col"
+        <div class="w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col"
              :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'">
             
             <!-- Modal Header -->
@@ -10746,38 +11170,115 @@
             </div>
 
             <!-- Modal Body -->
-            <div class="p-5 space-y-4">
+            <div class="p-5 space-y-3">
                 
-                <!-- Hızlı Kritik Şablonları / Etiketleri -->
-                <div>
-                    <label class="block text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                        Hızlı Kritik Ekle:
-                    </label>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button v-for="tag in ['Kalıp Onaylandı', 'Kalıp Boyu 2cm Kısalacak', 'Kumaş Revizesi Bekleniyor', 'Fit Onayı Alındı', 'Ölçü Farkı Var', 'Dikiş/İşçilik Temizlensin', 'Baskı/Nakış Düzeltilecek', 'Yıkama Rengi Doğru']"
-                                :key="tag"
-                                type="button"
-                                @click="applyCritiquePreset(tag)"
-                                class="text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition cursor-pointer select-none"
-                                :class="isDarkMode ? 'bg-slate-800/70 border-slate-700 text-slate-300 hover:border-amber-500/60 hover:text-amber-400' : 'bg-slate-100 border-slate-200 text-slate-700 hover:border-amber-500 hover:text-amber-600'">
-                            + {{ tag }}
+                <!-- Word Stili Zengin Metin Biçimlendirme Araç Çubuğu -->
+                <div class="p-2 rounded-xl border flex flex-wrap items-center gap-1.5"
+                     :class="isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-100 border-slate-200'">
+                    
+                    <!-- Font Stilleri (Kalın, İtalik, Altı Çizili, Üstü Çizili) -->
+                    <div class="flex items-center gap-1 pr-1.5 border-r" :class="isDarkMode ? 'border-slate-800' : 'border-slate-300'">
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('bold')"
+                                class="w-7 h-7 rounded-lg font-bold text-xs flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Kalın (Ctrl+B)">B</button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('italic')"
+                                class="w-7 h-7 rounded-lg italic font-serif text-xs flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="İtalik (Ctrl+I)">I</button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('underline')"
+                                class="w-7 h-7 rounded-lg underline text-xs flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Altı Çizili (Ctrl+U)">U</button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('strikeThrough')"
+                                class="w-7 h-7 rounded-lg line-through text-xs flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Üstü Çizili">S</button>
+                    </div>
+
+                    <!-- Hizalama (Sola, Ortalı, Sağa) -->
+                    <div class="flex items-center gap-1 pr-1.5 border-r" :class="isDarkMode ? 'border-slate-800' : 'border-slate-300'">
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('justifyLeft')"
+                                class="w-7 h-7 rounded-lg text-xs flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Sola Hizala">
+                            <i data-lucide="align-left" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('justifyCenter')"
+                                class="w-7 h-7 rounded-lg text-xs flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Ortala">
+                            <i data-lucide="align-center" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('justifyRight')"
+                                class="w-7 h-7 rounded-lg text-xs flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Sağa Hizala">
+                            <i data-lucide="align-right" class="w-4 h-4"></i>
                         </button>
                     </div>
+
+                    <!-- Madde İmleri & Listeler (Nokta, Numaralı, Tik, Çizgi) -->
+                    <div class="flex items-center gap-1 pr-1.5 border-r" :class="isDarkMode ? 'border-slate-800' : 'border-slate-300'">
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('insertUnorderedList')"
+                                class="w-7 h-7 rounded-lg text-xs flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Madde İmleri (Nokta)">
+                            <i data-lucide="list" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('insertOrderedList')"
+                                class="w-7 h-7 rounded-lg text-xs flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Numaralandırma (1, 2, 3)">
+                            <i data-lucide="list-ordered" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" @mousedown.prevent @click="insertCritiqueCustomBullet('✓')"
+                                class="w-7 h-7 rounded-lg text-xs font-bold text-emerald-500 flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Onay İmi (✓)">✓</button>
+                        <button type="button" @mousedown.prevent @click="insertCritiqueCustomBullet('—')"
+                                class="w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center transition hover:bg-black/10 dark:hover:bg-white/10"
+                                title="Tire İmi (—)">—</button>
+                    </div>
+
+                    <!-- Metin Rengi Seçimi -->
+                    <div class="flex items-center gap-1 pr-1.5 border-r" :class="isDarkMode ? 'border-slate-800' : 'border-slate-300'">
+                        <span class="text-[10px] font-bold text-slate-400 mr-0.5">Yazı:</span>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('foreColor', '#0f172a')" class="w-4 h-4 rounded-full bg-slate-900 border border-slate-400" title="Koyu / Siyah"></button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('foreColor', '#2563eb')" class="w-4 h-4 rounded-full bg-blue-600" title="Mavi"></button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('foreColor', '#dc2626')" class="w-4 h-4 rounded-full bg-red-600" title="Kırmızı"></button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('foreColor', '#16a34a')" class="w-4 h-4 rounded-full bg-emerald-600" title="Yeşil"></button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('foreColor', '#d97706')" class="w-4 h-4 rounded-full bg-amber-600" title="Kehribar"></button>
+                        <label class="w-5 h-5 rounded-md flex items-center justify-center cursor-pointer border hover:scale-105 transition" :class="isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-300 bg-white'" title="Özel Yazı Rengi Seç">
+                            <input type="color" @change="execCritiqueCmd('foreColor', $event.target.value)" class="opacity-0 w-0 h-0 absolute">
+                            <span class="text-[10px] font-bold">🎨</span>
+                        </label>
+                    </div>
+
+                    <!-- Highlight (Vurgu Rengi) -->
+                    <div class="flex items-center gap-1 pr-1.5 border-r" :class="isDarkMode ? 'border-slate-800' : 'border-slate-300'">
+                        <span class="text-[10px] font-bold text-slate-400 mr-0.5">Vurgu:</span>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('hiliteColor', '#fef08a')" class="w-4 h-4 rounded bg-yellow-200 border border-yellow-400" title="Sarı Vurgu"></button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('hiliteColor', '#bbf7d0')" class="w-4 h-4 rounded bg-emerald-200 border border-emerald-400" title="Yeşil Vurgu"></button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('hiliteColor', '#bae6fd')" class="w-4 h-4 rounded bg-sky-200 border border-sky-400" title="Mavi Vurgu"></button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('hiliteColor', '#fbcfe8')" class="w-4 h-4 rounded bg-pink-200 border border-pink-400" title="Pembe Vurgu"></button>
+                        <button type="button" @mousedown.prevent @click="execCritiqueCmd('hiliteColor', 'transparent')" class="w-4 h-4 rounded border border-dashed border-slate-400 flex items-center justify-center text-[9px] text-slate-400" title="Vurguyu Kaldır">✕</button>
+                    </div>
+
+                    <!-- Biçimlendirmeyi Temizle -->
+                    <button type="button" @mousedown.prevent @click="execCritiqueCmd('removeFormat')"
+                            class="px-2 py-1 rounded text-[10.5px] font-bold text-slate-400 hover:text-slate-200 transition flex items-center gap-1 cursor-pointer"
+                            title="Tüm Biçimlendirmeleri Temizle">
+                        <i data-lucide="remove-formatting" class="w-3.5 h-3.5"></i>
+                        <span>Sıfırla</span>
+                    </button>
+
                 </div>
 
-                <!-- Kritik Metin Alanı -->
+                <!-- Word Editör Metin Alanı<!-- Word Editör Metin Alanı (contenteditable) -->
                 <div>
                     <label class="block text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                        Ayrıntılı Numune Kritiği & Notlar:
+                        Ayrıntılı Numune Kritiği & Revizyon Notları:
                     </label>
-                    <textarea v-model="sampleCritiqueText"
-                              rows="6"
-                              placeholder="Numune prova sonuçları, müşteri yorumları, kalıp düzeltmeleri, kumaş çekme payları veya dikim notlarını buraya yazabilirsiniz..."
-                              class="w-full p-3 text-xs font-medium rounded-xl border outline-none transition focus:ring-1 focus:ring-amber-500 custom-scrollbar"
-                              :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'"></textarea>
-                    <p class="text-[10px] text-slate-400 mt-1 italic">
-                        İpucu: Tablo görünümünde kritiğin ilk 2-3 kelimesi özet olarak listelenir, tıklandığında bu pencerede tam metin görüntülenir.
-                    </p>
+                    <div id="sample-critique-editor"
+                         contenteditable="true"
+                         class="w-full min-h-[190px] max-h-[320px] overflow-y-auto p-4 text-xs sm:text-sm font-medium rounded-xl border outline-none leading-relaxed transition focus:ring-1 focus:ring-amber-500 custom-scrollbar select-text"
+                         :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                    </div>
+                    <div class="flex items-center justify-between mt-1.5 text-[10px] text-slate-400">
+                        <span class="italic">İpucu: Word'deki gibi metinleri seçip kalınlaştırabilir, madde imi ekleyebilir, renklendirebilir veya vurgulayabilirsiniz.</span>
+                        <span>Tabloda özet olarak 2-3 kelime listelenir.</span>
+                    </div>
                 </div>
 
             </div>
@@ -10799,7 +11300,7 @@
     </div>
 
 
-    <!-- MODAL 2: FABRICTAG KUMAŞ ATAMA MODALI -->
+    <!-- MODAL 2: FABRICTAG<!-- MODAL 2: FABRICTAG KUMAŞ ATAMA MODALI -->
     <div v-if="fabricAssignModalOpen" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden p-6 space-y-4"
              :class="isDarkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'">

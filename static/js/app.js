@@ -1660,6 +1660,17 @@ window.__texflowApp = createApp({
             localStorage.setItem('texflow_smart_scroll', isSmartScrollEnabled.value);
             refreshIcons();
         };
+        const toggleSmartScroll = () => {
+            isSmartScrollEnabled.value = !isSmartScrollEnabled.value;
+            saveSmartScrollPref();
+        };
+
+        // ÇARŞAF LİSTESİ KANALLARI TOPLA
+        const carsafConsolidateChannels = ref(localStorage.getItem('texflow_carsaf_consolidate_channels') === 'true');
+        const toggleCarsafConsolidateChannels = () => {
+            carsafConsolidateChannels.value = !carsafConsolidateChannels.value;
+            localStorage.setItem('texflow_carsaf_consolidate_channels', carsafConsolidateChannels.value ? 'true' : 'false');
+        };
 
         const selectedRowId = ref(null);
         const selectRow = (item) => {
@@ -4318,6 +4329,97 @@ window.__texflowApp = createApp({
                 });
             }
 
+            // 3. Kanalları Topla (Aynı müşteri, model ve renkteki farklı kanalları tek satırda birleştir)
+            if (carsafConsolidateChannels.value) {
+                const groups = {};
+                const orderedGroups = [];
+
+                result.forEach(s => {
+                    const cust = (s.customer_name || s.brand || '').trim().toLowerCase();
+                    const styleNo = (s.style_no || '').trim().toLowerCase();
+                    const colorDisp = (typeof getDisplayColor === 'function' ? getDisplayColor(s) : (s.color_name || s.color_code || '')).trim().toLowerCase();
+                    const groupKey = (styleNo || colorDisp) ? `${cust}___${styleNo}___${colorDisp}` : `single_${s.id}`;
+
+                    const ch = (s.channel || '').toString().trim();
+                    const po = (s.po_number || '').toString().trim();
+                    const qty = parseFloat(s.total_quantity) || 0;
+                    const cutQty = parseFloat(s.cut_total_quantity) || 0;
+                    const shippedQty = parseFloat(s.shipped_total_quantity) || 0;
+
+                    if (!groups[groupKey]) {
+                        const rowObj = {
+                            ...s,
+                            ids: [s.id],
+                            channelsSet: new Set(ch ? [ch] : []),
+                            poNumbersSet: new Set(po ? [po] : []),
+                            size_map: s.size_map ? { ...s.size_map } : {},
+                            total_quantity: qty,
+                            cut_total_quantity: cutQty,
+                            shipped_total_quantity: shippedQty,
+                            _isConsolidated: false,
+                            _consolidatedCount: 1
+                        };
+                        groups[groupKey] = rowObj;
+                        orderedGroups.push(rowObj);
+                    } else {
+                        const existing = groups[groupKey];
+                        existing._isConsolidated = true;
+                        existing._consolidatedCount = (existing._consolidatedCount || 1) + 1;
+                        existing.ids.push(s.id);
+
+                        if (ch && existing.channelsSet) {
+                            existing.channelsSet.add(ch);
+                            existing.channel = Array.from(existing.channelsSet).filter(Boolean).join(', ');
+                        }
+                        if (po && existing.poNumbersSet) {
+                            existing.poNumbersSet.add(po);
+                            existing.po_number = Array.from(existing.poNumbersSet).filter(Boolean).join(', ');
+                        }
+
+                        existing.total_quantity = (parseFloat(existing.total_quantity) || 0) + qty;
+                        if (cutQty) {
+                            existing.cut_total_quantity = (parseFloat(existing.cut_total_quantity) || 0) + cutQty;
+                        }
+                        if (shippedQty) {
+                            existing.shipped_total_quantity = (parseFloat(existing.shipped_total_quantity) || 0) + shippedQty;
+                        }
+
+                        if (s.size_map) {
+                            for (const [sz, val] of Object.entries(s.size_map)) {
+                                const num = parseFloat(val) || 0;
+                                existing.size_map[sz] = (parseFloat(existing.size_map[sz]) || 0) + num;
+                            }
+                        }
+
+                        if (!existing.image_url && s.image_url) {
+                            existing.image_url = s.image_url;
+                        }
+                        if (!existing.image_url_2 && s.image_url_2) {
+                            existing.image_url_2 = s.image_url_2;
+                        }
+
+                        if (s.fabric_ordered_meters) {
+                            existing.fabric_ordered_meters = (parseFloat(existing.fabric_ordered_meters) || 0) + (parseFloat(s.fabric_ordered_meters) || 0);
+                        }
+                        if (s.fabric_received_meters) {
+                            existing.fabric_received_meters = (parseFloat(existing.fabric_received_meters) || 0) + (parseFloat(s.fabric_received_meters) || 0);
+                        }
+                        if (s.fabric_ordered_meters_2) {
+                            existing.fabric_ordered_meters_2 = (parseFloat(existing.fabric_ordered_meters_2) || 0) + (parseFloat(s.fabric_ordered_meters_2) || 0);
+                        }
+                        if (s.fabric_received_meters_2) {
+                            existing.fabric_received_meters_2 = (parseFloat(existing.fabric_received_meters_2) || 0) + (parseFloat(s.fabric_received_meters_2) || 0);
+                        }
+
+                        if (s.notes && (!existing.notes || !existing.notes.includes(s.notes))) {
+                            existing.notes = existing.notes ? (existing.notes + ' | ' + s.notes) : s.notes;
+                        }
+                    }
+                });
+
+                return orderedGroups;
+            }
+
             return result;
         });
 
@@ -4346,7 +4448,7 @@ window.__texflowApp = createApp({
             }
         };
 
-        watch([carsafSearchQuery, columnFilters, sortColumn, sortDirection], () => {
+        watch([carsafSearchQuery, columnFilters, sortColumn, sortDirection, carsafConsolidateChannels], () => {
             carsafRenderLimit.value = 45;
         }, { deep: true });
 
@@ -4419,9 +4521,31 @@ window.__texflowApp = createApp({
         });
 
 
-        window.addEventListener('click', () => {
-            if (activeFilterDropdown.value) {
+        // GLOBAL CLICK OUTSIDE HANDLER FOR ALL DROPDOWNS & FILTERS
+        window.addEventListener('click', (e) => {
+            if (activeFilterDropdown && activeFilterDropdown.value) {
                 activeFilterDropdown.value = null;
+            }
+            if (typeof sampleActiveFilterCol !== 'undefined' && sampleActiveFilterCol.value) {
+                sampleActiveFilterCol.value = null;
+            }
+        });
+
+        // GLOBAL ESC KEY HANDLER FOR ALL FILTER POPUPS AND MODALS
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (typeof sampleActiveFilterCol !== 'undefined' && sampleActiveFilterCol.value) {
+                    sampleActiveFilterCol.value = null;
+                }
+                if (activeFilterDropdown && activeFilterDropdown.value) {
+                    activeFilterDropdown.value = null;
+                }
+                if (typeof sampleTalepModalOpen !== 'undefined' && sampleTalepModalOpen.value) {
+                    sampleTalepModalOpen.value = false;
+                }
+                if (typeof sampleCritiqueModalOpen !== 'undefined' && sampleCritiqueModalOpen.value) {
+                    sampleCritiqueModalOpen.value = false;
+                }
             }
         });
 
@@ -12374,7 +12498,7 @@ window.__texflowApp = createApp({
             { key: 'unit_meters', title: 'Birim Metraj', width: 100, sortable: true, filterable: false, align: 'center' },
             { key: 'critique', title: 'Kritik / Not', width: 145, sortable: false, filterable: false, align: 'left' },
             { key: 'stage', title: 'İşlem Aşaması', width: 145, sortable: true, filterable: true, align: 'center' },
-            { key: 'actions', title: 'İşlem', width: 140, sortable: false, filterable: false, align: 'center', isFixedRight: true }
+            { key: 'actions', title: 'İşlem', width: 195, sortable: false, filterable: false, align: 'center', isFixedRight: true }
         ];
 
         const sampleColOrder = ref([]);
@@ -12535,13 +12659,20 @@ window.__texflowApp = createApp({
 
         const assignSampleFabric = async (fabric) => {
             if (!activeSampleFabricItem.value || !fabric) return;
-            const code = fabric.quality_code || fabric.internal_code || '';
-            const name = fabric.quality_name || '';
-            const comp = fabric.composition ? `(${fabric.composition})` : '';
-            const displayTitle = [code, name, comp].filter(Boolean).join(' ');
+            const parts = [
+                fabric.company_name ? `Kumaşçı: ${fabric.company_name}` : '',
+                fabric.quality_code ? `Kalite: ${fabric.quality_code}` : '',
+                fabric.quality_name ? `Kalite Adı: ${fabric.quality_name}` : '',
+                fabric.design_code ? `Varyant: ${fabric.design_code}` : '',
+                fabric.color ? `Renk: ${fabric.color}` : '',
+                fabric.width ? `En: ${fabric.width}` : '',
+                fabric.composition ? `Karışım: ${fabric.composition}` : ''
+            ].filter(Boolean);
+            const displayTitle = parts.join('   ');
             
             activeSampleFabricItem.value.fabric_info = displayTitle;
             activeSampleFabricItem.value.fabrictag_id = fabric.id;
+            activeSampleFabricItem.value.fabric_detail = fabric;
 
             try {
                 await apiFetch(`/api/samples/${activeSampleFabricItem.value.id}/update-cell`, {
@@ -12552,7 +12683,7 @@ window.__texflowApp = createApp({
                     method: 'POST',
                     body: JSON.stringify({ field: 'fabrictag_id', value: fabric.id })
                 });
-                showToast(`FabricTag kumaşı atandı: ${name || code}`, 'success');
+                showToast(`FabricTag kumaşı atandı: ${fabric.quality_name || fabric.quality_code || fabric.company_name}`, 'success');
             } catch (err) {
                 showToast('Kumaş atanırken bir hata oluştu.', 'error');
             }
@@ -12570,16 +12701,39 @@ window.__texflowApp = createApp({
             } catch (err) {}
         };
 
-        // KRİTİK / NOTLAR MODALI (MODERN AÇILIR PENCERE)
+        // KRİTİK / NOTLAR MODALI (WORD ÖZELLİKLİ MODERN AÇILIR PENCERE)
         const sampleCritiqueModalOpen = ref(false);
         const activeSampleCritiqueItem = ref(null);
         const sampleCritiqueText = ref('');
+
+        const execCritiqueCmd = (cmd, val = null) => {
+            const editor = document.getElementById('sample-critique-editor');
+            if (editor) editor.focus();
+            try {
+                document.execCommand(cmd, false, val);
+            } catch (e) {}
+        };
+
+        const insertCritiqueCustomBullet = (bulletText) => {
+            const editor = document.getElementById('sample-critique-editor');
+            if (editor) editor.focus();
+            try {
+                document.execCommand('insertHTML', false, `<div>${bulletText}&nbsp;</div>`);
+            } catch (e) {}
+        };
 
         const openSampleCritiqueModal = (sample) => {
             activeSampleCritiqueItem.value = sample;
             sampleCritiqueText.value = sample.critique || sample.notes || '';
             sampleCritiqueModalOpen.value = true;
-            refreshIcons();
+            nextTick(() => {
+                const editor = document.getElementById('sample-critique-editor');
+                if (editor) {
+                    editor.innerHTML = sampleCritiqueText.value;
+                    editor.focus();
+                }
+                refreshIcons();
+            });
         };
 
         const closeSampleCritiqueModal = () => {
@@ -12587,17 +12741,13 @@ window.__texflowApp = createApp({
             activeSampleCritiqueItem.value = null;
         };
 
-        const applyCritiquePreset = (preset) => {
-            if (!sampleCritiqueText.value.trim()) {
-                sampleCritiqueText.value = preset;
-            } else {
-                sampleCritiqueText.value += ' • ' + preset;
-            }
-        };
-
         const saveSampleCritique = async () => {
             if (!activeSampleCritiqueItem.value) return;
-            const val = sampleCritiqueText.value.trim();
+            const editor = document.getElementById('sample-critique-editor');
+            let val = editor ? editor.innerHTML.trim() : sampleCritiqueText.value.trim();
+            if (val === '<p><br></p>' || val === '<br>' || val === '<div><br></div>') {
+                val = '';
+            }
             activeSampleCritiqueItem.value.critique = val;
             try {
                 await apiFetch(`/api/samples/${activeSampleCritiqueItem.value.id}/update-cell`, {
@@ -12613,9 +12763,105 @@ window.__texflowApp = createApp({
 
         const getShortCritique = (text) => {
             if (!text) return '';
-            const words = String(text).trim().split(/\s+/);
-            if (words.length <= 3) return words.join(' ');
-            return words.slice(0, 3).join(' ') + '...';
+            const clean = getCleanCritique(text);
+            if (!clean) return '';
+            const words = clean.split(' ');
+            if (words.length <= 4) return clean;
+            return words.slice(0, 4).join(' ') + '...';
+        };
+
+        // =========================================================================
+        // TEKİL NUMUNE TALEP FORMU (TALEP YAZDIR & EXCEL'E AKTAR)
+        // =========================================================================
+        const sampleTalepModalOpen = ref(false);
+        const activeTalepSample = ref(null);
+
+        const openSampleTalepModal = async (sample) => {
+            activeTalepSample.value = sample;
+            sampleTalepModalOpen.value = true;
+            if (sample.fabrictag_id && !sample.fabric_detail) {
+                try {
+                    const res = await apiFetch(`/api/fabrictag/fabrics?query=${sample.fabrictag_id}`);
+                    if (Array.isArray(res) && res.length) {
+                        const match = res.find(f => f.id === sample.fabrictag_id) || res[0];
+                        if (match) {
+                            sample.fabric_detail = match;
+                            activeTalepSample.value.fabric_detail = match;
+                        }
+                    }
+                } catch (e) {}
+            }
+            refreshIcons();
+        };
+
+        const closeSampleTalepModal = () => {
+            sampleTalepModalOpen.value = false;
+            activeTalepSample.value = null;
+        };
+
+        const getTalepHeaderTitle = (sampleType) => {
+            if (!sampleType || !String(sampleType).trim()) return 'NUMUNE TALEBİ';
+            let clean = String(sampleType).trim();
+            clean = clean.replace(/^[\d.\-\s]+/, '').trim();
+            if (!clean) clean = 'NUMUNE';
+            return clean.toLocaleUpperCase('tr-TR') + ' TALEBİ';
+        };
+
+        const parseTalepSizes = (rawStr) => {
+            if (!rawStr) return { items: [], total: 0, raw: '' };
+            const str = String(rawStr).trim();
+            const items = [];
+            let total = 0;
+            const tokens = str.split(/[,;\n/]+/).map(t => t.trim()).filter(Boolean);
+            for (const token of tokens) {
+                const m1 = token.match(/^([A-Za-z0-9\-_.]+)\s*[:=\-]\s*(\d+)$/);
+                const m2 = token.match(/^(\d+)\s*(?:x|adet|pcs)?\s*([A-Za-z0-9\-_.]+)$/i);
+                if (m1) {
+                    const qty = parseInt(m1[2], 10);
+                    items.push({ size: m1[1].toUpperCase(), qty });
+                    total += qty;
+                } else if (m2) {
+                    const qty = parseInt(m2[1], 10);
+                    items.push({ size: m2[2].toUpperCase(), qty });
+                    total += qty;
+                } else {
+                    const numOnly = token.match(/^(\d+)$/);
+                    if (numOnly) {
+                        const qty = parseInt(numOnly[1], 10);
+                        items.push({ size: 'Adet', qty });
+                        total += qty;
+                    }
+                }
+            }
+            return { items, total, raw: str };
+        };
+
+        const printSingleTalep = () => {
+            window.print();
+        };
+
+        
+        const getTalepFabricParts = (sample) => {
+            if (!sample) return [];
+            const fd = sample.fabric_detail;
+            if (fd) {
+                const defs = [
+                    { label: 'Kumaşçı', val: fd.company_name },
+                    { label: 'Kalite', val: fd.quality_code },
+                    { label: 'Kalite Adı', val: fd.quality_name },
+                    { label: 'Varyant', val: fd.design_code },
+                    { label: 'Renk', val: fd.color },
+                    { label: 'En', val: fd.width ? (String(fd.width).includes('cm') ? fd.width : fd.width + ' cm') : '' },
+                    { label: 'Karışım', val: fd.composition }
+                ];
+                return defs.filter(d => d.val && String(d.val).trim());
+            }
+            return [];
+        };
+
+        const exportTalepExcel = (sampleId) => {
+            if (!sampleId) return;
+            window.open(`/api/samples/${sampleId}/export-talep-excel`, '_blank');
         };
 
         // NUMUNE SEÇENEKLERİ (TÜRLER VE AŞAMALAR)
@@ -13099,11 +13345,87 @@ window.__texflowApp = createApp({
             return titles[key] || key;
         };
 
+        const sampleWidthsDropdownOpen = ref(false);
+
         const adjustSamplePrintColWidth = (colKey, delta) => {
-            const current = samplePrintColWidths.value[colKey] || defaultSamplePrintColWidths[colKey] || 8;
-            const updated = Math.max(2, Math.min(35, current + delta));
+            const current = parseFloat(samplePrintColWidths.value[colKey]) || defaultSamplePrintColWidths[colKey] || 8;
+            const updated = Math.max(2, Math.min(45, Math.round((current + delta) * 10) / 10));
             samplePrintColWidths.value[colKey] = updated;
             localStorage.setItem('sample_print_col_widths', JSON.stringify(samplePrintColWidths.value));
+        };
+
+        const setSamplePrintColWidthManual = (colKey, val) => {
+            const num = parseFloat(val);
+            if (isNaN(num)) return;
+            const clamped = Math.max(2, Math.min(45, Math.round(num * 10) / 10));
+            samplePrintColWidths.value[colKey] = clamped;
+            localStorage.setItem('sample_print_col_widths', JSON.stringify(samplePrintColWidths.value));
+        };
+
+        const distributeSamplePrintColWidths = () => {
+            const keys = Object.keys(samplePrintColWidths.value);
+            const total = keys.reduce((sum, k) => sum + (parseFloat(samplePrintColWidths.value[k]) || 0), 0);
+            if (total <= 0) return;
+            const factor = 100 / total;
+            keys.forEach(k => {
+                const cur = parseFloat(samplePrintColWidths.value[k]) || 0;
+                samplePrintColWidths.value[k] = Math.round(cur * factor * 10) / 10;
+            });
+            localStorage.setItem('sample_print_col_widths', JSON.stringify(samplePrintColWidths.value));
+            showToast('Sütun genişlikleri %100 oranına dengelendi.', 'info');
+        };
+
+        const startSamplePrintColResize = (colKey, e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const startX = e.pageX;
+            const startWidthPercent = parseFloat(samplePrintColWidths.value[colKey]) || defaultSamplePrintColWidths[colKey] || 8;
+            
+            const tableEl = document.querySelector('#sample-print-sheet table');
+            const tableWidthPx = tableEl ? tableEl.getBoundingClientRect().width : 800;
+            
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+
+            const onMouseMove = (moveEvent) => {
+                const diffPx = moveEvent.pageX - startX;
+                const diffPercent = (diffPx / tableWidthPx) * 100;
+                const newPercent = Math.max(2, Math.min(45, Math.round((startWidthPercent + diffPercent) * 10) / 10));
+                samplePrintColWidths.value[colKey] = newPercent;
+            };
+
+            const onMouseUp = () => {
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onMouseUp);
+                localStorage.setItem('sample_print_col_widths', JSON.stringify(samplePrintColWidths.value));
+            };
+
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        };
+
+        const getCleanCritique = (text) => {
+            if (!text) return '';
+            let str = String(text)
+                .replace(/<style[^>]*>.*?<\/style>/gi, '')
+                .replace(/<script[^>]*>.*?<\/script>/gi, '')
+                .replace(/<br\s*[\/]?>/gi, ' ')
+                .replace(/<\/p>/gi, ' ')
+                .replace(/<\/li>/gi, ' • ')
+                .replace(/<\/div>/gi, ' ')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'")
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (str.startsWith('• ')) str = str.substring(2).trim();
+            return str;
         };
 
         const resetSamplePrintColWidths = () => {
@@ -13289,6 +13611,9 @@ return {
             toggleFabricCollapsed,
             isSmartScrollEnabled,
             saveSmartScrollPref,
+            toggleSmartScroll,
+            carsafConsolidateChannels,
+            toggleCarsafConsolidateChannels,
             selectedRowId,
             selectRow,
             getStickyColumnStyle,
@@ -13559,15 +13884,30 @@ return {
             sampleCritiqueModalOpen,
             activeSampleCritiqueItem,
             sampleCritiqueText,
+            execCritiqueCmd,
+            insertCritiqueCustomBullet,
             openSampleCritiqueModal,
             closeSampleCritiqueModal,
-            applyCritiquePreset,
             saveSampleCritique,
             getShortCritique,
+            sampleTalepModalOpen,
+            activeTalepSample,
+            openSampleTalepModal,
+            closeSampleTalepModal,
+            getTalepHeaderTitle,
+            parseTalepSizes,
+            printSingleTalep,
+            exportTalepExcel,
+            getTalepFabricParts,
             defaultSamplePrintColWidths,
             adjustSamplePrintColWidth,
             resetSamplePrintColWidths,
             getSamplePrintColTitle,
+            sampleWidthsDropdownOpen,
+            setSamplePrintColWidthManual,
+            distributeSamplePrintColWidths,
+            startSamplePrintColResize,
+            getCleanCritique,
             getPpsBadgeClass,
             updatePpsStatus,
             getDaysSinceDate,

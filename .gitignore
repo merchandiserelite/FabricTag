@@ -34,3 +34,7 @@ data/backups/
 data/backup_config.json
 *.zip
 scratch_check_*.py
+
+*.db-shm
+*.db-wal
+

@@ -5902,6 +5902,429 @@ def api_haftalik_program_excel(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
+
+@app.get("/api/samples/{sample_id}/export-talep-excel")
+def api_export_single_sample_talep_excel(sample_id: int, user: Dict[str, Any] = Depends(require_user)):
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    import re
+    import html
+    from urllib.parse import quote
+    from fabrictag_connector import FabricTagConnector
+
+    conn = get_db()
+    c = conn.cursor()
+    company_id = user.get("company_id", 1)
+
+    c.execute("""
+        SELECT id, sample_type, season, customer_name, style_name, style_no,
+               request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes, critique, image_url, fabrictag_id, company_id
+        FROM sample_items
+        WHERE id = ?
+    """, (sample_id,))
+    row = c.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Numune kaydı bulunamadı")
+
+    cols = [d[0] for d in c.description]
+    s = dict(zip(cols, row))
+
+    sample_cid = s.get("company_id")
+    if user.get("role") != "superadmin" and sample_cid and company_id and sample_cid != company_id:
+        raise HTTPException(status_code=403, detail="Bu numuneye erişim yetkiniz yok.")
+
+    # Fabric detail from FabricTag if linked
+    fabric_detail = {}
+    if s.get("fabrictag_id"):
+        try:
+            ft_conn = FabricTagConnector.get_connection()
+            if ft_conn:
+                ft_c = ft_conn.cursor()
+                ft_c.execute("SELECT id, company_name, quality_code, quality_name, design_code, color, width, composition FROM fabrics WHERE id = ?", (s["fabrictag_id"],))
+                frow = ft_c.fetchone()
+                if frow:
+                    fabric_detail = dict(frow)
+                ft_conn.close()
+        except Exception:
+            pass
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Talep Formu"
+
+    # Sayfa ve Baskı Ayarları (A4 Dikey)
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.page_margins.left = 0.4
+    ws.page_margins.right = 0.4
+    ws.page_margins.top = 0.4
+    ws.page_margins.bottom = 0.4
+
+    # Başlık hesaplama (Örn: "1.Proto" -> "PROTO TALEBİ", "2.PPS" -> "PPS TALEBİ")
+    raw_type = (s.get("sample_type") or "").strip()
+    clean_type = re.sub(r"^[\d.\-\s]+", "", raw_type).strip()
+    if not clean_type:
+        clean_type = "NUMUNE"
+    header_title = f"{clean_type.upper()} TALEBİ"
+
+    # Renkler ve Stiller
+    title_font = Font(name="Calibri", size=18, bold=True, color="FFFFFF")
+    title_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    
+    sub_title_font = Font(name="Calibri", size=10, italic=True, color="475569")
+    
+    section_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    section_fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
+    
+    label_font = Font(name="Calibri", size=10, bold=True, color="334155")
+    label_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+    
+    val_bold_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+    val_norm_font = Font(name="Calibri", size=10, bold=False, color="0F172A")
+    
+    thin_border = Border(
+        left=Side(style="thin", color="CBD5E1"),
+        right=Side(style="thin", color="CBD5E1"),
+        top=Side(style="thin", color="CBD5E1"),
+        bottom=Side(style="thin", color="CBD5E1")
+    )
+
+    # 6 Sütunlu Sayfa Düzeni (A, B, C, D, E, F)
+    col_widths = {"A": 16, "B": 22, "C": 16, "D": 22, "E": 16, "F": 22}
+    for col_letter, width in col_widths.items():
+        ws.column_dimensions[col_letter].width = width
+
+    # Satır 1: Şirket / Sistem Üst Bilgisi (ORTALI)
+    ws.merge_cells("A1:F1")
+    ws["A1"] = "TEXFLOW PRODUCTION & QUALITY SYSTEMS"
+    ws["A1"].font = Font(name="Calibri", size=9, bold=True, color="64748B")
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 18
+
+    # Satır 2: Büyük Dinamik Başlık (EN ÜSTTE VE TAM ORTALI)
+    ws.merge_cells("A2:F2")
+    ws["A2"] = header_title
+    ws["A2"].font = title_font
+    ws["A2"].fill = title_fill
+    ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[2].height = 36
+
+    # Satır 3: Alt Başlık (ORTALI)
+    ws.merge_cells("A3:F3")
+    ws["A3"] = "Modelhane ve Numune Üretim Talep Formu"
+    ws["A3"].font = sub_title_font
+    ws["A3"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[3].height = 18
+
+    # Satır 4: Talep Kimlik / Meta Bilgileri Şeridi
+    ws.merge_cells("A4:B4")
+    ws["A4"] = f"Talep / Form No: SMP-{s.get('id')}"
+    ws["A4"].font = Font(name="Calibri", size=10, bold=True, color="475569")
+    ws["A4"].alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.merge_cells("C4:D4")
+    ws["C4"] = f"Tarih: {s.get('request_date') or datetime.now().strftime('%d.%m.%Y')}   |   Hedef Teslim: {s.get('delivery_date') or '-'}"
+    ws["C4"].font = Font(name="Calibri", size=10, bold=True, color="D97706" if s.get('delivery_date') else "475569")
+    ws["C4"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells("E4:F4")
+    ws["E4"] = f"Aşama: {s.get('stage') or 'Talep Oluşturuldu'}"
+    ws["E4"].font = Font(name="Calibri", size=10, bold=True, color="059669")
+    ws["E4"].alignment = Alignment(horizontal="right", vertical="center")
+    ws.row_dimensions[4].height = 22
+
+    # Satır 5: Model ve Talep Detayları Başlığı
+    ws.merge_cells("A5:F5")
+    ws["A5"] = "MODEL VE SİPARİŞ BİLGİLERİ"
+    ws["A5"].font = section_font
+    ws["A5"].fill = section_fill
+    ws["A5"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[5].height = 22
+
+    # Bilgi Satırları (Tablo formatında)
+    info_rows = [
+        ("Müşteri", s.get("customer_name") or "-", "Numune Türü", s.get("sample_type") or "-", "Talep Tarihi", s.get("request_date") or "-"),
+        ("Model Kodu", s.get("style_no") or "-", "Model Adı", s.get("style_name") or "-", "Sezon", s.get("season") or "-"),
+    ]
+
+    curr_row = 6
+    for r_data in info_rows:
+        ws.row_dimensions[curr_row].height = 22
+        # Col A-B
+        ws.cell(row=curr_row, column=1, value=r_data[0]).font = label_font
+        ws.cell(row=curr_row, column=1).fill = label_fill
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        ws.cell(row=curr_row, column=2, value=r_data[1]).font = val_bold_font
+        ws.cell(row=curr_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=2).border = thin_border
+
+        # Col C-D
+        ws.cell(row=curr_row, column=3, value=r_data[2]).font = label_font
+        ws.cell(row=curr_row, column=3).fill = label_fill
+        ws.cell(row=curr_row, column=3).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=3).border = thin_border
+
+        ws.cell(row=curr_row, column=4, value=r_data[3]).font = val_bold_font
+        ws.cell(row=curr_row, column=4).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=4).border = thin_border
+
+        # Col E-F
+        ws.cell(row=curr_row, column=5, value=r_data[4]).font = label_font
+        ws.cell(row=curr_row, column=5).fill = label_fill
+        ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=5).border = thin_border
+
+        ws.cell(row=curr_row, column=6, value=r_data[5]).font = val_bold_font
+        ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=6).border = thin_border
+
+        curr_row += 1
+
+    # Kumaş Bilgileri Satırı (Yan yana, aralarında boşluklar bırakarak)
+    fabric_parts = []
+    if fabric_detail:
+        if fabric_detail.get("company_name"): fabric_parts.append(f"Kumaşçı: {fabric_detail['company_name']}")
+        if fabric_detail.get("quality_code"): fabric_parts.append(f"Kalite: {fabric_detail['quality_code']}")
+        if fabric_detail.get("quality_name"): fabric_parts.append(f"Kalite Adı: {fabric_detail['quality_name']}")
+        if fabric_detail.get("design_code"): fabric_parts.append(f"Varyant: {fabric_detail['design_code']}")
+        if fabric_detail.get("color"): fabric_parts.append(f"Renk: {fabric_detail['color']}")
+        if fabric_detail.get("width"): fabric_parts.append(f"En: {fabric_detail['width']}")
+        if fabric_detail.get("composition"): fabric_parts.append(f"Karışım: {fabric_detail['composition']}")
+    
+    fabric_text = "   ".join(fabric_parts) if fabric_parts else (s.get("fabric_info") or "-")
+
+    ws.row_dimensions[curr_row].height = 24
+    ws.cell(row=curr_row, column=1, value="Kumaş Bilgisi").font = label_font
+    ws.cell(row=curr_row, column=1).fill = label_fill
+    ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
+    ws.cell(row=curr_row, column=1).border = thin_border
+
+    ws.merge_cells(f"B{curr_row}:D{curr_row}")
+    ws[f"B{curr_row}"] = fabric_text
+    ws[f"B{curr_row}"].font = val_bold_font
+    ws[f"B{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+    for cl in range(2, 5):
+        ws.cell(row=curr_row, column=cl).border = thin_border
+
+    ws.cell(row=curr_row, column=5, value="Birim Metraj").font = label_font
+    ws.cell(row=curr_row, column=5).fill = label_fill
+    ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
+    ws.cell(row=curr_row, column=5).border = thin_border
+
+    ws.cell(row=curr_row, column=6, value=f"{s.get('unit_meters') or '-'} m").font = val_bold_font
+    ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
+    ws.cell(row=curr_row, column=6).border = thin_border
+
+    curr_row += 1
+
+    # Satır Boşluk
+    curr_row += 1
+
+    # Beden & Adet Dağılımı Bölümü
+    ws.merge_cells(f"A{curr_row}:F{curr_row}")
+    ws[f"A{curr_row}"] = "ADET VE BEDEN DAĞILIMI"
+    ws[f"A{curr_row}"].font = section_font
+    ws[f"A{curr_row}"].fill = section_fill
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[curr_row].height = 22
+    curr_row += 1
+
+    # Parse sizes
+    qty_str = str(s.get("quantity_sizes") or "").strip()
+    size_pairs = []
+    total_qty = 0
+    if qty_str:
+        tokens = [t.strip() for t in re.split(r"[,;\n/]+", qty_str) if t.strip()]
+        for tok in tokens:
+            m1 = re.match(r"^([A-Za-z0-9\-_.]+)\s*[:=\-]\s*(\d+)$", tok)
+            m2 = re.match(r"^(\d+)\s*(?:x|adet|pcs)?\s*([A-Za-z0-9\-_.]+)$", tok, re.IGNORECASE)
+            if m1:
+                cnt = int(m1.group(2))
+                size_pairs.append((m1.group(1).upper(), cnt))
+                total_qty += cnt
+            elif m2:
+                cnt = int(m2.group(1))
+                size_pairs.append((m2.group(2).upper(), cnt))
+                total_qty += cnt
+            else:
+                num = re.match(r"^(\d+)$", tok)
+                if num:
+                    cnt = int(num.group(1))
+                    size_pairs.append(("Adet", cnt))
+                    total_qty += cnt
+
+    if size_pairs and len(size_pairs) <= 5:
+        # Header row (Bedenler)
+        ws.cell(row=curr_row, column=1, value="Beden").font = label_font
+        ws.cell(row=curr_row, column=1).fill = label_fill
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        for s_idx, (sz, cnt) in enumerate(size_pairs):
+            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=sz)
+            c_cell.font = label_font
+            c_cell.fill = label_fill
+            c_cell.alignment = Alignment(horizontal="center", vertical="center")
+            c_cell.border = thin_border
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2, value="TOPLAM").font = label_font
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).fill = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).border = thin_border
+        ws.row_dimensions[curr_row].height = 20
+        curr_row += 1
+
+        # Value row (Adetler)
+        ws.cell(row=curr_row, column=1, value="Miktar").font = label_font
+        ws.cell(row=curr_row, column=1).fill = label_fill
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        for s_idx, (sz, cnt) in enumerate(size_pairs):
+            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=cnt)
+            c_cell.font = val_bold_font
+            c_cell.alignment = Alignment(horizontal="center", vertical="center")
+            c_cell.border = thin_border
+
+        tot_cell = ws.cell(row=curr_row, column=len(size_pairs) + 2, value=f"{total_qty} Adet")
+        tot_cell.font = Font(name="Calibri", size=10, bold=True, color="059669")
+        tot_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+        tot_cell.alignment = Alignment(horizontal="center", vertical="center")
+        tot_cell.border = thin_border
+        ws.row_dimensions[curr_row].height = 22
+        curr_row += 1
+
+        if qty_str and (len(size_pairs) < len(tokens) or not str(total_qty) in qty_str):
+            ws.merge_cells(f"A{curr_row}:F{curr_row}")
+            ws[f"A{curr_row}"] = f"Not / Orijinal Giriş: {qty_str}"
+            ws[f"A{curr_row}"].font = Font(name="Calibri", size=9, italic=True, color="64748B")
+            ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+            curr_row += 1
+    else:
+        # Tek satır serbest metin gösterimi
+        ws.merge_cells(f"A{curr_row}:B{curr_row}")
+        ws[f"A{curr_row}"] = "Adet & Beden Bilgisi"
+        ws[f"A{curr_row}"].font = label_font
+        ws[f"A{curr_row}"].fill = label_fill
+        ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        ws[f"A{curr_row}"].border = thin_border
+
+        ws.merge_cells(f"C{curr_row}:F{curr_row}")
+        ws[f"C{curr_row}"] = qty_str or "Adet ve beden belirtilmedi"
+        ws[f"C{curr_row}"].font = val_bold_font
+        ws[f"C{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+        ws[f"C{curr_row}"].border = thin_border
+        ws.row_dimensions[curr_row].height = 24
+        curr_row += 1
+
+    # Satır Boşluk
+    curr_row += 1
+
+    # Numune Kritiği ve Notlar Bölümü
+    ws.merge_cells(f"A{curr_row}:F{curr_row}")
+    ws[f"A{curr_row}"] = "NUMUNE KRİTİĞİ VE REVİZYON NOTLARI"
+    ws[f"A{curr_row}"].font = section_font
+    ws[f"A{curr_row}"].fill = section_fill
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[curr_row].height = 22
+    curr_row += 1
+
+    # HTML temizleme & metne dönüştürme
+    raw_critique = s.get("critique") or s.get("notes") or ""
+    clean_critique = html.unescape(raw_critique)
+    clean_critique = re.sub(r"<li>", "• ", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"</li>", "\n", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"<br\s*/?>", "\n", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"</p>", "\n\n", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"</div>", "\n", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"<[^>]+>", "", clean_critique)
+    clean_critique = re.sub(r"\n{3,}", "\n\n", clean_critique).strip()
+
+    critique_box_start = curr_row
+    critique_box_end = curr_row + 4
+    ws.merge_cells(f"A{critique_box_start}:F{critique_box_end}")
+    critique_cell = ws[f"A{critique_box_start}"]
+    critique_cell.value = clean_critique or "Herhangi bir numune kritiği veya revizyon notu girilmemiştir."
+    critique_cell.font = Font(name="Calibri", size=10, italic=(not clean_critique), color="0F172A" if clean_critique else "94A3B8")
+    critique_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+    critique_cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+    for r in range(critique_box_start, critique_box_end + 1):
+        ws.row_dimensions[r].height = 20
+        for col_i in range(1, 7):
+            c_cell = ws.cell(row=r, column=col_i)
+            c_cell.border = thin_border
+            c_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    curr_row = critique_box_end + 2
+
+    # İmza ve Onay Alanları
+    ws.merge_cells(f"A{curr_row}:B{curr_row}")
+    ws[f"A{curr_row}"] = "TALEBİ HAZIRLAYAN"
+    ws[f"A{curr_row}"].font = label_font
+    ws[f"A{curr_row}"].fill = label_fill
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"A{curr_row}"].border = thin_border
+
+    ws.merge_cells(f"C{curr_row}:D{curr_row}")
+    ws[f"C{curr_row}"] = "MODELHANE / ATÖLYE ŞEFİ"
+    ws[f"C{curr_row}"].font = label_font
+    ws[f"C{curr_row}"].fill = label_fill
+    ws[f"C{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"C{curr_row}"].border = thin_border
+
+    ws.merge_cells(f"E{curr_row}:F{curr_row}")
+    ws[f"E{curr_row}"] = "MÜŞTERİ / SATIŞ ONAY"
+    ws[f"E{curr_row}"].font = label_font
+    ws[f"E{curr_row}"].fill = label_fill
+    ws[f"E{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"E{curr_row}"].border = thin_border
+    ws.row_dimensions[curr_row].height = 20
+    curr_row += 1
+
+    # İmza Kutuları
+    sig_start = curr_row
+    sig_end = curr_row + 2
+    for r in range(sig_start, sig_end + 1):
+        ws.row_dimensions[r].height = 22
+        for col_i in range(1, 7):
+            c_cell = ws.cell(row=r, column=col_i)
+            c_cell.border = thin_border
+
+    ws[f"A{sig_end}"] = "Ad Soyad / İmza / Tarih"
+    ws[f"A{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+    ws[f"A{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    ws[f"C{sig_end}"] = "Ad Soyad / İmza / Tarih"
+    ws[f"C{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+    ws[f"C{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    ws[f"E{sig_end}"] = "Ad Soyad / İmza / Tarih"
+    ws[f"E{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+    ws[f"E{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    output_stream = io.BytesIO()
+    wb.save(output_stream)
+    output_stream.seek(0)
+
+    clean_file_type = re.sub(r"[^A-Za-z0-9]", "_", clean_type)
+    clean_style_no = re.sub(r"[^A-Za-z0-9]", "_", str(s.get("style_no") or "Talep"))
+    filename = f"Numune_Talebi_{clean_file_type}_{clean_style_no}.xlsx"
+    encoded_filename = quote(filename)
+
+    return Response(
+        content=output_stream.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}; filename=\"{filename.encode('ascii', 'ignore').decode()}\""
+        }
+    )
 # ----------------- NUMUNE & PPS TAKİBİ (SAMPLE & PPS TRACKING) -----------------
 SAMPLE_OPTIONS_FILE = Path("data") / "sample_options.json"
 
@@ -5965,14 +6388,24 @@ def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends
     c = conn.cursor()
     company_id = user.get("company_id", 1)
     
-    query = """
-        SELECT id, company_id, image_url, image_url_2, sample_type, season, customer_name,
-               style_name, style_no, request_date, delivery_date, quantity_sizes,
-               fabric_info, unit_meters, stage, notes, critique, fabrictag_id, created_by, created_at, updated_at
-        FROM sample_items
-        WHERE company_id = ?
-    """
-    params = [company_id]
+    if user.get("role") == "superadmin":
+        query = """
+            SELECT id, company_id, image_url, image_url_2, sample_type, season, customer_name,
+                   style_name, style_no, request_date, delivery_date, quantity_sizes,
+                   fabric_info, unit_meters, stage, notes, critique, fabrictag_id, created_by, created_at, updated_at
+            FROM sample_items
+            WHERE 1=1
+        """
+        params = []
+    else:
+        query = """
+            SELECT id, company_id, image_url, image_url_2, sample_type, season, customer_name,
+                   style_name, style_no, request_date, delivery_date, quantity_sizes,
+                   fabric_info, unit_meters, stage, notes, critique, fabrictag_id, created_by, created_at, updated_at
+            FROM sample_items
+            WHERE (company_id = ? OR company_id IS NULL)
+        """
+        params = [company_id]
     
     if search and search.strip():
         q = f"%{search.strip().lower()}%"
@@ -5997,6 +6430,21 @@ def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends
         "fabric_info", "unit_meters", "stage", "notes", "critique", "fabrictag_id", "created_by", "created_at", "updated_at"
     ]
     samples = [dict(zip(cols, row)) for row in rows]
+    try:
+        from fabrictag_connector import FabricTagConnector
+        ft_conn = FabricTagConnector.get_connection()
+        if ft_conn:
+            ft_c = ft_conn.cursor()
+            for s in samples:
+                fid = s.get("fabrictag_id")
+                if fid:
+                    ft_c.execute("SELECT id, company_name, quality_code, quality_name, design_code, color, width, composition FROM fabrics WHERE id = ?", (fid,))
+                    frow = ft_c.fetchone()
+                    if frow:
+                        s["fabric_detail"] = dict(frow)
+            ft_conn.close()
+    except Exception:
+        pass
     return samples
 
 @app.post("/api/samples")
@@ -6170,9 +6618,17 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = thin_border
 
+    import html as py_html
     row_num = 4
     for idx, r in enumerate(rows, 1):
-        critique_val = str(r[13] if len(r) > 13 and r[13] is not None else (r[12] or "")).strip()
+        critique_raw = str(r[13] if len(r) > 13 and r[13] is not None else (r[12] or "")).strip()
+        clean_critique = re.sub(r'<br\s*[\/]?>', ' ', critique_raw, flags=re.I)
+        clean_critique = re.sub(r'<\/li>', ' • ', clean_critique, flags=re.I)
+        clean_critique = re.sub(r'<[^>]+>', ' ', clean_critique)
+        clean_critique = py_html.unescape(clean_critique)
+        clean_critique = re.sub(r'\s+', ' ', clean_critique).strip()
+        if clean_critique.startswith('• '):
+            clean_critique = clean_critique[2:].strip()
         row_data = [
             idx,
             r[1] or "",
@@ -6186,7 +6642,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
             r[9] or "",
             r[10] or "",
             r[11] or "",
-            critique_val
+            clean_critique
         ]
         ws.append(row_data)
         ws.row_dimensions[row_num].height = 20
@@ -6222,6 +6678,428 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
     )
 
 
+@app.get("/api/samples/{sample_id}/export-talep-excel")
+def api_export_single_sample_talep_excel(sample_id: int, user: Dict[str, Any] = Depends(require_user)):
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    import re
+    import html
+    from urllib.parse import quote
+    from fabrictag_connector import FabricTagConnector
+
+    conn = get_db()
+    c = conn.cursor()
+    company_id = user.get("company_id", 1)
+
+    c.execute("""
+        SELECT id, sample_type, season, customer_name, style_name, style_no,
+               request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes, critique, image_url, fabrictag_id, company_id
+        FROM sample_items
+        WHERE id = ?
+    """, (sample_id,))
+    row = c.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Numune kaydı bulunamadı")
+
+    cols = [d[0] for d in c.description]
+    s = dict(zip(cols, row))
+
+    sample_cid = s.get("company_id")
+    if user.get("role") != "superadmin" and sample_cid and company_id and sample_cid != company_id:
+        raise HTTPException(status_code=403, detail="Bu numuneye erişim yetkiniz yok.")
+
+    # Fabric detail from FabricTag if linked
+    fabric_detail = {}
+    if s.get("fabrictag_id"):
+        try:
+            ft_conn = FabricTagConnector.get_connection()
+            if ft_conn:
+                ft_c = ft_conn.cursor()
+                ft_c.execute("SELECT id, company_name, quality_code, quality_name, design_code, color, width, composition FROM fabrics WHERE id = ?", (s["fabrictag_id"],))
+                frow = ft_c.fetchone()
+                if frow:
+                    fabric_detail = dict(frow)
+                ft_conn.close()
+        except Exception:
+            pass
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Talep Formu"
+
+    # Sayfa ve Baskı Ayarları (A4 Dikey)
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.page_margins.left = 0.4
+    ws.page_margins.right = 0.4
+    ws.page_margins.top = 0.4
+    ws.page_margins.bottom = 0.4
+
+    # Başlık hesaplama (Örn: "1.Proto" -> "PROTO TALEBİ", "2.PPS" -> "PPS TALEBİ")
+    raw_type = (s.get("sample_type") or "").strip()
+    clean_type = re.sub(r"^[\d.\-\s]+", "", raw_type).strip()
+    if not clean_type:
+        clean_type = "NUMUNE"
+    header_title = f"{clean_type.upper()} TALEBİ"
+
+    # Renkler ve Stiller
+    title_font = Font(name="Calibri", size=18, bold=True, color="FFFFFF")
+    title_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    
+    sub_title_font = Font(name="Calibri", size=10, italic=True, color="475569")
+    
+    section_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    section_fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
+    
+    label_font = Font(name="Calibri", size=10, bold=True, color="334155")
+    label_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+    
+    val_bold_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+    val_norm_font = Font(name="Calibri", size=10, bold=False, color="0F172A")
+    
+    thin_border = Border(
+        left=Side(style="thin", color="CBD5E1"),
+        right=Side(style="thin", color="CBD5E1"),
+        top=Side(style="thin", color="CBD5E1"),
+        bottom=Side(style="thin", color="CBD5E1")
+    )
+
+    # 6 Sütunlu Sayfa Düzeni (A, B, C, D, E, F)
+    col_widths = {"A": 16, "B": 22, "C": 16, "D": 22, "E": 16, "F": 22}
+    for col_letter, width in col_widths.items():
+        ws.column_dimensions[col_letter].width = width
+
+    # Satır 1: Şirket / Sistem Üst Bilgisi (ORTALI)
+    ws.merge_cells("A1:F1")
+    ws["A1"] = "TEXFLOW PRODUCTION & QUALITY SYSTEMS"
+    ws["A1"].font = Font(name="Calibri", size=9, bold=True, color="64748B")
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 18
+
+    # Satır 2: Büyük Dinamik Başlık (EN ÜSTTE VE TAM ORTALI)
+    ws.merge_cells("A2:F2")
+    ws["A2"] = header_title
+    ws["A2"].font = title_font
+    ws["A2"].fill = title_fill
+    ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[2].height = 36
+
+    # Satır 3: Alt Başlık (ORTALI)
+    ws.merge_cells("A3:F3")
+    ws["A3"] = "Modelhane ve Numune Üretim Talep Formu"
+    ws["A3"].font = sub_title_font
+    ws["A3"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[3].height = 18
+
+    # Satır 4: Talep Kimlik / Meta Bilgileri Şeridi
+    ws.merge_cells("A4:B4")
+    ws["A4"] = f"Talep / Form No: SMP-{s.get('id')}"
+    ws["A4"].font = Font(name="Calibri", size=10, bold=True, color="475569")
+    ws["A4"].alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.merge_cells("C4:D4")
+    ws["C4"] = f"Tarih: {s.get('request_date') or datetime.now().strftime('%d.%m.%Y')}   |   Hedef Teslim: {s.get('delivery_date') or '-'}"
+    ws["C4"].font = Font(name="Calibri", size=10, bold=True, color="D97706" if s.get('delivery_date') else "475569")
+    ws["C4"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells("E4:F4")
+    ws["E4"] = f"Aşama: {s.get('stage') or 'Talep Oluşturuldu'}"
+    ws["E4"].font = Font(name="Calibri", size=10, bold=True, color="059669")
+    ws["E4"].alignment = Alignment(horizontal="right", vertical="center")
+    ws.row_dimensions[4].height = 22
+
+    # Satır 5: Model ve Talep Detayları Başlığı
+    ws.merge_cells("A5:F5")
+    ws["A5"] = "MODEL VE SİPARİŞ BİLGİLERİ"
+    ws["A5"].font = section_font
+    ws["A5"].fill = section_fill
+    ws["A5"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[5].height = 22
+
+    # Bilgi Satırları (Tablo formatında)
+    info_rows = [
+        ("Müşteri", s.get("customer_name") or "-", "Numune Türü", s.get("sample_type") or "-", "Talep Tarihi", s.get("request_date") or "-"),
+        ("Model Kodu", s.get("style_no") or "-", "Model Adı", s.get("style_name") or "-", "Sezon", s.get("season") or "-"),
+    ]
+
+    curr_row = 6
+    for r_data in info_rows:
+        ws.row_dimensions[curr_row].height = 22
+        # Col A-B
+        ws.cell(row=curr_row, column=1, value=r_data[0]).font = label_font
+        ws.cell(row=curr_row, column=1).fill = label_fill
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        ws.cell(row=curr_row, column=2, value=r_data[1]).font = val_bold_font
+        ws.cell(row=curr_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=2).border = thin_border
+
+        # Col C-D
+        ws.cell(row=curr_row, column=3, value=r_data[2]).font = label_font
+        ws.cell(row=curr_row, column=3).fill = label_fill
+        ws.cell(row=curr_row, column=3).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=3).border = thin_border
+
+        ws.cell(row=curr_row, column=4, value=r_data[3]).font = val_bold_font
+        ws.cell(row=curr_row, column=4).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=4).border = thin_border
+
+        # Col E-F
+        ws.cell(row=curr_row, column=5, value=r_data[4]).font = label_font
+        ws.cell(row=curr_row, column=5).fill = label_fill
+        ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=5).border = thin_border
+
+        ws.cell(row=curr_row, column=6, value=r_data[5]).font = val_bold_font
+        ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=curr_row, column=6).border = thin_border
+
+        curr_row += 1
+
+    # Kumaş Bilgileri Satırı (Yan yana, aralarında boşluklar bırakarak)
+    fabric_parts = []
+    if fabric_detail:
+        if fabric_detail.get("company_name"): fabric_parts.append(f"Kumaşçı: {fabric_detail['company_name']}")
+        if fabric_detail.get("quality_code"): fabric_parts.append(f"Kalite: {fabric_detail['quality_code']}")
+        if fabric_detail.get("quality_name"): fabric_parts.append(f"Kalite Adı: {fabric_detail['quality_name']}")
+        if fabric_detail.get("design_code"): fabric_parts.append(f"Varyant: {fabric_detail['design_code']}")
+        if fabric_detail.get("color"): fabric_parts.append(f"Renk: {fabric_detail['color']}")
+        if fabric_detail.get("width"): fabric_parts.append(f"En: {fabric_detail['width']}")
+        if fabric_detail.get("composition"): fabric_parts.append(f"Karışım: {fabric_detail['composition']}")
+    
+    fabric_text = "   ".join(fabric_parts) if fabric_parts else (s.get("fabric_info") or "-")
+
+    ws.row_dimensions[curr_row].height = 24
+    ws.cell(row=curr_row, column=1, value="Kumaş Bilgisi").font = label_font
+    ws.cell(row=curr_row, column=1).fill = label_fill
+    ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
+    ws.cell(row=curr_row, column=1).border = thin_border
+
+    ws.merge_cells(f"B{curr_row}:D{curr_row}")
+    ws[f"B{curr_row}"] = fabric_text
+    ws[f"B{curr_row}"].font = val_bold_font
+    ws[f"B{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+    for cl in range(2, 5):
+        ws.cell(row=curr_row, column=cl).border = thin_border
+
+    ws.cell(row=curr_row, column=5, value="Birim Metraj").font = label_font
+    ws.cell(row=curr_row, column=5).fill = label_fill
+    ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
+    ws.cell(row=curr_row, column=5).border = thin_border
+
+    ws.cell(row=curr_row, column=6, value=f"{s.get('unit_meters') or '-'} m").font = val_bold_font
+    ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
+    ws.cell(row=curr_row, column=6).border = thin_border
+
+    curr_row += 1
+
+    # Satır Boşluk
+    curr_row += 1
+
+    # Beden & Adet Dağılımı Bölümü
+    ws.merge_cells(f"A{curr_row}:F{curr_row}")
+    ws[f"A{curr_row}"] = "ADET VE BEDEN DAĞILIMI"
+    ws[f"A{curr_row}"].font = section_font
+    ws[f"A{curr_row}"].fill = section_fill
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[curr_row].height = 22
+    curr_row += 1
+
+    # Parse sizes
+    qty_str = str(s.get("quantity_sizes") or "").strip()
+    size_pairs = []
+    total_qty = 0
+    if qty_str:
+        tokens = [t.strip() for t in re.split(r"[,;\n/]+", qty_str) if t.strip()]
+        for tok in tokens:
+            m1 = re.match(r"^([A-Za-z0-9\-_.]+)\s*[:=\-]\s*(\d+)$", tok)
+            m2 = re.match(r"^(\d+)\s*(?:x|adet|pcs)?\s*([A-Za-z0-9\-_.]+)$", tok, re.IGNORECASE)
+            if m1:
+                cnt = int(m1.group(2))
+                size_pairs.append((m1.group(1).upper(), cnt))
+                total_qty += cnt
+            elif m2:
+                cnt = int(m2.group(1))
+                size_pairs.append((m2.group(2).upper(), cnt))
+                total_qty += cnt
+            else:
+                num = re.match(r"^(\d+)$", tok)
+                if num:
+                    cnt = int(num.group(1))
+                    size_pairs.append(("Adet", cnt))
+                    total_qty += cnt
+
+    if size_pairs and len(size_pairs) <= 5:
+        # Header row (Bedenler)
+        ws.cell(row=curr_row, column=1, value="Beden").font = label_font
+        ws.cell(row=curr_row, column=1).fill = label_fill
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        for s_idx, (sz, cnt) in enumerate(size_pairs):
+            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=sz)
+            c_cell.font = label_font
+            c_cell.fill = label_fill
+            c_cell.alignment = Alignment(horizontal="center", vertical="center")
+            c_cell.border = thin_border
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2, value="TOPLAM").font = label_font
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).fill = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).border = thin_border
+        ws.row_dimensions[curr_row].height = 20
+        curr_row += 1
+
+        # Value row (Adetler)
+        ws.cell(row=curr_row, column=1, value="Miktar").font = label_font
+        ws.cell(row=curr_row, column=1).fill = label_fill
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        for s_idx, (sz, cnt) in enumerate(size_pairs):
+            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=cnt)
+            c_cell.font = val_bold_font
+            c_cell.alignment = Alignment(horizontal="center", vertical="center")
+            c_cell.border = thin_border
+
+        tot_cell = ws.cell(row=curr_row, column=len(size_pairs) + 2, value=f"{total_qty} Adet")
+        tot_cell.font = Font(name="Calibri", size=10, bold=True, color="059669")
+        tot_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+        tot_cell.alignment = Alignment(horizontal="center", vertical="center")
+        tot_cell.border = thin_border
+        ws.row_dimensions[curr_row].height = 22
+        curr_row += 1
+
+        if qty_str and (len(size_pairs) < len(tokens) or not str(total_qty) in qty_str):
+            ws.merge_cells(f"A{curr_row}:F{curr_row}")
+            ws[f"A{curr_row}"] = f"Not / Orijinal Giriş: {qty_str}"
+            ws[f"A{curr_row}"].font = Font(name="Calibri", size=9, italic=True, color="64748B")
+            ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+            curr_row += 1
+    else:
+        # Tek satır serbest metin gösterimi
+        ws.merge_cells(f"A{curr_row}:B{curr_row}")
+        ws[f"A{curr_row}"] = "Adet & Beden Bilgisi"
+        ws[f"A{curr_row}"].font = label_font
+        ws[f"A{curr_row}"].fill = label_fill
+        ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+        ws[f"A{curr_row}"].border = thin_border
+
+        ws.merge_cells(f"C{curr_row}:F{curr_row}")
+        ws[f"C{curr_row}"] = qty_str or "Adet ve beden belirtilmedi"
+        ws[f"C{curr_row}"].font = val_bold_font
+        ws[f"C{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+        ws[f"C{curr_row}"].border = thin_border
+        ws.row_dimensions[curr_row].height = 24
+        curr_row += 1
+
+    # Satır Boşluk
+    curr_row += 1
+
+    # Numune Kritiği ve Notlar Bölümü
+    ws.merge_cells(f"A{curr_row}:F{curr_row}")
+    ws[f"A{curr_row}"] = "NUMUNE KRİTİĞİ VE REVİZYON NOTLARI"
+    ws[f"A{curr_row}"].font = section_font
+    ws[f"A{curr_row}"].fill = section_fill
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[curr_row].height = 22
+    curr_row += 1
+
+    # HTML temizleme & metne dönüştürme
+    raw_critique = s.get("critique") or s.get("notes") or ""
+    clean_critique = html.unescape(raw_critique)
+    clean_critique = re.sub(r"<li>", "• ", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"</li>", "\n", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"<br\s*/?>", "\n", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"</p>", "\n\n", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"</div>", "\n", clean_critique, flags=re.IGNORECASE)
+    clean_critique = re.sub(r"<[^>]+>", "", clean_critique)
+    clean_critique = re.sub(r"\n{3,}", "\n\n", clean_critique).strip()
+
+    critique_box_start = curr_row
+    critique_box_end = curr_row + 4
+    ws.merge_cells(f"A{critique_box_start}:F{critique_box_end}")
+    critique_cell = ws[f"A{critique_box_start}"]
+    critique_cell.value = clean_critique or "Herhangi bir numune kritiği veya revizyon notu girilmemiştir."
+    critique_cell.font = Font(name="Calibri", size=10, italic=(not clean_critique), color="0F172A" if clean_critique else "94A3B8")
+    critique_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+    critique_cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+    for r in range(critique_box_start, critique_box_end + 1):
+        ws.row_dimensions[r].height = 20
+        for col_i in range(1, 7):
+            c_cell = ws.cell(row=r, column=col_i)
+            c_cell.border = thin_border
+            c_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    curr_row = critique_box_end + 2
+
+    # İmza ve Onay Alanları
+    ws.merge_cells(f"A{curr_row}:B{curr_row}")
+    ws[f"A{curr_row}"] = "TALEBİ HAZIRLAYAN"
+    ws[f"A{curr_row}"].font = label_font
+    ws[f"A{curr_row}"].fill = label_fill
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"A{curr_row}"].border = thin_border
+
+    ws.merge_cells(f"C{curr_row}:D{curr_row}")
+    ws[f"C{curr_row}"] = "MODELHANE / ATÖLYE ŞEFİ"
+    ws[f"C{curr_row}"].font = label_font
+    ws[f"C{curr_row}"].fill = label_fill
+    ws[f"C{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"C{curr_row}"].border = thin_border
+
+    ws.merge_cells(f"E{curr_row}:F{curr_row}")
+    ws[f"E{curr_row}"] = "MÜŞTERİ / SATIŞ ONAY"
+    ws[f"E{curr_row}"].font = label_font
+    ws[f"E{curr_row}"].fill = label_fill
+    ws[f"E{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+    ws[f"E{curr_row}"].border = thin_border
+    ws.row_dimensions[curr_row].height = 20
+    curr_row += 1
+
+    # İmza Kutuları
+    sig_start = curr_row
+    sig_end = curr_row + 2
+    for r in range(sig_start, sig_end + 1):
+        ws.row_dimensions[r].height = 22
+        for col_i in range(1, 7):
+            c_cell = ws.cell(row=r, column=col_i)
+            c_cell.border = thin_border
+
+    ws[f"A{sig_end}"] = "Ad Soyad / İmza / Tarih"
+    ws[f"A{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+    ws[f"A{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    ws[f"C{sig_end}"] = "Ad Soyad / İmza / Tarih"
+    ws[f"C{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+    ws[f"C{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    ws[f"E{sig_end}"] = "Ad Soyad / İmza / Tarih"
+    ws[f"E{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+    ws[f"E{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    output_stream = io.BytesIO()
+    wb.save(output_stream)
+    output_stream.seek(0)
+
+    clean_file_type = re.sub(r"[^A-Za-z0-9]", "_", clean_type)
+    clean_style_no = re.sub(r"[^A-Za-z0-9]", "_", str(s.get("style_no") or "Talep"))
+    filename = f"Numune_Talebi_{clean_file_type}_{clean_style_no}.xlsx"
+    encoded_filename = quote(filename)
+
+    return Response(
+        content=output_stream.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}; filename=\"{filename.encode('ascii', 'ignore').decode()}\""
+        }
+    )
 # ----------------- VARSAYILAN SİSTEM AYARLARI (CUSTOM DEFAULTS) -----------------
 CUSTOM_DEFAULTS_FILE = Path("data") / "custom_defaults.json"
 
