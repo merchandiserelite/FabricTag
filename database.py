@@ -177,6 +177,7 @@ def init_db():
         image_url TEXT,
         image_url_2 TEXT,
         channel TEXT DEFAULT '',
+        critique TEXT,
         status TEXT DEFAULT 'Hazırlık',
         custom_fields_json TEXT DEFAULT '{}',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -448,13 +449,14 @@ def init_db():
 
 
     
-    # 12. Sample / PPS Tracking (Numune & PPS Takibi)
+    # 12. Sample Tracking (Numune Takip Listesi)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS sample_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         company_id INTEGER DEFAULT 1,
         image_url TEXT,
         image_url_2 TEXT,
+        image_fit TEXT DEFAULT 'contain',
         sample_type TEXT DEFAULT '1.Proto',
         season TEXT,
         customer_name TEXT,
@@ -464,11 +466,16 @@ def init_db():
         delivery_date TEXT,
         quantity_sizes TEXT,
         fabric_info TEXT,
+        fabric_info_2 TEXT,
+        fabric_info_3 TEXT,
+        fabrictag_id INTEGER,
+        fabrictag_id_2 INTEGER,
+        fabrictag_id_3 INTEGER,
         unit_meters TEXT,
         stage TEXT DEFAULT 'Talep Oluşturuldu',
         notes TEXT,
         critique TEXT,
-        fabrictag_id INTEGER,
+        display_order INTEGER DEFAULT 0,
         created_by TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -482,21 +489,20 @@ def init_db():
         cursor.execute("ALTER TABLE sample_items ADD COLUMN critique TEXT")
     if "fabrictag_id" not in existing_sample_cols:
         cursor.execute("ALTER TABLE sample_items ADD COLUMN fabrictag_id INTEGER")
+    if "fabric_info_2" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN fabric_info_2 TEXT")
+    if "fabric_info_3" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN fabric_info_3 TEXT")
+    if "fabrictag_id_2" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN fabrictag_id_2 INTEGER")
+    if "fabrictag_id_3" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN fabrictag_id_3 INTEGER")
+    if "image_fit" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN image_fit TEXT DEFAULT 'contain'")
+    if "display_order" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN display_order INTEGER DEFAULT 0")
 
-    cursor.execute("SELECT COUNT(*) FROM sample_items")
-    if cursor.fetchone()[0] == 0:
-        seed_samples = [
-            ("1.Proto", "2026/27 Sonbahar-Kış", "ROBERTO SARTO", "V Yaka Triko Bluz", "RS-8821", "10.10.2026", "28.10.2026", "36: 1, 38: 2, 40: 1", "%100 Viskon Kaşkorse 210gr", "0.85", "Dikim Sırada"),
-            ("1.PPS", "2026/27 Sonbahar-Kış", "MASSIMO DUTTI", "Oversize Polo Yaka", "MD-4090", "15.10.2026", "30.10.2026", "S: 2, M: 2", "%95 Pamuk %5 Elastan Pike 220gr", "1.10", "Kumaş Bekliyor"),
-            ("Fit Sample", "2027 İlkbahar", "ZARA MAN", "Basic Crewneck", "ZR-1104", "18.10.2026", "05.11.2026", "M: 1, L: 1", "%100 Ege Pamuk Süprem 160gr", "0.75", "Talep Oluşturuldu"),
-            ("SMS", "2026/27 Kış", "MANGO", "Kemerli Düğmeli Hırka", "MG-7023", "05.10.2026", "26.10.2026", "S: 1, M: 1, L: 1", "%80 Yün %20 Polyamid Fitilli", "1.35", "Yıkama/Boya")
-        ]
-        for st_type, s_season, s_cust, s_sname, s_sno, s_req, s_del, s_qty, s_fab, s_um, s_stg in seed_samples:
-            cursor.execute("""
-            INSERT INTO sample_items 
-            (company_id, sample_type, season, customer_name, style_name, style_no, request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, created_by)
-            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Sistem')
-            """, (st_type, s_season, s_cust, s_sname, s_sno, s_req, s_del, s_qty, s_fab, s_um, s_stg))
+    # Sample items: Clean / verisiz başlangıç (test verileri kaldırıldı)
 
     # Safe migrations for cut and shipping tracking
     cursor.execute("PRAGMA table_info(styles)")
@@ -521,6 +527,8 @@ def init_db():
         cursor.execute("ALTER TABLE styles ADD COLUMN last_status_updated_by TEXT")
     if "last_status_updated_at" not in style_cols:
         cursor.execute("ALTER TABLE styles ADD COLUMN last_status_updated_at TEXT")
+    if "critique" not in style_cols:
+        cursor.execute("ALTER TABLE styles ADD COLUMN critique TEXT")
 
     cursor.execute("PRAGMA table_info(size_distributions)")
     size_cols = [r[1] for r in cursor.fetchall()]
@@ -588,7 +596,7 @@ def init_db():
         ("yukleme_adetleri", "Yükleme Adetleri", "Shipment Quantities", "truck", "/yukleme-adetleri", 6, '["superadmin","admin","merchandiser","cutting","shipping"]'),
         ("serbest_fiyat", "Serbest Fiyat Çalışması", "Freeform Costing", "calculator", "/serbest-fiyat", 7, '["superadmin","admin","merchandiser"]'),
         ("ceki_koli", "Çeki listesi ve koli üstü", "Packing List & Carton Labels", "package", "/ceki-koli", 8, '["superadmin","admin","merchandiser","cutting","shipping","warehouse"]'),
-        ("numune_takip", "Numune & PPS Takibi", "Sample / PPS Tracking", "check-check", "/numuneler", 9, '["superadmin","admin","merchandiser"]'),
+        ("numune_takip", "Numune Takip Listesi", "Sample / PPS Tracking", "check-check", "/numuneler", 9, '["superadmin","admin","merchandiser"]'),
         ("audit_logs", "Değişiklik Tarihçesi (Audit Log)", "Audit Logs", "history", "/audit-logs", 10, '["superadmin","admin","merchandiser"]'),
         ("menu_yonetimi", "Menü & Alan Özelleştirme", "Custom Fields & Menu Config", "sliders-horizontal", "/ayarlar/menuler", 11, '["superadmin","admin"]'),
         ("kullanici_yonetimi", "Kullanıcı & Yetki Yönetimi", "User & Role Management", "users", "/ayarlar/kullanicilar", 12, '["superadmin","admin"]'),
@@ -603,6 +611,7 @@ def init_db():
             """, (company_id, key, tr, en, icon, path, order, roles))
         else:
             cursor.execute("UPDATE dynamic_menus SET is_visible = 1 WHERE menu_key = ? AND is_visible = 0", (key,))
+    cursor.execute("UPDATE dynamic_menus SET title_tr = 'Numune Takip Listesi' WHERE menu_key = 'numune_takip'")
 
     # Create High-Performance Indexes for 400+ style instant lookups
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_styles_company_order ON styles(company_id, order_id)")

@@ -11,30 +11,24 @@ ENV/
 *.log
 *.tmp
 
-# Databases (Never push production databases to git)
+# Databases & Data (Never push production or user data to git)
+data/
+data/**
 database.db
 production.db
 textile.db
 texflow.db
-data/*.db
-data/texflow.db
 *.db
 *.sqlite
 *.sqlite3
+*.db-shm
+*.db-wal
 
-# Uploads & Client orders
-data/uploads/
+# Uploads & Client files
 uploads/
 scratch/
 dist/
 build/
 *.spec
-
-data/backups/
-data/backup_config.json
 *.zip
 scratch_check_*.py
-
-*.db-shm
-*.db-wal
-

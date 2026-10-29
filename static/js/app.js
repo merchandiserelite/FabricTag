@@ -1557,7 +1557,7 @@ window.__texflowApp = createApp({
                 { key: 'fabric_ordered_meters', title: 'Kumaş Sipariş 1', filterable: false, align: 'center', width: 125, minWidth: 45 },
                 { key: 'fabric_price_1', title: 'Kumaş Fiyat 1', filterable: false, align: 'center', width: 115, minWidth: 50 },
                 { key: 'fabric_arrival_date', title: 'Kumaş Termin Tarihi 1', filterable: true, align: 'center', width: 125, minWidth: 50 },
-                { key: 'fabric_received_meters', title: 'Kumaş Gelen Metraj (M) 1', filterable: false, align: 'center', width: 125, minWidth: 45 },
+                { key: 'fabric_received_meters', title: 'GELEN KUMAŞ 1', filterable: false, align: 'center', width: 125, minWidth: 45 },
 
                 // KUMAŞ 2 GRUBU
                 { key: 'fabric_article_2', title: 'Kumaş 2', filterable: true, width: 165, minWidth: 45 },
@@ -1568,10 +1568,11 @@ window.__texflowApp = createApp({
                 { key: 'fabric_ordered_meters_2', title: 'Kumaş Sipariş 2', filterable: false, align: 'center', width: 125, minWidth: 45 },
                 { key: 'fabric_price_2', title: 'Kumaş Fiyat 2', filterable: false, align: 'center', width: 115, minWidth: 50 },
                 { key: 'fabric_arrival_date_2', title: 'Kumaş Termin Tarihi 2', filterable: true, align: 'center', width: 125, minWidth: 50 },
-                { key: 'fabric_received_meters_2', title: 'Kumaş Gelen Metraj (M) 2', filterable: false, align: 'center', width: 125, minWidth: 45 },
+                { key: 'fabric_received_meters_2', title: 'GELEN KUMAŞ 2', filterable: false, align: 'center', width: 125, minWidth: 45 },
 
                 { key: 'shipping_sample_sent', title: 'Yükleme', filterable: false, align: 'center', width: 75, minWidth: 35 },
                 { key: 'fabric_order_status', title: 'Notlar', filterable: false, width: 130, minWidth: 40 },
+                { key: 'critique', title: 'Kritik', filterable: false, width: 140, minWidth: 50, align: 'left' },
                 { key: 'cost_calculation', title: 'Maliyet', filterable: false, align: 'center', width: 135, minWidth: 105 },
                 { key: 'actual_cost', title: 'Gerçekleşen', filterable: false, align: 'center', width: 135, minWidth: 105 },
                 { key: 'order_month', title: 'Sipariş Ayı', filterable: true, align: 'center', width: 90, minWidth: 35 },
@@ -2255,7 +2256,7 @@ window.__texflowApp = createApp({
         // ============================================================
         const kumasSiparisModalOpen = ref(false);
         const kumasSiparisSearch = ref('');
-        const kumasSiparisStatusFilter = ref('planning_and_ordered');
+        const kumasSiparisStatusFilter = ref('all');
         const kumasSiparisCopiedToast = ref(false);
         const kumasSiparisPrintOrientation = ref('landscape');
 
@@ -2329,11 +2330,9 @@ window.__texflowApp = createApp({
             const filterMode = kumasSiparisStatusFilter.value;
             const search = (kumasSiparisSearch.value || '').toLowerCase().trim();
 
+            // Ekranda gosterilen tum siparisler (islem asamasi filtresi ile olan bag tamamen kaldirildi)
             const targetStyles = allStyles.filter(s => {
-                if (isItemCancelled(s)) return false;
-                if (filterMode === 'planning_and_ordered') {
-                    return isPlanningOrOrderedStatus(s.status);
-                }
+                if (!s) return false;
                 return true;
             });
 
@@ -2701,6 +2700,16 @@ window.__texflowApp = createApp({
                                 if (!hasShipCol && allAvailMap.has('shipped_quantity')) {
                                     result.splice(insertIdx, 0, { ...allAvailMap.get('shipped_quantity') });
                                 }
+                            }
+                        }
+
+                        // Ensure Kritik column exists next to fabric_order_status
+                        if (!result.some(c => c.key === 'critique') && allAvailMap.has('critique')) {
+                            let notlarIdx = result.findIndex(c => c.key === 'fabric_order_status');
+                            if (notlarIdx !== -1) {
+                                result.splice(notlarIdx + 1, 0, { ...allAvailMap.get('critique') });
+                            } else {
+                                result.push({ ...allAvailMap.get('critique') });
                             }
                         }
 
@@ -3180,6 +3189,7 @@ window.__texflowApp = createApp({
         };
 
         // STATUS STAGE UPDATE WITH USER TRACKING
+        // STATUS STAGE UPDATE WITH USER TRACKING (STABLE SYNC ACROSS SINGLE & CONSOLIDATED ROWS)
         const updateStatusWithUser = async (item, newStatus) => {
             const prevStatus = item.status;
             item.status = newStatus;
@@ -3188,9 +3198,9 @@ window.__texflowApp = createApp({
 
             const isSevk = String(newStatus || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase().includes('sevk');
             const wasSevk = String(prevStatus || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase().includes('sevk');
+            const todayStr = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
             if (isSevk) {
-                const todayStr = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 item.shipping_sample_sent = 1;
                 item.shipping_sample_sent_date = todayStr;
             } else if (wasSevk || item.shipping_sample_sent) {
@@ -3199,49 +3209,74 @@ window.__texflowApp = createApp({
                 item.shipping_sample_sent_date = null;
             }
 
-            // Single row update without altering global table filters
+            // Target IDs: single row id or all grouped ids (when 'Kanalları Topla' is active)
+            const targetIds = (item.ids && Array.isArray(item.ids) && item.ids.length) ? item.ids : [item.id];
+
+            // Immediately synchronize styles.value in memory for all target styles so recomputed filters/groups NEVER revert
+            targetIds.forEach(sid => {
+                const found = styles.value.find(s => s.id === sid);
+                if (found) {
+                    found.status = newStatus;
+                    found.last_status_updated_by = currentUserName;
+                    if (isSevk) {
+                        found.shipping_sample_sent = 1;
+                        found.shipping_sample_sent_date = todayStr;
+                    } else if (wasSevk || found.shipping_sample_sent) {
+                        found.shipping_sample_sent = 0;
+                        found.shipping_sample_sent_date = null;
+                    }
+                }
+            });
             
             try {
-                const res = await apiFetch('/api/styles/update-cell', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        style_id: item.id,
-                        field: 'status',
-                        value: newStatus,
-                        reason: `Aşama: ${prevStatus} ➜ ${newStatus}`
-                    })
-                });
-                if (res.user_name) {
-                    item.last_status_updated_by = res.user_name;
+                for (const sid of targetIds) {
+                    const res = await apiFetch('/api/styles/update-cell', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            style_id: sid,
+                            field: 'status',
+                            value: newStatus,
+                            reason: `Aşama: ${prevStatus} ➔ ${newStatus}`
+                        })
+                    });
+                    if (res && res.user_name) {
+                        item.last_status_updated_by = res.user_name;
+                        const found = styles.value.find(s => s.id === sid);
+                        if (found) found.last_status_updated_by = res.user_name;
+                    }
+
+                    if (isSevk) {
+                        await apiFetch('/api/styles/update-cell', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                style_id: sid,
+                                field: 'shipping_sample_sent',
+                                value: 1,
+                                reason: 'Sevk Edildi seçildiği için Yükleme otomatik işaretlendi'
+                            })
+                        });
+                    } else if (wasSevk || item.shipping_sample_sent === 0) {
+                        await apiFetch('/api/styles/update-cell', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                style_id: sid,
+                                field: 'shipping_sample_sent',
+                                value: 0,
+                                reason: 'Aşama Sevk Edildi dışına alındığı için Yükleme sıfırlandı'
+                            })
+                        });
+                    }
                 }
+
                 item.audit_count = (item.audit_count || 0) + 1;
-
-                if (isSevk) {
-                    await apiFetch('/api/styles/update-cell', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            style_id: item.id,
-                            field: 'shipping_sample_sent',
-                            value: 1,
-                            reason: 'Sevk Edildi seçildiği için Yükleme otomatik işaretlendi'
-                        })
-                    });
-                } else if (wasSevk || item.shipping_sample_sent === 0) {
-                    await apiFetch('/api/styles/update-cell', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            style_id: item.id,
-                            field: 'shipping_sample_sent',
-                            value: 0,
-                            reason: 'Aşama Sevk Edildi dışına alındığı için Yükleme sıfırlandı'
-                        })
-                    });
-                }
-
                 loadStats();
             } catch (err) {
                 alert('Durum güncelleme hatası: ' + err.message);
                 item.status = prevStatus;
+                targetIds.forEach(sid => {
+                    const found = styles.value.find(s => s.id === sid);
+                    if (found) found.status = prevStatus;
+                });
             }
         };
 
@@ -4499,6 +4534,28 @@ window.__texflowApp = createApp({
                 }
             });
 
+            // Gelen Kumaş 1 & 2 Toplamları
+            let fabricRecM1 = 0;
+            let fabricRecKg1 = 0;
+            let fabricRecM2 = 0;
+            let fabricRecKg2 = 0;
+
+            list.forEach(item => {
+                const unit1 = item.fabric_order_unit || 'M';
+                const recVal1 = parseFloat(String(item.fabric_received_meters || '0').replace(',', '.')) || 0;
+                if (recVal1 > 0) {
+                    if (unit1 === 'KG') fabricRecKg1 += recVal1;
+                    else fabricRecM1 += recVal1;
+                }
+
+                const unit2 = item.fabric_order_unit_2 || 'M';
+                const recVal2 = parseFloat(String(item.fabric_received_meters_2 || '0').replace(',', '.')) || 0;
+                if (recVal2 > 0) {
+                    if (unit2 === 'KG') fabricRecKg2 += recVal2;
+                    else fabricRecM2 += recVal2;
+                }
+            });
+
             // Format Fabric 1
             const f1Parts = [];
             if (fabricM1 > 0) f1Parts.push(`${Math.round(fabricM1 * 10) / 10} M`);
@@ -4509,6 +4566,16 @@ window.__texflowApp = createApp({
             if (fabricM2 > 0) f2Parts.push(`${Math.round(fabricM2 * 10) / 10} M`);
             if (fabricKg2 > 0) f2Parts.push(`${Math.round(fabricKg2 * 10) / 10} KG`);
 
+            // Format Gelen Kumaş 1
+            const fRec1Parts = [];
+            if (fabricRecM1 > 0) fRec1Parts.push(`${Math.round(fabricRecM1 * 10) / 10} M`);
+            if (fabricRecKg1 > 0) fRec1Parts.push(`${Math.round(fabricRecKg1 * 10) / 10} KG`);
+
+            // Format Gelen Kumaş 2
+            const fRec2Parts = [];
+            if (fabricRecM2 > 0) fRec2Parts.push(`${Math.round(fabricRecM2 * 10) / 10} M`);
+            if (fabricKg2 > 0) fRec2Parts.push(`${Math.round(fabricKg2 * 10) / 10} KG`);
+
             return {
                 totalQuantity: totalQty,
                 cutTotalQuantity: cutTotalQty,
@@ -4516,6 +4583,8 @@ window.__texflowApp = createApp({
                 sizes: sizeSums,
                 fabric1TotalStr: f1Parts.join(' + ') || '-',
                 fabric2TotalStr: f2Parts.join(' + ') || '-',
+                fabricRec1TotalStr: fRec1Parts.join(' + ') || '-',
+                fabricRec2TotalStr: fRec2Parts.join(' + ') || '-',
                 count: list.length
             };
         });
@@ -4586,9 +4655,10 @@ window.__texflowApp = createApp({
         const uploadStyleImageBlob = async (targetStyle, blob, slot = 1) => {
             if (!targetStyle || !blob) return;
             const ext = (blob.type && blob.type.includes('jpeg')) ? 'jpg' : 'png';
-            const file = (blob instanceof File) ? blob : new File([blob], `screenshot_${Date.now()}.${ext}`, { type: blob.type || 'image/png' });
+            const filename = `screenshot_${Date.now()}.${ext}`;
+            const file = (blob instanceof File) ? blob : new File([blob], filename, { type: blob.type || 'image/png' });
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', file, filename);
             
             try {
                 const res = await apiFetch(`/api/styles/${targetStyle.id}/image?slot=${slot}`, {
@@ -4661,7 +4731,15 @@ window.__texflowApp = createApp({
 
             if (!imageFile) return;
 
-            // 1. Durum: Model Fotoğrafı Modalı açıkken yapıştırma
+            // 1. Durum: Numune & PPS Görsel Modalı açıkken yapıştırma
+            if (sampleImageModalOpen.value && activeSampleItem.value) {
+                e.preventDefault();
+                const slot = sampleImageSlot.value || 1;
+                await uploadSampleImageBlob(activeSampleItem.value, imageFile, slot);
+                return;
+            }
+
+            // 2. Durum: Model Fotoğrafı Modalı açıkken yapıştırma
             if (imageModalOpen.value && selectedStyle.value) {
                 e.preventDefault();
                 const slot = activeImageSlot.value || 1;
@@ -4669,7 +4747,17 @@ window.__texflowApp = createApp({
                 return;
             }
 
-            // 2. Durum: Çarşaf listesinde bir satır seçiliyken ve bir metin kutusuna yazmıyorken yapıştırma
+            // 3. Durum: Numune tablosunda tek bir satır seçiliyken (metin kutusu dışındayken) yapıştırma
+            if (!isTextInput && activeTab.value === 'samples' && selectedSampleIds.value && selectedSampleIds.value.length === 1) {
+                const targetSample = samplesList.value.find(s => s.id === selectedSampleIds.value[0]);
+                if (targetSample) {
+                    e.preventDefault();
+                    await uploadSampleImageBlob(targetSample, imageFile, 1);
+                    return;
+                }
+            }
+
+            // 4. Durum: Çarşaf listesinde bir satır seçiliyken ve bir metin kutusuna yazmıyorken yapıştırma
             if (!isTextInput && selectedStyle.value && activeTab.value === 'carsaf') {
                 e.preventDefault();
                 const styleName = `${selectedStyle.value.style_no || 'Model'} (${selectedStyle.value.color_name || ''})`;
@@ -12466,8 +12554,9 @@ window.__texflowApp = createApp({
         const sampleActiveFilterCol = ref(null);
         const sampleFilterSearch = ref('');
         const sampleColumnFilters = ref({});
-        const sampleSortCol = ref('id');
-        const sampleSortDir = ref('desc');
+        const sampleSortCol = ref('');
+        const sampleSortDir = ref('asc');
+        const draggedSampleRowId = ref(null);
         const selectedSampleIds = ref([]);
         const sampleImageModalOpen = ref(false);
         const activeSampleItem = ref(null);
@@ -12484,7 +12573,7 @@ window.__texflowApp = createApp({
 
         // SÜTUN TANIMLARI
         const defaultSampleColumns = [
-            { key: 'select', title: '', width: 38, sortable: false, filterable: false, isFixed: true },
+            { key: 'select', title: '', width: 88, sortable: false, filterable: false, isFixed: true },
             { key: 'image', title: 'Görsel', width: 68, sortable: false, filterable: false, align: 'center', isFixed: true },
             { key: 'sample_type', title: 'Numune Türü', width: 125, sortable: true, filterable: true, align: 'center' },
             { key: 'season', title: 'Sezon', width: 110, sortable: true, filterable: true, align: 'left' },
@@ -12494,12 +12583,84 @@ window.__texflowApp = createApp({
             { key: 'request_date', title: 'Talep Tarihi', width: 105, sortable: true, filterable: true, align: 'center' },
             { key: 'delivery_date', title: 'Teslim Tarihi', width: 115, sortable: true, filterable: true, align: 'center' },
             { key: 'quantity_sizes', title: 'Adet ve Beden', width: 155, sortable: false, filterable: true, align: 'left' },
-            { key: 'fabric_info', title: 'Kumaşı', width: 175, sortable: true, filterable: true, align: 'left' },
+            { key: 'fabric_info', title: 'Kumaş 1', width: 175, sortable: true, filterable: true, align: 'left' },
+            { key: 'fabric_info_2', title: 'Kumaş 2', width: 175, sortable: true, filterable: true, align: 'left' },
+            { key: 'fabric_info_3', title: 'Kumaş 3', width: 175, sortable: true, filterable: true, align: 'left' },
             { key: 'unit_meters', title: 'Birim Metraj', width: 100, sortable: true, filterable: false, align: 'center' },
-            { key: 'critique', title: 'Kritik / Not', width: 145, sortable: false, filterable: false, align: 'left' },
+            { key: 'critique', title: 'Kritik', width: 140, sortable: false, filterable: false, align: 'left' },
+            { key: 'notes', title: 'Notlar', width: 140, sortable: false, filterable: false, align: 'left' },
             { key: 'stage', title: 'İşlem Aşaması', width: 145, sortable: true, filterable: true, align: 'center' },
-            { key: 'actions', title: 'İşlem', width: 195, sortable: false, filterable: false, align: 'center', isFixedRight: true }
+            { key: 'cost', title: 'Maliyet', width: 95, sortable: false, filterable: false, align: 'center', isFixedRight: true },
+            { key: 'talep', title: 'İşlem', width: 115, sortable: false, filterable: false, align: 'center', isFixedRight: true },
+            { key: 'delete', title: 'Sil', width: 55, sortable: false, filterable: false, align: 'center', isFixedRight: true }
         ];
+
+        const sampleActiveFabricCount = ref(parseInt(localStorage.getItem('sample_active_fabric_count') || '1'));
+
+        const addSampleFabricColumn = () => {
+            if (sampleActiveFabricCount.value < 3) {
+                sampleActiveFabricCount.value++;
+                localStorage.setItem('sample_active_fabric_count', sampleActiveFabricCount.value.toString());
+                syncSampleFabricColumns();
+                showToast(`Kumaş ${sampleActiveFabricCount.value} sütunu eklendi.`, 'success');
+                refreshIcons();
+            }
+        };
+
+        const removeSampleFabricColumn = (targetSlot) => {
+            if (typeof targetSlot === 'number') {
+                if (targetSlot === 2 && sampleActiveFabricCount.value === 3) {
+                    sampleActiveFabricCount.value = 2;
+                } else if (targetSlot <= sampleActiveFabricCount.value) {
+                    sampleActiveFabricCount.value = targetSlot - 1;
+                }
+            } else if (sampleActiveFabricCount.value > 1) {
+                sampleActiveFabricCount.value--;
+            }
+            if (sampleActiveFabricCount.value < 1) sampleActiveFabricCount.value = 1;
+            localStorage.setItem('sample_active_fabric_count', sampleActiveFabricCount.value.toString());
+            syncSampleFabricColumns();
+            showToast('Kumaş sütunu kaldırıldı.', 'info');
+            refreshIcons();
+        };
+
+        const syncSampleFabricColumns = () => {
+            let order = [...sampleColOrder.value];
+            if (!order.includes('fabric_info')) {
+                order.splice(10, 0, 'fabric_info');
+            }
+            const idx1 = order.indexOf('fabric_info');
+
+            if (sampleActiveFabricCount.value >= 2) {
+                if (!order.includes('fabric_info_2')) {
+                    order.splice(idx1 + 1, 0, 'fabric_info_2');
+                }
+            } else {
+                order = order.filter(k => k !== 'fabric_info_2');
+            }
+
+            const idx2 = order.indexOf('fabric_info_2');
+            const insertIdx3 = idx2 !== -1 ? idx2 + 1 : idx1 + 1;
+            if (sampleActiveFabricCount.value >= 3) {
+                if (!order.includes('fabric_info_3')) {
+                    order.splice(insertIdx3, 0, 'fabric_info_3');
+                }
+            } else {
+                order = order.filter(k => k !== 'fabric_info_3');
+            }
+
+            if (!order.includes('notes')) {
+                const cIdx = order.indexOf('critique');
+                if (cIdx !== -1) order.splice(cIdx + 1, 0, 'notes');
+                else order.push('notes');
+            }
+
+            order = order.filter(k => k !== 'delete');
+            order.push('delete');
+
+            sampleColOrder.value = order;
+            localStorage.setItem('sample_col_order', JSON.stringify(order));
+        };
 
         const sampleColOrder = ref([]);
         const sampleColWidths = ref({});
@@ -12508,23 +12669,33 @@ window.__texflowApp = createApp({
             const savedOrder = localStorage.getItem('sample_col_order');
             if (savedOrder) {
                 try {
-                    const parsed = JSON.parse(savedOrder);
+                    let parsed = JSON.parse(savedOrder);
                     if (Array.isArray(parsed) && parsed.length) {
+                        const actIdx = parsed.indexOf('actions');
+                        if (actIdx !== -1) {
+                            parsed.splice(actIdx, 1, 'cost', 'talep', 'delete');
+                        }
                         const validKeys = defaultSampleColumns.map(c => c.key);
-                        const filtered = parsed.filter(k => validKeys.includes(k));
+                        let filtered = parsed.filter(k => validKeys.includes(k));
+                        if (!filtered.includes('notes')) {
+                            const crIdx = filtered.indexOf('critique');
+                            if (crIdx !== -1) filtered.splice(crIdx + 1, 0, 'notes');
+                        }
                         validKeys.forEach(k => {
                             if (!filtered.includes(k)) {
-                                const actIdx = filtered.indexOf('actions');
-                                if (actIdx !== -1) filtered.splice(actIdx, 0, k);
-                                else filtered.push(k);
+                                filtered.push(k);
                             }
                         });
+                        filtered = filtered.filter(k => k !== 'delete');
+                        filtered.push('delete');
                         sampleColOrder.value = filtered;
+                        syncSampleFabricColumns();
                         return;
                     }
                 } catch (e) {}
             }
             sampleColOrder.value = defaultSampleColumns.map(c => c.key);
+            syncSampleFabricColumns();
         };
 
         const initSampleColWidths = () => {
@@ -12549,6 +12720,9 @@ window.__texflowApp = createApp({
                     if (sampleColWidths.value[k]) {
                         col.width = sampleColWidths.value[k];
                     }
+                    if (col.key === 'select') {
+                        col.width = Math.max(88, col.width || 88);
+                    }
                     cols.push(col);
                 }
             });
@@ -12557,7 +12731,7 @@ window.__texflowApp = createApp({
 
         let sampleDraggedCol = null;
         const onSampleColDragStart = (col, e) => {
-            if (col.key === 'select' || col.key === 'actions') return;
+            if (col.key === 'select' || col.key === 'actions' || col.key === 'cost' || col.key === 'talep' || col.key === 'delete') return;
             sampleDraggedCol = col.key;
             if (e.dataTransfer) {
                 e.dataTransfer.effectAllowed = 'move';
@@ -12566,13 +12740,13 @@ window.__texflowApp = createApp({
         };
 
         const onSampleColDragOver = (col, e) => {
-            if (col.key === 'select' || col.key === 'actions') return;
+            if (col.key === 'select' || col.key === 'actions' || col.key === 'cost' || col.key === 'talep' || col.key === 'delete') return;
             if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
         };
 
         const onSampleColDrop = (targetCol, e) => {
             if (!sampleDraggedCol || sampleDraggedCol === targetCol.key) return;
-            if (targetCol.key === 'select' || targetCol.key === 'actions') return;
+            if (targetCol.key === 'select' || targetCol.key === 'actions' || targetCol.key === 'cost' || targetCol.key === 'talep' || targetCol.key === 'delete') return;
 
             const order = [...sampleColOrder.value];
             const fromIdx = order.indexOf(sampleDraggedCol);
@@ -12618,13 +12792,16 @@ window.__texflowApp = createApp({
         // FABRICTAG KUMAŞ ENTEGRASYONU
         const sampleFabricModalOpen = ref(false);
         const activeSampleFabricItem = ref(null);
+        const activeSampleFabricSlot = ref(1);
         const sampleFabricSearch = ref('');
         const sampleFabricsList = ref([]);
         const sampleFabricLoading = ref(false);
 
-        const openSampleFabricModal = (sample) => {
+        const openSampleFabricModal = (sample, slot = 1) => {
             activeSampleFabricItem.value = sample;
-            sampleFabricSearch.value = sample.fabric_info || '';
+            activeSampleFabricSlot.value = slot || 1;
+            const currentVal = slot === 3 ? sample.fabric_info_3 : (slot === 2 ? sample.fabric_info_2 : sample.fabric_info);
+            sampleFabricSearch.value = currentVal || '';
             sampleFabricModalOpen.value = true;
             searchSampleFabrics();
             refreshIcons();
@@ -12657,51 +12834,220 @@ window.__texflowApp = createApp({
             }
         };
 
+        const buildFabricSummaryClean = (fabric) => {
+            if (!fabric) return '';
+            const line1 = buildFabricFormattedName(fabric);
+            const line2 = formatCompositionAbbr(fabric.composition || '');
+            let widthStr = '';
+            let weightStr = '';
+            const cleanW = extractCleanDimension(fabric.width);
+            if (cleanW) widthStr = `${cleanW} CM`;
+            const cleanG = extractCleanDimension(fabric.weight);
+            if (cleanG) weightStr = `${cleanG} GRM2`;
+            const line3 = (widthStr && weightStr) ? `${widthStr} • ${weightStr}` : (widthStr || weightStr || '');
+            return [line1, line2, line3].filter(Boolean).join(' • ');
+        };
+
+        const cleanSampleFabricString = (raw) => {
+            if (!raw) return '';
+            return String(raw)
+                .replace(/(Kumaşçı|Kumasci|Kalite Adı|Kalite Adi|Kalite|Varyant|Renk|En|Karışım|Karisim|Kumaş|Kumas):\s*/gi, '')
+                .trim();
+        };
+
+        const getSampleFabricDetail = (sample, slot = 1) => {
+            if (!sample) return null;
+            return slot === 3 ? sample.fabric_detail_3 : (slot === 2 ? sample.fabric_detail_2 : sample.fabric_detail);
+        };
+        const getSampleFabricRaw = (sample, slot = 1) => {
+            if (!sample) return '';
+            return slot === 3 ? sample.fabric_info_3 : (slot === 2 ? sample.fabric_info_2 : sample.fabric_info);
+        };
+        const getSampleFabricId = (sample, slot = 1) => {
+            if (!sample) return null;
+            return slot === 3 ? sample.fabrictag_id_3 : (slot === 2 ? sample.fabrictag_id_2 : sample.fabrictag_id);
+        };
+
+        const getSampleFabricParsed = (sample, slot = 1) => {
+            if (!sample) return { line1: '', line2: '', line3: '', tooltip: '' };
+            if (!sample._fabCache) sample._fabCache = {};
+            const raw = getSampleFabricRaw(sample, slot);
+            const id = getSampleFabricId(sample, slot);
+            const fd = getSampleFabricDetail(sample, slot);
+            const key = `${slot}_${id || ''}_${raw || ''}`;
+            if (sample._fabCache[key]) return sample._fabCache[key];
+
+            let l1 = '';
+            let l2 = '';
+            let l3 = '';
+
+            if (fd) {
+                l1 = buildFabricFormattedName(fd);
+                if (fd.composition) l2 = formatCompositionAbbr(fd.composition);
+                let widthStr = '';
+                let weightStr = '';
+                const cleanW = extractCleanDimension(fd.width);
+                if (cleanW) widthStr = `${cleanW} CM`;
+                const cleanG = extractCleanDimension(fd.weight);
+                if (cleanG) weightStr = `${cleanG} GRM2`;
+                l3 = (widthStr && weightStr) ? `${widthStr} • ${weightStr}` : (widthStr || weightStr || '');
+            } else if (raw) {
+                const cleaned = cleanSampleFabricString(raw);
+                const parts = cleaned.split(/\s*•\s*|\s{3,}/);
+                l1 = parts[0] || '';
+                l2 = parts.length > 1 ? formatCompositionAbbr(parts[1]) : '';
+                l3 = parts.length > 2 ? parts.slice(2).join(' • ') : '';
+            }
+
+            const tip = [l1, l2, l3].filter(Boolean).join('\n') || raw || '';
+            const res = { line1: l1, line2: l2, line3: l3, tooltip: tip };
+            sample._fabCache[key] = res;
+            return res;
+        };
+
+        const getSampleFabricLine1 = (sample, slot = 1) => getSampleFabricParsed(sample, slot).line1;
+        const getSampleFabricLine2 = (sample, slot = 1) => getSampleFabricParsed(sample, slot).line2;
+        const getSampleFabricLine3 = (sample, slot = 1) => getSampleFabricParsed(sample, slot).line3;
+        const getSampleFabricTooltip = (sample, slot = 1) => getSampleFabricParsed(sample, slot).tooltip;
+
         const assignSampleFabric = async (fabric) => {
             if (!activeSampleFabricItem.value || !fabric) return;
-            const parts = [
-                fabric.company_name ? `Kumaşçı: ${fabric.company_name}` : '',
-                fabric.quality_code ? `Kalite: ${fabric.quality_code}` : '',
-                fabric.quality_name ? `Kalite Adı: ${fabric.quality_name}` : '',
-                fabric.design_code ? `Varyant: ${fabric.design_code}` : '',
-                fabric.color ? `Renk: ${fabric.color}` : '',
-                fabric.width ? `En: ${fabric.width}` : '',
-                fabric.composition ? `Karışım: ${fabric.composition}` : ''
-            ].filter(Boolean);
-            const displayTitle = parts.join('   ');
+            const displayTitle = buildFabricSummaryClean(fabric);
+            const slot = activeSampleFabricSlot.value || 1;
+            const infoField = slot === 3 ? 'fabric_info_3' : (slot === 2 ? 'fabric_info_2' : 'fabric_info');
+            const idField = slot === 3 ? 'fabrictag_id_3' : (slot === 2 ? 'fabrictag_id_2' : 'fabrictag_id');
+            const detailField = slot === 3 ? 'fabric_detail_3' : (slot === 2 ? 'fabric_detail_2' : 'fabric_detail');
             
-            activeSampleFabricItem.value.fabric_info = displayTitle;
-            activeSampleFabricItem.value.fabrictag_id = fabric.id;
-            activeSampleFabricItem.value.fabric_detail = fabric;
+            activeSampleFabricItem.value[infoField] = displayTitle;
+            activeSampleFabricItem.value[idField] = fabric.id;
+            activeSampleFabricItem.value[detailField] = fabric;
+            activeSampleFabricItem.value._fabCache = null;
 
             try {
                 await apiFetch(`/api/samples/${activeSampleFabricItem.value.id}/update-cell`, {
                     method: 'POST',
-                    body: JSON.stringify({ field: 'fabric_info', value: displayTitle })
+                    body: JSON.stringify({ field: infoField, value: displayTitle })
                 });
                 await apiFetch(`/api/samples/${activeSampleFabricItem.value.id}/update-cell`, {
                     method: 'POST',
-                    body: JSON.stringify({ field: 'fabrictag_id', value: fabric.id })
+                    body: JSON.stringify({ field: idField, value: fabric.id })
                 });
-                showToast(`FabricTag kumaşı atandı: ${fabric.quality_name || fabric.quality_code || fabric.company_name}`, 'success');
+                const l1 = buildFabricFormattedName(fabric);
+                showToast(`FabricTag Kumaş ${slot} atandı: ${l1 || fabric.quality_name || fabric.company_name}`, 'success');
             } catch (err) {
                 showToast('Kumaş atanırken bir hata oluştu.', 'error');
             }
             sampleFabricModalOpen.value = false;
         };
 
-        const clearSampleFabricLink = async (sample) => {
-            sample.fabrictag_id = null;
+        const clearSampleFabricLink = async (sample, slot = 1) => {
+            const idField = slot === 3 ? 'fabrictag_id_3' : (slot === 2 ? 'fabrictag_id_2' : 'fabrictag_id');
+            const detailField = slot === 3 ? 'fabric_detail_3' : (slot === 2 ? 'fabric_detail_2' : 'fabric_detail');
+            sample[idField] = null;
+            sample[detailField] = null;
+            sample._fabCache = null;
             try {
                 await apiFetch(`/api/samples/${sample.id}/update-cell`, {
                     method: 'POST',
-                    body: JSON.stringify({ field: 'fabrictag_id', value: null })
+                    body: JSON.stringify({ field: idField, value: null })
                 });
-                showToast('FabricTag bağlantısı kaldırıldı.', 'info');
+                showToast(`FabricTag Kumaş ${slot} bağlantısı kaldırıldı.`, 'info');
             } catch (err) {}
+            refreshIcons();
         };
 
-        // KRİTİK / NOTLAR MODALI (WORD ÖZELLİKLİ MODERN AÇILIR PENCERE)
+        // GÖRSEL SIĞDIRMA VE SATIR YER DEĞİŞTİRME FONKSİYONLARI
+        const setSampleImageFit = async (sample, fit) => {
+            if (!sample) return;
+            sample.image_fit = fit;
+            try {
+                await apiFetch(`/api/samples/${sample.id}/update-cell`, {
+                    method: 'POST',
+                    body: JSON.stringify({ field: 'image_fit', value: fit })
+                });
+                showToast(fit === 'cover' ? 'Görsel: Enden Sığdırıldı' : 'Görsel: Boydan Sığdırıldı', 'info');
+            } catch (e) {}
+        };
+
+        const moveSampleRow = async (sample, direction) => {
+            if (!sample) return;
+            sampleSortCol.value = '';
+            const list = [...samplesList.value];
+            const currentIndex = list.findIndex(s => s.id === sample.id);
+            if (currentIndex === -1) return;
+            const targetIndex = currentIndex + direction;
+            if (targetIndex < 0 || targetIndex >= list.length) return;
+            
+            const temp = list[currentIndex];
+            list[currentIndex] = list[targetIndex];
+            list[targetIndex] = temp;
+            list.forEach((s, idx) => { s.display_order = idx; });
+            samplesList.value = list;
+            
+            const ids = list.map(s => s.id);
+            localStorage.setItem('sample_row_order', JSON.stringify(ids));
+            try {
+                await apiFetch('/api/samples/reorder', {
+                    method: 'POST',
+                    body: JSON.stringify({ sample_ids: ids })
+                });
+                showToast('Satır sırası güncellendi.', 'success');
+            } catch (e) {
+                showToast('Satır sırası kaydedilemedi.', 'error');
+            }
+        };
+
+        const onSampleRowDragStart = (sample, e) => {
+            if (!sample) return;
+            draggedSampleRowId.value = sample.id;
+            if (e && e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(sample.id));
+            }
+        };
+        const onSampleRowDragOver = (e) => {
+            if (draggedSampleRowId.value) {
+                if (e) {
+                    e.preventDefault();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                }
+            }
+        };
+        const onSampleRowDrop = async (targetSample, e) => {
+            if (e) e.preventDefault();
+            let sourceId = draggedSampleRowId.value;
+            if (!sourceId && e && e.dataTransfer) {
+                const dt = e.dataTransfer.getData('text/plain');
+                if (dt) sourceId = parseInt(dt);
+            }
+            draggedSampleRowId.value = null;
+            if (!sourceId || !targetSample || sourceId === targetSample.id) return;
+            
+            sampleSortCol.value = '';
+            const list = [...samplesList.value];
+            const fromIdx = list.findIndex(s => s.id === sourceId);
+            const toIdx = list.findIndex(s => s.id === targetSample.id);
+            if (fromIdx === -1 || toIdx === -1) return;
+            
+            const [moved] = list.splice(fromIdx, 1);
+            list.splice(toIdx, 0, moved);
+            list.forEach((s, idx) => { s.display_order = idx; });
+            samplesList.value = list;
+            
+            const ids = list.map(s => s.id);
+            localStorage.setItem('sample_row_order', JSON.stringify(ids));
+            try {
+                await apiFetch('/api/samples/reorder', {
+                    method: 'POST',
+                    body: JSON.stringify({ sample_ids: ids })
+                });
+                showToast('Satır sırası güncellendi.', 'success');
+            } catch (e) {
+                showToast('Satır sırası kaydedilemedi.', 'error');
+            }
+        };
+
+                // KRİTİK / NOTLAR MODALI (WORD ÖZELLİKLİ MODERN AÇILIR PENCERE)
         const sampleCritiqueModalOpen = ref(false);
         const activeSampleCritiqueItem = ref(null);
         const sampleCritiqueText = ref('');
@@ -12722,7 +13068,25 @@ window.__texflowApp = createApp({
             } catch (e) {}
         };
 
+        const isStyleCritique = ref(false);
+
+        const openStyleCritiqueModal = (item) => {
+            isStyleCritique.value = true;
+            activeSampleCritiqueItem.value = item;
+            sampleCritiqueText.value = item.critique || '';
+            sampleCritiqueModalOpen.value = true;
+            nextTick(() => {
+                const editor = document.getElementById('sample-critique-editor');
+                if (editor) {
+                    editor.innerHTML = sampleCritiqueText.value;
+                    editor.focus();
+                }
+                refreshIcons();
+            });
+        };
+
         const openSampleCritiqueModal = (sample) => {
+            isStyleCritique.value = false;
             activeSampleCritiqueItem.value = sample;
             sampleCritiqueText.value = sample.critique || sample.notes || '';
             sampleCritiqueModalOpen.value = true;
@@ -12739,6 +13103,7 @@ window.__texflowApp = createApp({
         const closeSampleCritiqueModal = () => {
             sampleCritiqueModalOpen.value = false;
             activeSampleCritiqueItem.value = null;
+            isStyleCritique.value = false;
         };
 
         const saveSampleCritique = async () => {
@@ -12749,16 +13114,351 @@ window.__texflowApp = createApp({
                 val = '';
             }
             activeSampleCritiqueItem.value.critique = val;
-            try {
-                await apiFetch(`/api/samples/${activeSampleCritiqueItem.value.id}/update-cell`, {
-                    method: 'POST',
-                    body: JSON.stringify({ field: 'critique', value: val })
-                });
-                showToast('Numune kritiği kaydedildi.', 'success');
-            } catch (err) {
-                showToast('Kritik kaydedilirken hata oluştu.', 'error');
+            if (isStyleCritique.value) {
+                try {
+                    await updateCellWithLog(activeSampleCritiqueItem.value.id, 'critique', val, 'Kritik Güncellendi');
+                    showToast('Model kritiği başarıyla kaydedildi.', 'success');
+                } catch (err) {
+                    showToast('Kritik kaydedilirken hata oluştu.', 'error');
+                }
+            } else {
+                try {
+                    await apiFetch(`/api/samples/${activeSampleCritiqueItem.value.id}/update-cell`, {
+                        method: 'POST',
+                        body: JSON.stringify({ field: 'critique', value: val })
+                    });
+                    showToast('Numune kritiği kaydedildi.', 'success');
+                } catch (err) {
+                    showToast('Kritik kaydedilirken hata oluştu.', 'error');
+                }
             }
             sampleCritiqueModalOpen.value = false;
+        };
+
+        // =========================================================================
+        // ÇARŞAF LİSTESİ MODEL İMALAT VE TAKİP FORMU (FORM YAZDIR & A4 YAZDIRMA)
+        // =========================================================================
+        const styleFormModalOpen = ref(false);
+        const activeStyleFormItem = ref(null);
+        const styleFormOrientation = ref(localStorage.getItem('style_form_orientation') || 'portrait');
+        const styleFormPageFit = ref(localStorage.getItem('style_form_page_fit') || 'single');
+        const styleFormScale = ref(parseInt(localStorage.getItem('style_form_scale') || '100'));
+        const styleFormChannelMode = ref('as_is'); // 'as_is' (Kanallar ile Olduğu Gibi) | 'consolidated' (Kanalları Topla)
+
+        const setStyleFormChannelMode = (mode) => {
+            styleFormChannelMode.value = mode;
+            nextTick(() => {
+                refreshIcons();
+            });
+        };
+
+        const getStyleFormRelatedRows = (item) => {
+            if (!item) return [];
+            // 1. If item already has consolidated ids from carsafConsolidateChannels
+            if (item.ids && item.ids.length > 1 && Array.isArray(styles.value) && styles.value.length > 0) {
+                const idSet = new Set(item.ids);
+                const matched = styles.value.filter(s => idSet.has(s.id));
+                if (matched.length > 1) return matched;
+            }
+            // 2. Search across styles.value for items sharing style_no, customer_name/brand, and color
+            if (Array.isArray(styles.value) && styles.value.length > 0) {
+                const cust = (item.customer_name || item.brand || '').trim().toLowerCase();
+                const styleNo = (item.style_no || '').trim().toLowerCase();
+                const colorDisp = (typeof getDisplayColor === 'function' ? getDisplayColor(item) : (item.color_name || item.color_code || '')).trim().toLowerCase();
+                
+                if (styleNo || colorDisp) {
+                    const matched = styles.value.filter(s => {
+                        const sCust = (s.customer_name || s.brand || '').trim().toLowerCase();
+                        const sStyleNo = (s.style_no || '').trim().toLowerCase();
+                        const sColorDisp = (typeof getDisplayColor === 'function' ? getDisplayColor(s) : (s.color_name || s.color_code || '')).trim().toLowerCase();
+                        return sCust === cust && sStyleNo === styleNo && sColorDisp === colorDisp;
+                    });
+                    if (matched.length > 1) return matched;
+                }
+            }
+            return [item];
+        };
+
+        const hasStyleFormChannels = computed(() => {
+            if (!activeStyleFormItem.value) return false;
+            const related = getStyleFormRelatedRows(activeStyleFormItem.value);
+            if (related.length > 1) return true;
+            if (activeStyleFormItem.value._isConsolidated && (activeStyleFormItem.value._consolidatedCount > 1 || activeStyleFormItem.value.channelsSet?.size > 1)) {
+                return true;
+            }
+            return false;
+        });
+
+        const extractRowSizeMap = (row) => {
+            const map = {};
+            if (!row) return map;
+            if (row.size_map && typeof row.size_map === 'object' && Object.keys(row.size_map).length > 0) {
+                for (const [k, v] of Object.entries(row.size_map)) {
+                    map[k] = parseFloat(v) || 0;
+                }
+            } else if (Array.isArray(row.sizes) && row.sizes.length > 0) {
+                row.sizes.forEach(sz => {
+                    if (sz && sz.size_name) {
+                        map[sz.size_name] = parseFloat(sz.quantity) || 0;
+                    }
+                });
+            }
+            return map;
+        };
+
+        const styleFormAllSizesHeader = computed(() => {
+            if (!activeStyleFormItem.value) return [];
+            const related = getStyleFormRelatedRows(activeStyleFormItem.value);
+            const szSet = new Set();
+            related.forEach(r => {
+                const sm = extractRowSizeMap(r);
+                Object.keys(sm).forEach(k => szSet.add(k));
+            });
+            if (szSet.size === 0) {
+                return getStyleFormSortedSizes(activeStyleFormItem.value).map(s => s.size_name);
+            }
+            return sortSizesList(Array.from(szSet));
+        });
+
+        const styleFormChannelBreakdownRows = computed(() => {
+            if (!activeStyleFormItem.value) return [];
+            const related = getStyleFormRelatedRows(activeStyleFormItem.value);
+            return related.map((r, idx) => {
+                const sm = extractRowSizeMap(r);
+                let total = parseFloat(r.total_quantity) || 0;
+                if (!total) {
+                    total = Object.values(sm).reduce((acc, v) => acc + v, 0);
+                }
+                const chName = (r.channel || '').toString().trim() || `Kanal ${idx + 1}`;
+                const poNo = (r.po_number || '').toString().trim() || '-';
+                return {
+                    id: r.id || `ch_${idx}`,
+                    channel: chName,
+                    po_number: poNo,
+                    size_map: sm,
+                    total_quantity: total,
+                    raw: r
+                };
+            });
+        });
+
+        const styleFormTotalPerSize = computed(() => {
+            const totals = {};
+            const rows = styleFormChannelBreakdownRows.value;
+            rows.forEach(r => {
+                for (const [sz, qty] of Object.entries(r.size_map)) {
+                    totals[sz] = (totals[sz] || 0) + (parseFloat(qty) || 0);
+                }
+            });
+            return totals;
+        });
+
+        const currentStyleFormTotalQty = computed(() => {
+            if (!activeStyleFormItem.value) return 0;
+            if (hasStyleFormChannels.value) {
+                return styleFormChannelBreakdownRows.value.reduce((acc, r) => acc + (parseFloat(r.total_quantity) || 0), 0);
+            }
+            return parseFloat(activeStyleFormItem.value.total_quantity) || 0;
+        });
+
+        const currentStyleFormPoNumber = computed(() => {
+            if (!activeStyleFormItem.value) return '';
+            if (hasStyleFormChannels.value) {
+                const pos = [...new Set(styleFormChannelBreakdownRows.value.map(r => r.po_number).filter(p => p && p !== '-'))];
+                if (pos.length > 0) return pos.join(', ');
+            }
+            return activeStyleFormItem.value.po_number || '-';
+        });
+
+        const currentStyleFormChannelText = computed(() => {
+            if (!activeStyleFormItem.value) return '';
+            if (hasStyleFormChannels.value) {
+                const chs = [...new Set(styleFormChannelBreakdownRows.value.map(r => r.channel).filter(Boolean))];
+                if (chs.length > 0) return chs.join(', ');
+            }
+            return activeStyleFormItem.value.channel || '';
+        });
+
+        const styleFormSizesList = computed(() => {
+            if (!activeStyleFormItem.value) return [];
+            if (!hasStyleFormChannels.value) {
+                return getStyleFormSortedSizes(activeStyleFormItem.value);
+            }
+            const headerSizes = styleFormAllSizesHeader.value;
+            const totals = styleFormTotalPerSize.value;
+            return headerSizes.map(sz => ({
+                size_name: sz,
+                quantity: totals[sz] || 0
+            }));
+        });
+
+        const openStyleFormModal = (item) => {
+            activeStyleFormItem.value = item;
+            if (carsafConsolidateChannels && carsafConsolidateChannels.value) {
+                styleFormChannelMode.value = 'consolidated';
+            } else {
+                styleFormChannelMode.value = 'as_is';
+            }
+            styleFormModalOpen.value = true;
+            nextTick(() => {
+                refreshIcons();
+            });
+        };
+
+        const closeStyleFormModal = () => {
+            styleFormModalOpen.value = false;
+            activeStyleFormItem.value = null;
+        };
+
+        const setStyleFormOrientation = (o) => {
+            styleFormOrientation.value = o;
+            localStorage.setItem('style_form_orientation', o);
+        };
+
+        const setStyleFormPageFit = (f) => {
+            styleFormPageFit.value = f;
+            localStorage.setItem('style_form_page_fit', f);
+        };
+
+        const setStyleFormScale = (s) => {
+            const val = Math.min(130, Math.max(70, s));
+            styleFormScale.value = val;
+            localStorage.setItem('style_form_scale', String(val));
+        };
+
+        const getStyleFormFabricClean = (item, slot = 1) => {
+            if (!item) return '';
+            const isSlot2 = (slot === 2);
+            const company = isSlot2 ? (item.fabric_company_2 || '') : (item.fabric_company_1 || '');
+            const qualityName = isSlot2 ? (item.fabric_quality_name_2 || '') : (item.fabric_quality_name_1 || '');
+            const qualityCode = isSlot2 ? (item.fabric_quality_code_2 || '') : (item.fabric_quality_code_1 || '');
+            const composition = isSlot2 ? (item.fabric_composition_2 || '') : (item.fabric_composition || '');
+            const width = isSlot2 ? (item.fabrictag_width_2 || item.fabric_width_2 || '') : (item.fabrictag_width || item.fabric_width || '');
+            const weight = isSlot2 ? (item.fabrictag_weight_2 || item.fabric_weight_2 || '') : (item.fabrictag_weight || item.fabric_weight || '');
+            const rawArticle = isSlot2 ? (item.fabric_article_2 || '') : (item.fabric_article || '');
+            
+            const parts = [];
+            if (company && company.trim()) parts.push(company.trim());
+            
+            let qualityCombo = '';
+            if (qualityName && qualityName.trim()) qualityCombo += qualityName.trim();
+            if (qualityCode && qualityCode.trim()) qualityCombo += ` (${qualityCode.trim()})`;
+            if (!qualityCombo && rawArticle && rawArticle.trim()) qualityCombo = rawArticle.trim();
+            if (qualityCombo) parts.push(qualityCombo);
+            
+            if (composition && composition.trim()) parts.push(composition.trim());
+            if (width && String(width).trim()) parts.push(`${String(width).trim()} cm`);
+            if (weight && String(weight).trim()) parts.push(`${String(weight).trim()} gr/m²`);
+            
+            return parts.join('   -   ');
+        };
+
+        const getStyleFormSortedSizes = (item) => {
+            if (!item) return [];
+            let list = [];
+            if (item.sizes && item.sizes.length > 0) {
+                list = item.sizes.map(s => ({ size_name: s.size_name, quantity: s.quantity || 0 }));
+            } else if (item.size_map && Object.keys(item.size_map).length > 0) {
+                list = Object.entries(item.size_map).map(([k, v]) => ({ size_name: k, quantity: parseInt(v) || 0 }));
+            }
+            if (!list.length) return [];
+            const sizeNames = list.map(x => x.size_name);
+            const sortedNames = sortSizesList(sizeNames);
+            const map = new Map(list.map(x => [x.size_name, x.quantity]));
+            return sortedNames.map(name => ({
+                size_name: name,
+                quantity: map.get(name) || 0
+            }));
+        };
+
+        const printStyleForm = () => {
+            let printStyle = document.getElementById('style-form-dynamic-print-style');
+            if (!printStyle) {
+                printStyle = document.createElement('style');
+                printStyle.id = 'style-form-dynamic-print-style';
+                document.head.appendChild(printStyle);
+            }
+            const orient = styleFormOrientation.value || 'portrait';
+            const isSingle = (styleFormPageFit.value === 'single');
+            const scaleFactor = (styleFormScale.value || 100) / 100;
+            
+            printStyle.innerHTML = `
+                @media print {
+                    @page {
+                        size: A4 ${orient} !important;
+                        margin: 6mm 6mm !important;
+                    }
+                    html, body {
+                        background: #ffffff !important;
+                        color: #000000 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        overflow: visible !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    body * {
+                        visibility: hidden !important;
+                    }
+                    #style-form-modal,
+                    #style-form-modal *,
+                    #style-form-print-area,
+                    #style-form-print-area * {
+                        visibility: visible !important;
+                    }
+                    #style-form-modal {
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        height: auto !important;
+                        min-height: auto !important;
+                        max-height: none !important;
+                        overflow: visible !important;
+                        background: transparent !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                        display: block !important;
+                        z-index: 999999 !important;
+                    }
+                    #style-form-modal .style-form-modal-container {
+                        max-width: 100% !important;
+                        width: 100% !important;
+                        border: none !important;
+                        box-shadow: none !important;
+                        background: transparent !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                        border-radius: 0 !important;
+                        overflow: visible !important;
+                    }
+                    #style-form-modal .no-print,
+                    #style-form-modal .no-print * {
+                        display: none !important;
+                        visibility: hidden !important;
+                    }
+                    #style-form-print-area {
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        margin: 0 auto !important;
+                        padding: 0 !important;
+                        background: transparent !important;
+                        color: #000000 !important;
+                        box-shadow: none !important;
+                        border: none !important;
+                        transform: scale(${scaleFactor}) !important;
+                        transform-origin: top center !important;
+                        ${isSingle ? 'page-break-inside: avoid !important; break-inside: avoid !important;' : ''}
+                    }
+                    #style-form-print-area * {
+                        color: #000000 !important;
+                    }
+                }
+            `;
+            setTimeout(() => {
+                window.print();
+            }, 150);
         };
 
         const getShortCritique = (text) => {
@@ -12922,7 +13622,26 @@ window.__texflowApp = createApp({
             samplesLoading.value = true;
             try {
                 const res = await apiFetch('/api/samples');
-                samplesList.value = Array.isArray(res) ? res : [];
+                let arr = Array.isArray(res) ? res : [];
+                const savedOrder = localStorage.getItem('sample_row_order');
+                if (savedOrder) {
+                    try {
+                        const orderIds = JSON.parse(savedOrder);
+                        if (Array.isArray(orderIds) && orderIds.length) {
+                            const idMap = new Map(arr.map(s => [s.id, s]));
+                            const sorted = [];
+                            orderIds.forEach(id => {
+                                if (idMap.has(id)) {
+                                    sorted.push(idMap.get(id));
+                                    idMap.delete(id);
+                                }
+                            });
+                            idMap.forEach(s => sorted.push(s));
+                            arr = sorted;
+                        }
+                    } catch (e) {}
+                }
+                samplesList.value = arr;
             } catch (err) {
                 samplesList.value = [];
             } finally {
@@ -12959,7 +13678,7 @@ window.__texflowApp = createApp({
                     refreshIcons();
                 }
             } catch (err) {
-                showToast('Numune satırı eklenirken hata oluştu.', 'error');
+                showToast(err.message || 'Numune satırı eklenirken hata oluştu.', 'error');
             }
         };
 
@@ -12967,6 +13686,7 @@ window.__texflowApp = createApp({
             const valStr = value !== undefined && value !== null ? String(value).trim() : '';
             if (sample[field] === valStr) return;
             sample[field] = valStr;
+            sample._fabCache = null;
             try {
                 await apiFetch(`/api/samples/${sample.id}/update-cell`, {
                     method: 'POST',
@@ -12977,15 +13697,40 @@ window.__texflowApp = createApp({
             }
         };
 
-        const updateSampleSmartDate = (sample, field, event) => {
-            let raw = (event.target ? event.target.value : event) || '';
-            let formatted = smartFormatDateInput(raw);
-            if (formatted) {
-                sample[field] = formatted;
-                updateSampleCell(sample, field, formatted);
-                if (event.target) event.target.value = formatted;
-            } else {
-                updateSampleCell(sample, field, raw);
+        const updateSampleSmartDate = async (sample, field, eventOrVal) => {
+            let raw = (eventOrVal && eventOrVal.target ? eventOrVal.target.value : eventOrVal) || '';
+            let formatted = parseSmartDate(raw);
+            const finalVal = formatted || raw;
+            await updateSampleCell(sample, field, finalVal);
+            if (eventOrVal && eventOrVal.target) {
+                eventOrVal.target.value = sample[field] || '';
+            }
+        };
+
+        const onSampleDatePickerChange = async (sample, field, event) => {
+            const iso = event.target.value;
+            if (!iso) {
+                await updateSampleCell(sample, field, '');
+                return;
+            }
+            const parts = iso.split('-');
+            if (parts.length === 3) {
+                const trDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+                await updateSampleCell(sample, field, trDate);
+            }
+        };
+
+        const onStyleDatePickerChange = async (item, field, event) => {
+            const iso = event.target.value;
+            if (!iso) {
+                await updateCellWithLog(item.id, field, '', 'Tarih Temizlendi');
+                return;
+            }
+            const parts = iso.split('-');
+            if (parts.length === 3) {
+                const trDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+                item[field] = trDate;
+                await updateCellWithLog(item.id, field, trDate, 'Tarih Güncellendi');
             }
         };
 
@@ -13010,32 +13755,76 @@ window.__texflowApp = createApp({
             refreshIcons();
         };
 
-        const uploadSampleImageSlot = async (event, slot = 1) => {
-            const file = event.target.files && event.target.files[0];
-            if (!file || !activeSampleItem.value) return;
-
+        const uploadSampleImageBlob = async (targetSample, blob, slot = 1) => {
+            if (!targetSample || !blob) return;
+            const ext = (blob.type && blob.type.includes('jpeg')) ? 'jpg' : 'png';
+            const filename = `sample_${targetSample.id}_s${slot}_${Date.now()}.${ext}`;
+            const file = (blob instanceof File) ? blob : new File([blob], filename, { type: blob.type || 'image/png' });
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', file, filename);
 
             try {
-                const res = await apiFetch(`/api/samples/${activeSampleItem.value.id}/image?slot=${slot}`, {
+                const res = await apiFetch(`/api/samples/${targetSample.id}/image?slot=${slot}`, {
                     method: 'POST',
                     body: formData
                 });
                 if (res && res.image_url) {
-                    if (slot === 1) activeSampleItem.value.image_url = res.image_url;
-                    else activeSampleItem.value.image_url_2 = res.image_url;
-                    
-                    const itemInList = samplesList.value.find(s => s.id === activeSampleItem.value.id);
+                    if (slot === 1) targetSample.image_url = res.image_url;
+                    else targetSample.image_url_2 = res.image_url;
+
+                    const itemInList = samplesList.value.find(s => s.id === targetSample.id);
                     if (itemInList) {
                         if (slot === 1) itemInList.image_url = res.image_url;
                         else itemInList.image_url_2 = res.image_url;
                     }
-                    showToast(`Numune görseli ${slot} yüklendi.`, 'success');
+                    showToast(`Numune ${slot}. görseli yüklendi.`, 'success');
+                    refreshIcons();
                 }
             } catch (err) {
-                showToast('Görsel yüklenirken hata oluştu.', 'error');
+                showToast('Görsel yüklenirken hata oluştu: ' + (err.message || ''), 'error');
             }
+        };
+
+        const uploadSampleImageSlot = async (arg1, arg2) => {
+            let slot = 1;
+            let event = null;
+            if (typeof arg1 === 'number') {
+                slot = arg1;
+                event = arg2;
+            } else if (typeof arg2 === 'number') {
+                slot = arg2;
+                event = arg1;
+            } else {
+                event = arg1;
+            }
+            const file = event && event.target && event.target.files && event.target.files[0];
+            if (!file || !activeSampleItem.value) return;
+            await uploadSampleImageBlob(activeSampleItem.value, file, slot);
+        };
+
+        const pasteSampleImageSlot = async (slot = 1) => {
+            sampleImageSlot.value = slot;
+            if (!activeSampleItem.value) return;
+
+            try {
+                if (navigator.clipboard && navigator.clipboard.read) {
+                    const items = await navigator.clipboard.read();
+                    for (const item of items) {
+                        const imageType = item.types.find(type => type.startsWith('image/'));
+                        if (imageType) {
+                            const blob = await item.getType(imageType);
+                            await uploadSampleImageBlob(activeSampleItem.value, blob, slot);
+                            return;
+                        }
+                    }
+                    showToast('Panoda resim bulunamadı. Win + Shift + S ile ekran görüntüsü aldıktan sonra tekrar deneyin veya Ctrl + V yapın.', 'info');
+                    return;
+                }
+            } catch (err) {
+                console.warn('Clipboard read permission error:', err);
+            }
+
+            showToast('Panoya doğrudan erişim izni alınamadı. Lütfen klavyeden Ctrl + V tuşlarına basarak yapıştırınız.', 'info');
         };
 
         const deleteSampleImageSlot = async (slot = 1) => {
@@ -13089,7 +13878,12 @@ window.__texflowApp = createApp({
         // SIRALAMA VE SÜZGEÇ (FILTER) MANTIĞI
         const toggleSampleSort = (colKey) => {
             if (sampleSortCol.value === colKey) {
-                sampleSortDir.value = sampleSortDir.value === 'asc' ? 'desc' : 'asc';
+                if (sampleSortDir.value === 'asc') {
+                    sampleSortDir.value = 'desc';
+                } else {
+                    sampleSortCol.value = '';
+                    sampleSortDir.value = 'asc';
+                }
             } else {
                 sampleSortCol.value = colKey;
                 sampleSortDir.value = 'asc';
@@ -13292,24 +14086,29 @@ window.__texflowApp = createApp({
         const samplePrintOrientation = ref('landscape');
         const samplePrintScale = ref(100);
 
+        const samplePrintPageFit = ref(localStorage.getItem('sample_print_page_fit') || 'multi');
+        const samplePrintRowsPerPage = ref(parseInt(localStorage.getItem('sample_print_rows_per_page') || '0'));
+
         const defaultSamplePrintColWidths = {
-            index: 4,
-            image: 6,
-            sample_type: 9,
-            season: 8,
-            customer_name: 10,
-            style_no: 9,
-            style_name: 11,
-            request_date: 7,
-            delivery_date: 7,
+            index: 3,
+            image: 7,
+            sample_type: 7,
+            season: 6,
+            customer_name: 9,
+            style_no: 8,
+            style_name: 10,
+            request_date: 6,
+            delivery_date: 6,
             quantity_sizes: 8,
-            fabric_info: 9,
+            fabric_info: 10,
             unit_meters: 4,
             critique: 8,
+            notes: 8,
             stage: 6
         };
 
         const samplePrintColWidths = ref({ ...defaultSamplePrintColWidths });
+        const sampleWidthsDropdownOpen = ref(false);
 
         const initSamplePrintColWidths = () => {
             const saved = localStorage.getItem('sample_print_col_widths');
@@ -13337,17 +14136,18 @@ window.__texflowApp = createApp({
                 request_date: 'Talep T.',
                 delivery_date: 'Teslim T.',
                 quantity_sizes: 'Adet & Beden',
-                fabric_info: 'Kumaşı',
+                fabric_info: 'Kumaş 1',
+                fabric_info_2: 'Kumaş 2',
+                fabric_info_3: 'Kumaş 3',
                 unit_meters: 'Metraj',
-                critique: 'Kritik / Not',
+                critique: 'Kritik',
+                notes: 'Notlar',
                 stage: 'Aşama'
             };
             return titles[key] || key;
         };
 
-        const sampleWidthsDropdownOpen = ref(false);
-
-        const adjustSamplePrintColWidth = (colKey, delta) => {
+                const adjustSamplePrintColWidth = (colKey, delta) => {
             const current = parseFloat(samplePrintColWidths.value[colKey]) || defaultSamplePrintColWidths[colKey] || 8;
             const updated = Math.max(2, Math.min(45, Math.round((current + delta) * 10) / 10));
             samplePrintColWidths.value[colKey] = updated;
@@ -13434,6 +14234,130 @@ window.__texflowApp = createApp({
             showToast('Yazdırma sütun genişlikleri varsayılana sıfırlandı.', 'info');
         };
 
+        const setSamplePrintPageFit = (mode) => {
+            samplePrintPageFit.value = mode;
+            localStorage.setItem('sample_print_page_fit', mode);
+            if (mode === 'single') {
+                const count = samplePrintRows.value.length;
+                if (count <= 6) samplePrintScale.value = 100;
+                else if (count <= 10) samplePrintScale.value = 90;
+                else if (count <= 15) samplePrintScale.value = 80;
+                else if (count <= 20) samplePrintScale.value = 75;
+                else samplePrintScale.value = 70;
+            } else {
+                const saved = parseInt(localStorage.getItem('sample_print_scale')) || 100;
+                samplePrintScale.value = saved;
+            }
+            updateSamplePrintStyle();
+            refreshIcons();
+        };
+
+        const setSamplePrintRowsPerPage = (val) => {
+            samplePrintRowsPerPage.value = val;
+            localStorage.setItem('sample_print_rows_per_page', val.toString());
+            refreshIcons();
+        };
+
+        const samplePrintRows = computed(() => {
+            const selected = selectedSampleIds.value;
+            const all = filteredSamplesList.value || [];
+            if (selected && selected.length) {
+                return all.filter(s => selected.includes(s.id));
+            }
+            return all;
+        });
+
+        const samplePrintPages = computed(() => {
+            const rows = samplePrintRows.value || [];
+            const rpp = parseInt(samplePrintRowsPerPage.value) || 0;
+            if (rpp <= 0 || samplePrintPageFit.value === 'single') {
+                return [rows];
+            }
+            const pages = [];
+            for (let i = 0; i < rows.length; i += rpp) {
+                pages.push(rows.slice(i, i + rpp));
+            }
+            return pages.length ? pages : [[]];
+        });
+
+        const getSamplePrintFabric = (sample) => {
+            if (!sample) return '-';
+            // 1. FabricTag objesi varsa: Başlıksız, karışımsız, ağırlıksız temiz isim
+            if (sample.fabric_detail) {
+                const fd = sample.fabric_detail;
+                const comp = (fd.company_name || '').trim();
+                const qName = isInvalidOrKodsuz(fd.quality_name) ? '' : String(fd.quality_name).trim();
+                const qCode = isInvalidOrKodsuz(fd.quality_code) ? '' : String(fd.quality_code).trim();
+                const qual = [qName, qCode ? `(${qCode})` : ''].filter(Boolean).join(' ');
+                const parts = [];
+                if (comp) parts.push(comp);
+                if (qual) parts.push(qual);
+                if (fd.design_code && !qual.includes(fd.design_code)) parts.push(fd.design_code);
+                else if (fd.color && !qual.includes(fd.color)) parts.push(fd.color);
+                return parts.join(' - ') || comp || qName || qCode || '-';
+            }
+
+            // 2. Ham metin varsa
+            let raw = (sample.fabric_info || '').trim();
+            if (!raw) return '-';
+
+            // Eğer bullet formatındaysa ("SOYLU - İnterlok • %100 Pamuk • 160 CM"): Sadece ilk parçayı al
+            if (raw.includes('•')) {
+                const first = raw.split('•')[0].trim();
+                if (first) return first;
+            }
+
+            // Token-based label splitting (Kumaşçı, Kalite Adı, Kalite, Varyant, Renk, En, Karışım vb.)
+            const labelRegex = /(?:Kumaşçı|Kumaş|Kumasci|Kumas|Kalite\s*Adı|Kalite\s*Adi|Kalite|Varyant|Renk|En|Karışım|Karisim|Gramaj|Ağırlık|Agirlik)\s*:\s*/gi;
+            const matches = [];
+            let m;
+            while ((m = labelRegex.exec(raw)) !== null) {
+                matches.push({
+                    label: m[0].split(':')[0].trim().toLowerCase(),
+                    start: m.index,
+                    end: labelRegex.lastIndex
+                });
+            }
+
+            if (matches.length > 0) {
+                const dict = {};
+                for (let i = 0; i < matches.length; i++) {
+                    const cur = matches[i];
+                    const valEnd = (i + 1 < matches.length) ? matches[i + 1].start : raw.length;
+                    dict[cur.label] = raw.substring(cur.end, valEnd).trim();
+                }
+
+                const supplier = dict['kumaşçı'] || dict['kumaş'] || dict['kumasci'] || dict['kumas'] || '';
+                const quality = dict['kalite adı'] || dict['kalite adi'] || dict['kalite'] || '';
+                const variant = dict['varyant'] || '';
+                const color = dict['renk'] || '';
+
+                const parts = [];
+                if (supplier) parts.push(supplier);
+                if (quality) parts.push(quality);
+                if (variant) parts.push(variant);
+                else if (color) parts.push(color);
+
+                if (parts.length > 0) {
+                    return parts.join(' - ');
+                }
+            }
+
+            // Fallback: Başlıkları ve ölçüleri buda
+            let cleaned = raw
+                .replace(/(?:Karışım|Karisim)\s*:\s*[^ \t\n\r]+/gi, '')
+                .replace(/(?:En|Ağırlık|Gramaj|Agirlik)\s*:\s*[^ \t\n\r]+/gi, '')
+                .replace(/(?:Kumaşçı|Kumasci|Kalite\s*Adı|Kalite\s*Adi|Kalite|Varyant|Renk|Kumaş|Kumas)\s*:\s*/gi, '')
+                .replace(/\d+\s*%\s*[A-ZÇĞİÖŞÜ]+/gi, '')
+                .replace(/\d+%\s*[A-Z]+/gi, '')
+                .replace(/\d+\s*CM/gi, '')
+                .replace(/\d+\s*GR(?:M2)?/gi, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            return cleaned || '-';
+        };
+
         const updateSamplePrintStyle = () => {
             let el = document.getElementById('sample-dynamic-print-css');
             if (!el) {
@@ -13443,21 +14367,90 @@ window.__texflowApp = createApp({
             }
             const orient = samplePrintOrientation.value === 'portrait' ? 'portrait' : 'landscape';
             const scale = (samplePrintScale.value || 100) / 100;
+            const isSingle = samplePrintPageFit.value === 'single';
+
             el.innerHTML = `
                 @media print {
                     @page {
                         size: A4 ${orient};
                         margin: 6mm;
                     }
-                    body {
+                    html, body {
+                        background: #ffffff !important;
+                        color: #000000 !important;
                         margin: 0 !important;
                         padding: 0 !important;
+                        overflow: visible !important;
                     }
+                    #sample-print-modal {
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        height: auto !important;
+                        min-height: auto !important;
+                        background: #ffffff !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                        z-index: 999999 !important;
+                        overflow: visible !important;
+                        display: block !important;
+                    }
+                    #sample-print-modal > div {
+                        background: #ffffff !important;
+                        border: none !important;
+                        box-shadow: none !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        height: auto !important;
+                        overflow: visible !important;
+                    }
+                    #sample-print-modal .no-print,
+                    .no-print {
+                        display: none !important;
+                    }
+                    .sample-print-sheet,
                     #sample-print-sheet {
-                        zoom: ${scale} !important;
                         width: 100% !important;
                         max-width: 100% !important;
                         box-sizing: border-box !important;
+                        padding: 0 !important;
+                        margin: 0 0 4mm 0 !important;
+                        box-shadow: none !important;
+                        border: none !important;
+                        background: #ffffff !important;
+                        zoom: ${scale} !important;
+                    }
+                    .page-break-after-always {
+                        page-break-after: always !important;
+                        break-after: page !important;
+                    }
+                    ${isSingle ? `
+                    .sample-print-sheet, #sample-print-sheet {
+                        page-break-after: avoid !important;
+                        break-after: avoid !important;
+                    }
+                    table {
+                        page-break-after: avoid !important;
+                        break-after: avoid !important;
+                    }
+                    ` : ''}
+                    table {
+                        width: 100% !important;
+                        table-layout: fixed !important;
+                        page-break-inside: auto !important;
+                    }
+                    thead {
+                        display: table-header-group !important;
+                    }
+                    tr {
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
+                    }
+                    td, th {
+                        word-break: break-word !important;
                     }
                 }
             `;
@@ -13468,6 +14461,10 @@ window.__texflowApp = createApp({
             if (savedOrient) samplePrintOrientation.value = savedOrient;
             const savedScale = localStorage.getItem('sample_print_scale');
             if (savedScale) samplePrintScale.value = parseInt(savedScale) || 100;
+            const savedFit = localStorage.getItem('sample_print_page_fit');
+            if (savedFit) samplePrintPageFit.value = savedFit;
+            const savedRpp = localStorage.getItem('sample_print_rows_per_page');
+            if (savedRpp) samplePrintRowsPerPage.value = parseInt(savedRpp) || 0;
             initSamplePrintColWidths();
             samplePrintModalOpen.value = true;
             updateSamplePrintStyle();
@@ -13485,15 +14482,6 @@ window.__texflowApp = createApp({
             localStorage.setItem('sample_print_scale', scale.toString());
             updateSamplePrintStyle();
         };
-
-        const samplePrintRows = computed(() => {
-            const selected = selectedSampleIds.value;
-            const all = filteredSamplesList.value || [];
-            if (selected && selected.length) {
-                return all.filter(s => selected.includes(s.id));
-            }
-            return all;
-        });
 
         const printSampleList = () => {
             updateSamplePrintStyle();
@@ -13838,9 +14826,13 @@ return {
             addNewSampleRow,
             updateSampleCell,
             updateSampleSmartDate,
+            onSampleDatePickerChange,
+            onStyleDatePickerChange,
             deleteSampleRow,
             openSampleImageModal,
             uploadSampleImageSlot,
+            uploadSampleImageBlob,
+            pasteSampleImageSlot,
             deleteSampleImageSlot,
             createCostFromSample,
             toggleSampleSort,
@@ -13869,7 +14861,27 @@ return {
             setSamplePrintScale,
             printSampleList,
             exportSamplesExcel,
+            samplePrintPageFit,
+            setSamplePrintPageFit,
+            samplePrintRowsPerPage,
+            setSamplePrintRowsPerPage,
+            samplePrintPages,
+            getSamplePrintFabric,
             getSampleFilteredDistinctValues,
+            sampleActiveFabricCount,
+            addSampleFabricColumn,
+            removeSampleFabricColumn,
+            syncSampleFabricColumns,
+            activeSampleFabricSlot,
+            getSampleFabricId,
+            getSampleFabricRaw,
+            getSampleFabricDetail,
+            setSampleImageFit,
+            moveSampleRow,
+            draggedSampleRowId,
+            onSampleRowDragStart,
+            onSampleRowDragOver,
+            onSampleRowDrop,
             sampleFabricModalOpen,
             activeSampleFabricItem,
             sampleFabricSearch,
@@ -13881,15 +14893,46 @@ return {
             searchSampleFabrics,
             assignSampleFabric,
             clearSampleFabricLink,
+            buildFabricSummaryClean,
+            cleanSampleFabricString,
+            getSampleFabricLine1,
+            getSampleFabricLine2,
+            getSampleFabricLine3,
+            getSampleFabricTooltip,
             sampleCritiqueModalOpen,
             activeSampleCritiqueItem,
             sampleCritiqueText,
             execCritiqueCmd,
             insertCritiqueCustomBullet,
             openSampleCritiqueModal,
+            isStyleCritique,
+            openStyleCritiqueModal,
             closeSampleCritiqueModal,
             saveSampleCritique,
             getShortCritique,
+            styleFormModalOpen,
+            activeStyleFormItem,
+            styleFormOrientation,
+            styleFormPageFit,
+            styleFormScale,
+            styleFormChannelMode,
+            setStyleFormChannelMode,
+            hasStyleFormChannels,
+            styleFormAllSizesHeader,
+            styleFormChannelBreakdownRows,
+            styleFormTotalPerSize,
+            currentStyleFormTotalQty,
+            currentStyleFormPoNumber,
+            currentStyleFormChannelText,
+            styleFormSizesList,
+            openStyleFormModal,
+            closeStyleFormModal,
+            setStyleFormOrientation,
+            setStyleFormPageFit,
+            setStyleFormScale,
+            getStyleFormFabricClean,
+            getStyleFormSortedSizes,
+            printStyleForm,
             sampleTalepModalOpen,
             activeTalepSample,
             openSampleTalepModal,

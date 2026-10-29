@@ -343,6 +343,19 @@
             contain-intrinsic-size: 1px 38px;
         }
 
+        /* NUMUNE TAKİP VE MASTER TABLO DONANIM HIZLANDIRMASI (PÜRÜZSÜZ EŞZAMANLI KAYDIRMA) */
+        .numune-table-scroll-container {
+            will-change: scroll-position;
+            transform: translateZ(0);
+            -webkit-overflow-scrolling: touch;
+        }
+        .numune-table-scroll-container .master-table {
+            transform: translateZ(0);
+        }
+        .numune-table-scroll-container thead {
+            transform: translateZ(0);
+        }
+
         
         /* WORD STİLİ KRİTİK EDİTÖRÜ LİSTE VE MADDE İMLERİ */
         #sample-critique-editor ul,
@@ -406,7 +419,8 @@
             #free-cost-modal,
             #koli-etiket-print-modal,
             #sample-print-modal,
-            #sample-talep-modal {
+            #sample-talep-modal,
+            #style-form-modal {
                 position: absolute !important;
                 left: 0 !important;
                 top: 0 !important;
@@ -448,10 +462,16 @@
             #sample-print-modal *,
             #sample-print-sheet,
             #sample-print-sheet *,
+            .sample-print-sheet,
+            .sample-print-sheet *,
             
             #sample-talep-modal *,
             #sample-talep-sheet,
-            #sample-talep-sheet * {
+            #sample-talep-sheet *,
+            #style-form-modal,
+            #style-form-modal *,
+            #style-form-print-area,
+            #style-form-print-area * {
                 visibility: visible !important;
             }
             /* SAMPLE TALEP MODAL VE A4 SAYFASI YAZDIRMA */
@@ -509,6 +529,50 @@
                 padding-top: 3mm !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
+            }
+
+            /* ÇARŞAF LİSTESİ İMALAT FÖYÜ YAZDIRMA */
+            #style-form-modal .no-print,
+            #style-form-modal .no-print * {
+                display: none !important;
+                visibility: hidden !important;
+            }
+            #style-form-modal > div {
+                background: transparent !important;
+                border: none !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+                display: block !important;
+            }
+            #style-form-modal .overflow-y-auto {
+                background: transparent !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                display: block !important;
+            }
+            #style-form-print-area {
+                width: 100% !important;
+                max-width: 100% !important;
+                box-shadow: none !important;
+                border: none !important;
+                border-radius: 0 !important;
+                background: transparent !important;
+                color: black !important;
+                padding: 0 !important;
+                margin: 0 auto !important;
+                overflow: visible !important;
+                display: block !important;
             }
 
             #kumas-bilgi-print-modal > div:not(.no-print),
@@ -1712,10 +1776,11 @@
                         <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                     </button>
 
-                    <!-- SİPARİŞ YÜKLE DÜĞMESİ -->
-                    <button v-if="hasPermission('can_create_orders')"
+                    <!-- SİPARİŞ YÜKLE DÜĞMESİ (SADECE ÇARŞAF LİSTESİNDE GÖSTERİLİR) -->
+                    <button v-if="activeMenu === 'carsaf_liste' && hasPermission('can_create_orders')"
                             @click="activeMenu = 'siparis_yukle'" 
-                            class="h-9 flex items-center gap-1.5 btn-theme text-xs font-bold px-3.5 rounded-xl transition shadow-md cursor-pointer select-none">
+                            class="h-9 flex items-center gap-1.5 btn-theme text-xs font-bold px-3.5 rounded-xl transition shadow-md cursor-pointer select-none"
+                            title="Yeni sipariş yükleme ekranını aç">
                         <i data-lucide="file-up" class="w-4 h-4"></i>
                         <span class="hidden sm:inline">Sipariş Yükle</span>
                     </button>
@@ -2357,7 +2422,7 @@
                             <button id="btn-kumas-siparis"
                                     @click="openKumasSiparisModal"
                                     class="h-9 px-2.5 rounded-xl btn-theme text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none"
-                                    title="Planlama ve Sipariş Alındı Aşamasındaki Kumaş Sipariş Listesi">
+                                    title="Ekranda listelenen siparişlerin kumaş sipariş çizelgesini göster">
                                 <span>Kumaş</span>
                                 <span class="text-[9.5px] text-white/90 font-semibold">Sipariş</span>
                             </button>
@@ -2630,6 +2695,12 @@
                                             <div class="resizer" @mousedown.stop.prevent="startColumnResize(col, $event)"></div>
                                         </th>
 
+                                        <!-- Fixed Form Yazdır Column -->
+                                        <th style="width: 110px; min-width: 95px;" class="p-2 font-semibold text-center border-r align-middle whitespace-nowrap"
+                                            :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300'">
+                                            Form Yazdır
+                                        </th>
+
                                         <!-- Fixed Süreç ve Not Kayıt Column -->
                                         <th style="width: 120px; min-width: 100px;" class="p-2 font-semibold text-center align-middle whitespace-nowrap"
                                             :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300'">
@@ -2856,10 +2927,28 @@
                                                        class="w-full bg-white dark:bg-slate-900 border border-emerald-400 rounded px-1 py-1 text-xs font-mono text-center focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm">
                                             </template>
 
-                                            <!-- Kumaş Gelen Metraj 2 -->
+                                            <!-- Gelen Kumaş 1 -->
+                                            <template v-else-if="col.key === 'fabric_received_meters'">
+                                                <div class="flex items-center gap-1 text-center justify-center font-mono">
+                                                    <input v-model.number="newManualRow.fabric_received_meters" type="number" step="0.1" placeholder="0"
+                                                           class="w-full bg-white dark:bg-slate-900 border border-emerald-400 rounded px-1 py-1 text-xs text-center font-mono font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm">
+                                                    <span v-if="newManualRow.fabric_received_meters" class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0"
+                                                          :class="newManualRow.fabric_order_unit === 'KG' ? 'bg-cyan-500/20 text-cyan-500 border-cyan-500/30' : 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30'">
+                                                        {{ newManualRow.fabric_order_unit || 'M' }}
+                                                    </span>
+                                                </div>
+                                            </template>
+
+                                            <!-- Gelen Kumaş 2 -->
                                             <template v-else-if="col.key === 'fabric_received_meters_2'">
-                                                <input v-model.number="newManualRow.fabric_received_meters_2" type="number" step="0.1" placeholder="0 m"
-                                                       class="w-full bg-white dark:bg-slate-900 border border-emerald-400 rounded px-1 py-1 text-xs text-center font-mono font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm">
+                                                <div class="flex items-center gap-1 text-center justify-center font-mono">
+                                                    <input v-model.number="newManualRow.fabric_received_meters_2" type="number" step="0.1" placeholder="0"
+                                                           class="w-full bg-white dark:bg-slate-900 border border-emerald-400 rounded px-1 py-1 text-xs text-center font-mono font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm">
+                                                    <span v-if="newManualRow.fabric_received_meters_2" class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0"
+                                                          :class="newManualRow.fabric_order_unit_2 === 'KG' ? 'bg-cyan-500/20 text-cyan-500 border-cyan-500/30' : 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30'">
+                                                        {{ newManualRow.fabric_order_unit_2 || 'M' }}
+                                                    </span>
+                                                </div>
                                             </template>
 
                                             <!-- Sezon -->
@@ -2892,6 +2981,11 @@
                                                 <input v-model="newManualRow[col.key]"
                                                        class="w-full bg-white dark:bg-slate-900 border border-emerald-400 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm">
                                             </template>
+                                        </td>
+
+                                        <!-- Fixed Form Yazdır Boş Hücre (Manuel Giriş) -->
+                                        <td style="width: 110px; min-width: 95px;" class="p-1 text-center align-middle whitespace-nowrap bg-emerald-500/10 border-r">
+                                            <span class="text-[10px] text-slate-400 font-mono">-</span>
                                         </td>
 
                                         <!-- Fixed Kaydet / İptal Aksiyon Butonları -->
@@ -3053,17 +3147,26 @@
                                                 </span>
                                             </template>
 
-                                            <!-- 10. Teslimat Tarihi (AKILLI TARİH GİRİŞİ: 25.09 -> 25.09.2026) -->
+                                            <!-- 10. Teslimat Tarihi (AKILLI TARİH GİRİŞİ + Açılır Takvim) -->
                                             <template v-else-if="col.key === 'delivery_date'">
-                                                <div class="flex items-center justify-center text-center">
+                                                <div class="relative flex items-center justify-center group/date w-full text-center">
                                                     <input type="text"
                                                            data-is-date="true"
                                                            :value="item.delivery_date"
                                                            @change="updateSmartDate(item, 'delivery_date', $event.target.value)"
                                                            placeholder="GG.AA"
-                                                           class="w-full bg-transparent border-0 outline-none text-xs font-mono font-bold text-center hover:bg-black/5 dark:hover:bg-white/5 rounded px-1 py-0.5 transition"
+                                                           class="w-full bg-transparent border-0 outline-none text-xs font-mono font-bold text-center hover:bg-black/5 dark:hover:bg-white/5 rounded pl-1 pr-4 py-0.5 transition cursor-text"
                                                            :style="{ color: getDeliveryDateTextColor(item, col) }"
                                                            :title="getDeliveryDateTooltip(item)">
+                                                    <div class="absolute right-0.5 flex items-center justify-center w-3.5 h-3.5 pointer-events-none opacity-40 group-hover/date:opacity-100 transition">
+                                                        <i data-lucide="calendar" class="w-3 h-3 text-slate-400 group-hover/date:text-emerald-500"></i>
+                                                    </div>
+                                                    <input type="date"
+                                                           tabindex="-1"
+                                                           :value="formatDateForInput(item.delivery_date)"
+                                                           @change="onStyleDatePickerChange(item, 'delivery_date', $event)"
+                                                           class="absolute right-0.5 w-3.5 h-3.5 opacity-0 cursor-pointer z-10"
+                                                           title="Açılır Takvimden Seç">
                                                 </div>
                                             </template>
 
@@ -3211,6 +3314,24 @@
                                                        :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
                                             </template>
 
+                                            <!-- 16.0.1 KRİTİK SÜTUNU (NUMUNE TAKİP LİSTESİ İLE BİREBİR AYNI ÖZELLİKLERDE) -->
+                                            <template v-else-if="col.key === 'critique'">
+                                                <div class="flex items-center gap-1.5 cursor-pointer group/crit px-1 py-1 rounded hover:bg-slate-500/10 transition select-none"
+                                                     @click.stop="openStyleCritiqueModal(item)"
+                                                     title="Model kritiğini görüntüle veya düzenle">
+                                                    <div v-if="item.critique" class="flex items-center gap-1 min-w-0">
+                                                        <i data-lucide="message-square" class="w-3.5 h-3.5 text-indigo-500 shrink-0"></i>
+                                                        <span class="text-xs text-slate-700 dark:text-slate-200 font-medium truncate max-w-[125px]">
+                                                            {{ getShortCritique(item.critique) }}
+                                                        </span>
+                                                    </div>
+                                                    <div v-else class="text-[11px] text-slate-400 dark:text-slate-500 italic flex items-center gap-1 group-hover/crit:text-indigo-500">
+                                                        <i data-lucide="file-pen" class="w-3 h-3"></i>
+                                                        <span>+ Kritik</span>
+                                                    </div>
+                                                </div>
+                                            </template>
+
                                             <!-- 16.1 MALİYET HESAPLAMA DÜĞMESİ (SÜRÜKLE & BIRAK KOPYALAMA DESTEKLİ) -->
                                             <template v-else-if="col.key === 'cost_calculation'">
                                                 <div class="flex items-center justify-center relative"
@@ -3334,18 +3455,24 @@
                                             </template>
 
 
-                                            <!-- 17.3 KUMAŞ GELEN METRAJ (+/- %5 ÜZERİ KIRMIZI, +/- %0-%5 SARI UYARI - SİYAH YAZI - TAM GENİŞLİK) -->
+                                            <!-- 17.3 GELEN KUMAŞ 1 (+/- %5 ÜZERİ KIRMIZI, +/- %0-%5 SARI UYARI - M VEYA KG BİRİMİ) -->
                                             <template v-else-if="col.key === 'fabric_received_meters'">
-                                                <div class="w-full flex items-center justify-center text-center font-mono">
-                                                    <div class="w-full inline-flex items-center justify-center transition"
+                                                <div class="w-full flex items-center justify-center gap-1 text-center font-mono">
+                                                    <div class="w-full inline-flex items-center justify-center transition flex-1"
                                                          :class="getFabricReceivedMetersClass(item.fabric_ordered_meters, item.fabric_received_meters)">
-                                                        <input :value="item.fabric_received_meters || ''"
-                                                               @change="updateCellWithLog(item.id, 'fabric_received_meters', $event.target.value, 'Kumaş Gelen Metraj Güncellendi')"
-                                                               placeholder="0 m"
+                                                        <input :value="item.fabric_received_meters !== undefined && item.fabric_received_meters !== null ? item.fabric_received_meters : ''"
+                                                               @change="updateCellWithLog(item.id, 'fabric_received_meters', $event.target.value, 'Gelen Kumaş 1 Güncellendi')"
+                                                               placeholder="0"
                                                                type="number" step="0.1"
                                                                class="w-full bg-transparent border-0 outline-none text-center font-mono font-bold text-xs hover:bg-slate-500/10 rounded px-1 py-0.5 transition"
                                                                :class="getFabricReceivedMetersClass(item.fabric_ordered_meters, item.fabric_received_meters) ? '!text-black font-extrabold' : (isDarkMode ? 'text-white' : 'text-slate-900')">
                                                     </div>
+                                                    <span v-if="item.fabric_received_meters !== null && item.fabric_received_meters !== undefined && String(item.fabric_received_meters).trim() !== ''"
+                                                          class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border shrink-0 select-none"
+                                                          :class="(item.fabric_order_unit || 'M') === 'KG' ? 'bg-cyan-500/15 text-cyan-500 border-cyan-500/30' : 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'"
+                                                          title="Gelen Kumaş 1 Birimi (Kumaş Sipariş 1'den Alınır)">
+                                                        {{ item.fabric_order_unit || 'M' }}
+                                                    </span>
                                                 </div>
                                             </template>
 
@@ -3548,18 +3675,24 @@
                                                  </div>
                                              </template>
 
-                                             <!-- 18.10 KUMAŞ GELEN METRAJ 2 -->
+                                             <!-- 18.10 GELEN KUMAŞ 2 (+/- %5 ÜZERİ KIRMIZI, +/- %0-%5 SARI UYARI - M VEYA KG BİRİMİ) -->
                                              <template v-else-if="col.key === 'fabric_received_meters_2'">
-                                                 <div class="w-full flex items-center justify-center text-center font-mono">
-                                                     <div class="w-full inline-flex items-center justify-center transition"
+                                                 <div class="w-full flex items-center justify-center gap-1 text-center font-mono">
+                                                     <div class="w-full inline-flex items-center justify-center transition flex-1"
                                                           :class="getFabricReceivedMetersClass(item.fabric_ordered_meters_2, item.fabric_received_meters_2)">
-                                                         <input :value="item.fabric_received_meters_2 || ''"
-                                                                @change="updateCellWithLog(item.id, 'fabric_received_meters_2', $event.target.value, 'Kumaş Gelen Metraj 2 Güncellendi')"
-                                                                placeholder="0 m"
+                                                         <input :value="item.fabric_received_meters_2 !== undefined && item.fabric_received_meters_2 !== null ? item.fabric_received_meters_2 : ''"
+                                                                @change="updateCellWithLog(item.id, 'fabric_received_meters_2', $event.target.value, 'Gelen Kumaş 2 Güncellendi')"
+                                                                placeholder="0"
                                                                 type="number" step="0.1"
                                                                 class="w-full bg-transparent border-0 outline-none text-center font-mono font-bold text-xs hover:bg-slate-500/10 rounded px-1 py-0.5 transition"
                                                                 :class="getFabricReceivedMetersClass(item.fabric_ordered_meters_2, item.fabric_received_meters_2) ? '!text-black font-extrabold' : (isDarkMode ? 'text-white' : 'text-slate-900')">
                                                      </div>
+                                                     <span v-if="item.fabric_received_meters_2 !== null && item.fabric_received_meters_2 !== undefined && String(item.fabric_received_meters_2).trim() !== ''"
+                                                           class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border shrink-0 select-none"
+                                                           :class="(item.fabric_order_unit_2 || 'M') === 'KG' ? 'bg-cyan-500/15 text-cyan-500 border-cyan-500/30' : 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'"
+                                                           title="Gelen Kumaş 2 Birimi (Kumaş Sipariş 2'den Alınır)">
+                                                         {{ item.fabric_order_unit_2 || 'M' }}
+                                                     </span>
                                                  </div>
                                              </template>
 
@@ -3697,6 +3830,19 @@
                                             </template>
                                         </td>
 
+                                        <!-- Fixed Form Yazdır Column -->
+                                        <td class="p-2 text-center whitespace-nowrap align-middle border-r"
+                                            :class="getCellBgClass(item, false, false)"
+                                            style="width: 110px; min-width: 95px;">
+                                            <button type="button"
+                                                    @click.stop="openStyleFormModal(item)"
+                                                    class="px-2.5 py-1 rounded-lg border transition inline-flex items-center gap-1.5 text-xs font-bold hover:scale-105 shadow-sm bg-indigo-600/10 hover:bg-indigo-600 text-indigo-600 hover:text-white border-indigo-500/30 dark:bg-indigo-500/20 dark:text-indigo-300 dark:hover:bg-indigo-600 dark:hover:text-white cursor-pointer"
+                                                    title="Ürün / Model İmalat ve Takip Formunu Aç / Yazdır">
+                                                <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                                                <span>Form Yazdır</span>
+                                            </button>
+                                        </td>
+
                                         <!-- Fixed Süreç ve Not Kayıt Column -->
                                         <td class="p-2 text-center whitespace-nowrap align-middle">
                                             <div class="flex items-center justify-center gap-2">
@@ -3725,7 +3871,7 @@
                                     <tr v-if="displayedFilteredStyles.length < filteredStyles.length"
                                         class="transition-colors border-t border-b"
                                         :class="isDarkMode ? 'bg-slate-800/40 text-slate-300 border-slate-700' : 'bg-amber-50/80 text-slate-800 border-amber-200'">
-                                        <td :colspan="displayedColumns.length + 2" class="py-2 px-4 text-center">
+                                        <td :colspan="displayedColumns.length + 3" class="py-2 px-4 text-center">
                                             <div class="flex items-center justify-center gap-3 text-xs">
                                                 <span>
                                                     ⚡ <b>Hızlı Yükleme:</b> Toplam <b>{{ filteredStyles.length }}</b> siparişten ilk <b>{{ displayedFilteredStyles.length }}</b> tanesi listelendi. (Aşağı kaydırdıkça otomatik devamı yüklenir)
@@ -3739,7 +3885,7 @@
                                     </tr>
 
                                     <tr v-if="filteredStyles.length === 0" style="height: calc(100vh - 380px); min-height: 300px;">
-                                        <td :colspan="displayedColumns.length + 2" class="p-12 text-center text-slate-400 align-middle">
+                                        <td :colspan="displayedColumns.length + 3" class="p-12 text-center text-slate-400 align-middle">
                                             <div class="flex flex-col items-center justify-center">
                                                 <i data-lucide="search-x" class="w-10 h-10 mb-3 opacity-40"></i>
                                                 <div class="text-sm font-semibold">Seçilen süzgeç kriterlerine uygun model bulunamadı.</div>
@@ -3752,7 +3898,7 @@
                                     </tr>
                                     <!-- Boşluk Doldurucu Satır (Süzme Yapıldığında Footer'ın Daima En Altta Kalmasını Sağlar) -->
                                     <tr v-if="filteredStyles.length > 0" class="spacer-row pointer-events-none" style="height: auto;">
-                                        <td :colspan="displayedColumns.length + 2" class="border-0 p-0 m-0 bg-transparent"></td>
+                                        <td :colspan="displayedColumns.length + 3" class="border-0 p-0 m-0 bg-transparent"></td>
                                     </tr>
                                 </tbody>
 
@@ -3840,12 +3986,33 @@
                                                 </span>
                                             </template>
 
+                                            <!-- Gelen Kumaş 1 Toplamı -->
+                                            <template v-else-if="col.key === 'fabric_received_meters'">
+                                                <span class="font-mono font-bold text-xs text-center block text-emerald-600 dark:text-emerald-400" :title="'Toplam Gelen Kumaş 1: ' + (filteredTotals.fabricRec1TotalStr || '-')">
+                                                    {{ filteredTotals.fabricRec1TotalStr || '-' }}
+                                                </span>
+                                            </template>
+
+                                            <!-- Gelen Kumaş 2 Toplamı -->
+                                            <template v-else-if="col.key === 'fabric_received_meters_2'">
+                                                <span class="font-mono font-bold text-xs text-center block text-cyan-600 dark:text-cyan-400" :title="'Toplam Gelen Kumaş 2: ' + (filteredTotals.fabricRec2TotalStr || '-')">
+                                                    {{ filteredTotals.fabricRec2TotalStr || '-' }}
+                                                </span>
+                                            </template>
+
 
                                             <!-- G. Diğer Boş Sütunlar -->
                                             <template v-else>
                                                 <span class="text-slate-400 dark:text-slate-600 font-normal text-center block text-[10px]">-</span>
                                             </template>
 
+                                        </td>
+
+                                        <!-- Form Yazdır Kolonu Altı -->
+                                        <td class="p-2 text-center border-r whitespace-nowrap align-middle"
+                                            style="width: 110px; min-width: 95px;"
+                                            :class="isDarkMode ? 'border-slate-800 bg-slate-950 text-slate-400' : 'border-slate-300 bg-slate-200 text-slate-500'">
+                                            <span class="text-[10px] font-normal">-</span>
                                         </td>
 
                                         <!-- Süreç ve Not Kayıt Kolonu Altı -->
@@ -8124,7 +8291,7 @@
 
                 
                 <!-- ======================================================== -->
-                <!-- 9. NUMUNE & PPS TAKİBİ MODÜLÜ -->
+                <!-- 9. NUMUNE TAKİP LİSTESİ MODÜLÜ -->
                 <!-- ======================================================== -->
                 <section v-if="activeMenu === 'numune_takip'" class="space-y-4 w-full">
                     
@@ -8141,7 +8308,7 @@
                                 <div>
                                     <h2 class="text-base sm:text-lg font-black tracking-tight flex items-center gap-2"
                                         :class="isDarkMode ? 'text-white' : 'text-slate-900'">
-                                        Numune & PPS Takip Çarşafı
+                                        Numune Takip Listesi
                                     </h2>
                                     <div class="flex flex-wrap items-center gap-2 mt-1">
                                         <span class="text-[11px] font-bold px-2 py-0.5 rounded-full"
@@ -8198,6 +8365,17 @@
                                     <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                                 </button>
 
+                                <!-- Kumaş 2 / 3 Sütunu Ekle / Kaldır Butonları -->
+                                <button v-if="sampleActiveFabricCount < 3"
+                                        @click="addSampleFabricColumn"
+                                        type="button"
+                                        class="h-9 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition shadow-sm hover:brightness-110 active:scale-95 cursor-pointer select-none"
+                                        :class="isDarkMode ? 'bg-indigo-950/40 border-indigo-700/60 text-indigo-300 hover:text-white hover:bg-indigo-900/60' : 'bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-100'"
+                                        :title="'Tabloya Kumaş ' + (sampleActiveFabricCount + 1) + ' sütununu ekle'">
+                                    <i data-lucide="layers" class="w-4 h-4 text-indigo-500"></i>
+                                    <span>+ Kumaş {{ sampleActiveFabricCount + 1 }} Ekle</span>
+                                </button>
+
                                 <!-- Excel'e Aktar Butonu -->
                                 <button @click="exportSamplesExcel"
                                         class="h-9 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition shadow-sm hover:brightness-110 active:scale-95 cursor-pointer select-none"
@@ -8228,31 +8406,31 @@
                     </div>
 
                     <!-- MASTER NUMUNE & PPS TABLOSU (SAYFA SONUNA KADAR TAM UZANAN MODERN YAPI) -->
-                    <div class="border rounded-2xl overflow-hidden shadow-sm flex flex-col flex-1"
-                         style="height: calc(100vh - 215px); min-height: 480px;"
+                    <div class="rounded-2xl overflow-hidden border shadow-sm relative flex flex-col"
                          :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'">
                         
-                        <div class="overflow-auto custom-scrollbar flex-1 w-full h-full">
-                            <table style="table-layout: fixed; width: max-content; min-width: 100%;" class="text-left text-xs border-collapse master-table">
+                        <div class="overflow-auto custom-scrollbar numune-table-scroll-container"
+                             style="height: calc(100vh - 215px); min-height: 350px;">
+                            <table style="table-layout: fixed; width: max-content; min-width: 100%; min-height: 100%;" class="text-left text-xs border-collapse master-table">
                                 
                                 <!-- TABLE HEADER -->
-                                <thead class="sticky top-0 z-30 text-[11px] uppercase tracking-wider border-b select-none"
+                                <thead class="sticky top-0 z-30 text-[11px] uppercase tracking-wider border-b select-none opacity-100"
                                        :class="isDarkMode ? 'bg-slate-950 text-slate-300 border-slate-800' : 'bg-slate-100 text-slate-800 border-slate-300'">
-                                    <tr>
+                                    <tr :class="isDarkMode ? 'bg-slate-950' : 'bg-slate-100'">
                                         <!-- Her Sütun İçin Header -->
                                         <th v-for="col in displayedSampleColumns" :key="col.key"
-                                            :draggable="col.key !== 'select' && col.key !== 'actions'"
+                                            :draggable="col.key !== 'select' && col.key !== 'actions' && col.key !== 'cost' && col.key !== 'talep' && col.key !== 'delete'"
                                             @dragstart="onSampleColDragStart(col, $event)"
                                             @dragover.prevent="onSampleColDragOver(col, $event)"
                                             @drop="onSampleColDrop(col, $event)"
-                                            :style="{ width: (col.width || 100) + 'px', minWidth: '35px' }"
-                                            class="p-2 font-semibold relative transition-colors border-r align-middle"
+                                            :style="{ width: (col.width || 100) + 'px', minWidth: (col.width || 100) + 'px', maxWidth: (col.width || 100) + 'px' }"
+                                            class="p-2 font-semibold relative border-r align-middle select-none"
                                             :class="[
                                                 isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300',
                                                 col.align === 'center' ? 'text-center' : 'text-left',
-                                                (col.key !== 'select' && col.key !== 'actions') ? 'cursor-grab active:cursor-grabbing' : ''
+                                                (col.key !== 'select' && col.key !== 'actions' && col.key !== 'cost' && col.key !== 'talep' && col.key !== 'delete') ? 'cursor-grab active:cursor-grabbing' : ''
                                             ]"
-                                            :title="col.key !== 'select' && col.key !== 'actions' ? ('Sürükleyerek sırasını değiştirebilirsiniz: ' + col.title) : ''">
+                                            :title="(col.key !== 'select' && col.key !== 'actions' && col.key !== 'cost' && col.key !== 'talep' && col.key !== 'delete') ? ('Sürükleyerek sırasını değiştirebilirsiniz: ' + col.title) : ''">
                                             
                                             <!-- SEÇİM CHECKBOX SÜTUNU -->
                                             <template v-if="col.key === 'select'">
@@ -8278,6 +8456,15 @@
                                                     <!-- Sıralama Okları & Süzgeç Butonu -->
                                                     <div class="flex items-center gap-0.5 shrink-0">
                                                         
+                                                        <!-- Kumaş 2 / 3 Kolonu Hızlı Kaldırma (X) Butonu -->
+                                                        <button v-if="col.key === 'fabric_info_2' || col.key === 'fabric_info_3'"
+                                                                type="button"
+                                                                @click.stop="removeSampleFabricColumn(col.key === 'fabric_info_3' ? 3 : 2)"
+                                                                class="p-0.5 rounded hover:bg-rose-500 hover:text-white text-slate-400 transition cursor-pointer"
+                                                                :title="col.title + ' sütununu tablodan kaldır'">
+                                                            <i data-lucide="x" class="w-3 h-3"></i>
+                                                        </button>
+
                                                         <!-- Sıralama Okları -->
                                                         <button v-if="col.sortable" type="button" @click.stop="toggleSampleSort(col.key)"
                                                                 class="flex flex-col items-center justify-center p-0.5 rounded hover:bg-slate-700/40 transition cursor-pointer"
@@ -8417,44 +8604,93 @@
                                     </tr>
 
                                     <tr v-for="(sample, sIdx) in filteredSamplesList" :key="sample.id"
-                                        class="transition"
+                                        @dragover="onSampleRowDragOver($event)"
+                                        @drop="onSampleRowDrop(sample, $event)"
                                         :class="[
                                             selectedSampleIds.includes(sample.id) ? (isDarkMode ? 'bg-emerald-950/20' : 'bg-emerald-50/40') : (isDarkMode ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'),
-                                            sIdx % 2 === 1 ? (isDarkMode ? 'bg-slate-900/30' : 'bg-slate-50/50') : ''
+                                            sIdx % 2 === 1 ? (isDarkMode ? 'bg-slate-900/30' : 'bg-slate-50/50') : '',
+                                            draggedSampleRowId === sample.id ? 'opacity-40 bg-emerald-500/10' : ''
                                         ]">
                                         
                                         <td v-for="col in displayedSampleColumns" :key="col.key"
-                                            class="p-2 border-r overflow-hidden text-ellipsis whitespace-nowrap align-middle"
+                                            class="border-r overflow-hidden text-ellipsis whitespace-nowrap align-middle"
                                             :class="[
                                                 isDarkMode ? 'border-slate-800/60' : 'border-slate-200',
-                                                col.align === 'center' ? 'text-center' : 'text-left'
+                                                col.align === 'center' ? 'text-center' : 'text-left',
+                                                col.key === 'select' ? 'px-1 py-1' : 'p-2'
                                             ]"
-                                            :style="{ width: (col.width || 100) + 'px', maxWidth: (col.width || 100) + 'px' }">
+                                            :style="{ width: (col.width || 100) + 'px', minWidth: (col.width || 100) + 'px', maxWidth: (col.width || 100) + 'px' }">
                                             
-                                            <!-- 0. SEÇİM CHECKBOX -->
+                                            <!-- 0. SEÇİM & SATIR YER DEĞİŞTİRME SÜTUNU -->
                                             <template v-if="col.key === 'select'">
-                                                <div class="flex items-center justify-center">
+                                                <div class="flex items-center justify-center gap-1 w-full select-none px-0.5">
+                                                    <!-- Yukarı / Aşağı Taşıma Okları -->
+                                                    <div class="w-3 flex flex-col items-center justify-center -space-y-1 shrink-0">
+                                                        <button v-if="sIdx > 0"
+                                                                @click.stop="moveSampleRow(sample, -1)"
+                                                                type="button"
+                                                                class="text-[9px] text-slate-600 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400 leading-none cursor-pointer p-0.5"
+                                                                title="Satırı Yukarı Taşı">▲</button>
+                                                        <button v-if="sIdx < filteredSamplesList.length - 1"
+                                                                @click.stop="moveSampleRow(sample, 1)"
+                                                                type="button"
+                                                                class="text-[9px] text-slate-600 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400 leading-none cursor-pointer p-0.5"
+                                                                title="Satırı Aşağı Taşı">▼</button>
+                                                    </div>
+                                                    <!-- Sürükleme Tutamacı (High-contrast, cursor: move, asla beyazlaşmaz) -->
+                                                    <div draggable="true"
+                                                         @dragstart="onSampleRowDragStart(sample, $event)"
+                                                         style="cursor: move;"
+                                                         class="p-0.5 text-slate-800 hover:text-emerald-600 dark:text-slate-100 dark:hover:text-emerald-400 shrink-0 bg-slate-200/70 dark:bg-slate-700/70 rounded cursor-move"
+                                                         title="Sürükleyip bırakarak satır sırasını değiştirin">
+                                                        <i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i>
+                                                    </div>
+                                                    <!-- Seçim Kutucuğu (Tam görünen, kesilmeyen) -->
                                                     <input type="checkbox"
                                                            :checked="selectedSampleIds.includes(sample.id)"
                                                            @change="toggleSelectSample(sample.id)"
-                                                           class="rounded text-emerald-600 focus:ring-0 cursor-pointer">
+                                                           class="w-4 h-4 rounded text-emerald-600 focus:ring-0 cursor-pointer shrink-0 ml-0.5">
                                                 </div>
                                             </template>
 
-                                            <!-- 1. GÖRSEL SÜTUNU -->
+                                            <!-- 1. GÖRSEL SÜTUNU (HÜCRE GENİŞLEDİKÇE ORANTILI BÜYÜYEN & ENDEN/BOYDAN SIĞDIRMA SEÇENEKLİ) -->
                                             <template v-else-if="col.key === 'image'">
                                                 <div class="flex items-center justify-center">
-                                                    <div @click="openSampleImageModal(sample)"
-                                                         class="w-10 h-10 rounded-lg border overflow-hidden flex items-center justify-center cursor-pointer relative group transition shadow-sm hover:scale-105"
-                                                         :class="isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-100'"
-                                                         title="Görseli büyütmek veya değiştirmek için tıklayın">
-                                                        <img v-if="sample.image_url" :src="sample.image_url" class="w-full h-full object-cover">
-                                                        <div v-else class="flex flex-col items-center justify-center text-slate-400 group-hover:text-emerald-500">
+                                                    <div class="rounded-lg border overflow-hidden flex items-center justify-center relative group transition shadow-sm"
+                                                         :style="{ width: Math.max(38, Math.min(260, (col.width || 68) - 14)) + 'px', height: Math.max(38, Math.min(260, (col.width || 68) - 14)) + 'px' }"
+                                                         :class="isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-100'">
+                                                        <img v-if="sample.image_url"
+                                                             :src="sample.image_url"
+                                                             @click="openSampleImageModal(sample)"
+                                                             class="w-full h-full cursor-pointer transition-all duration-200 hover:scale-105"
+                                                             :class="(sample.image_fit || 'contain') === 'cover' ? 'object-cover' : 'object-contain'"
+                                                             :title="((sample.image_fit || 'contain') === 'cover' ? 'Enden Sığdırılmış (Genişlik bazlı)' : 'Boydan Sığdırılmış (Orantılı)') + ' - Büyütmek için tıklayın'">
+                                                        <div v-else @click="openSampleImageModal(sample)"
+                                                             class="flex flex-col items-center justify-center text-slate-400 group-hover:text-emerald-500 cursor-pointer w-full h-full">
                                                             <i data-lucide="camera" class="w-4 h-4"></i>
                                                             <span class="text-[8px] font-bold">Ekle</span>
                                                         </div>
+                                                        
+                                                        <!-- Hızlı Sığdırma Seçenekleri (Hover Butonları) -->
+                                                        <div v-if="sample.image_url" class="absolute top-0.5 left-0.5 hidden group-hover:flex items-center gap-0.5 bg-black/85 rounded p-0.5 z-10 shadow">
+                                                            <button type="button"
+                                                                    @click.stop="setSampleImageFit(sample, 'cover')"
+                                                                    class="px-1 py-0.5 rounded text-[7.5px] font-bold leading-none transition cursor-pointer"
+                                                                    :class="sample.image_fit === 'cover' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-700'"
+                                                                    title="Enden Sığdır (Genişlik doldur)">
+                                                                En
+                                                            </button>
+                                                            <button type="button"
+                                                                    @click.stop="setSampleImageFit(sample, 'contain')"
+                                                                    class="px-1 py-0.5 rounded text-[7.5px] font-bold leading-none transition cursor-pointer"
+                                                                    :class="(sample.image_fit || 'contain') === 'contain' ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-700'"
+                                                                    title="Boydan Sığdır (Tam orantılı göster)">
+                                                                Boy
+                                                            </button>
+                                                        </div>
+
                                                         <span v-if="sample.image_url_2"
-                                                              class="absolute bottom-0.5 right-0.5 bg-black/80 text-white text-[7.5px] px-1 rounded font-bold">2📷</span>
+                                                              class="absolute bottom-0.5 right-0.5 bg-black/80 text-white text-[7.5px] px-1 rounded font-bold pointer-events-none">2📷</span>
                                                     </div>
                                                 </div>
                                             </template>
@@ -8504,27 +8740,47 @@
                                                        class="w-full bg-transparent border-0 outline-none text-xs font-semibold hover:bg-slate-500/10 focus:bg-slate-500/10 rounded px-1.5 py-1 transition truncate">
                                             </template>
 
-                                            <!-- 7. NUMUNE TALEP TARİHİ -->
+                                            <!-- 7. NUMUNE TALEP TARİHİ (Akıllı Metin + Açılır Takvim) -->
                                             <template v-else-if="col.key === 'request_date'">
-                                                <input type="text"
-                                                       data-is-date="true"
-                                                       :value="sample.request_date"
-                                                       @change="updateSampleSmartDate(sample, 'request_date', $event.target.value)"
-                                                       placeholder="GG.AA"
-                                                       class="w-full bg-transparent border-0 outline-none text-xs font-mono text-center hover:bg-slate-500/10 rounded px-1 py-1 transition">
+                                                <div class="relative flex items-center justify-center group/date w-full">
+                                                    <input type="text"
+                                                           data-is-date="true"
+                                                           :value="sample.request_date"
+                                                           @change="updateSampleSmartDate(sample, 'request_date', $event)"
+                                                           placeholder="GG.AA.YYYY"
+                                                           class="w-full bg-transparent border-0 outline-none text-xs font-mono text-center hover:bg-slate-500/10 focus:bg-slate-500/10 rounded pl-1 pr-5 py-1 transition cursor-text">
+                                                    <div class="absolute right-0.5 flex items-center justify-center w-4 h-4 pointer-events-none opacity-40 group-hover/date:opacity-100 transition">
+                                                        <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400 group-hover/date:text-emerald-500"></i>
+                                                    </div>
+                                                    <input type="date"
+                                                           tabindex="-1"
+                                                           :value="formatDateForInput(sample.request_date)"
+                                                           @change="onSampleDatePickerChange(sample, 'request_date', $event)"
+                                                           class="absolute right-0.5 w-4 h-4 opacity-0 cursor-pointer z-10"
+                                                           title="Açılır Takvimden Seç">
+                                                </div>
                                             </template>
 
-                                            <!-- 8. NUMUNE TESLİM TARİHİ (Kalan güne göre renk uyarısı) -->
+                                            <!-- 8. NUMUNE TESLİM TARİHİ (Kalan güne göre renk uyarısı + Açılır Takvim) -->
                                             <template v-else-if="col.key === 'delivery_date'">
-                                                <div class="flex items-center justify-center text-center">
+                                                <div class="relative flex items-center justify-center group/date w-full">
                                                     <input type="text"
                                                            data-is-date="true"
                                                            :value="sample.delivery_date"
-                                                           @change="updateSampleSmartDate(sample, 'delivery_date', $event.target.value)"
-                                                           placeholder="GG.AA"
-                                                           class="w-full bg-transparent border-0 outline-none text-xs font-mono font-bold text-center hover:bg-black/5 dark:hover:bg-white/5 rounded px-1 py-1 transition"
+                                                           @change="updateSampleSmartDate(sample, 'delivery_date', $event)"
+                                                           placeholder="GG.AA.YYYY"
+                                                           class="w-full bg-transparent border-0 outline-none text-xs font-mono font-bold text-center hover:bg-black/5 dark:hover:bg-white/5 rounded pl-1 pr-5 py-1 transition cursor-text"
                                                            :style="getDeliveryDateAlertStyle(sample, { key: 'delivery_date' })"
                                                            :title="getDeliveryDateTooltip(sample)">
+                                                    <div class="absolute right-0.5 flex items-center justify-center w-4 h-4 pointer-events-none opacity-50 group-hover/date:opacity-100 transition">
+                                                        <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400 group-hover/date:text-emerald-500"></i>
+                                                    </div>
+                                                    <input type="date"
+                                                           tabindex="-1"
+                                                           :value="formatDateForInput(sample.delivery_date)"
+                                                           @change="onSampleDatePickerChange(sample, 'delivery_date', $event)"
+                                                           class="absolute right-0.5 w-4 h-4 opacity-0 cursor-pointer z-10"
+                                                           title="Açılır Takvimden Seç">
                                                 </div>
                                             </template>
 
@@ -8537,27 +8793,62 @@
                                                        title="Adet ve bedenleri istediğiniz formatta yazabilirsiniz">
                                             </template>
 
-                                            <!-- 10. KUMAŞI (FABRICTAG ENTEGRELİ) -->
-                                            <template v-else-if="col.key === 'fabric_info'">
-                                                <div class="flex items-center gap-1 w-full group/fab">
-                                                    <input :value="sample.fabric_info"
-                                                           @change="updateSampleCell(sample, 'fabric_info', $event.target.value)"
-                                                           placeholder="Kumaş bilgisi / FT..."
+                                            <!-- 10. KUMAŞ 1, KUMAŞ 2 VE KUMAŞ 3 (BİREBİR AYNI GÖSTERİM & FABRICTAG ENTEGRELİ) -->
+                                            <template v-else-if="col.key === 'fabric_info' || col.key === 'fabric_info_2' || col.key === 'fabric_info_3'">
+                                                <!-- Dolu Kumaş Gösterimi: Çok satırlı temiz layout -->
+                                                <div v-if="(getSampleFabricRaw(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) || getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) || getSampleFabricDetail(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))) && !sample['_editingManualFabric_' + col.key]"
+                                                     class="flex items-center justify-between gap-1 overflow-hidden py-0.5 w-full group/fab">
+                                                    <div class="truncate leading-tight flex-1 min-w-0 cursor-pointer"
+                                                         @dblclick="sample['_editingManualFabric_' + col.key] = true"
+                                                         :title="getSampleFabricTooltip(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))">
+                                                        <div v-if="getSampleFabricLine1(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
+                                                             class="font-medium truncate text-xs"
+                                                             :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                                            {{ getSampleFabricLine1(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) }}
+                                                        </div>
+                                                        <div v-if="getSampleFabricLine2(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
+                                                             class="text-slate-400 truncate text-[11px]"
+                                                             :title="getSampleFabricLine2(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))">
+                                                            {{ getSampleFabricLine2(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) }}
+                                                        </div>
+                                                        <div v-if="getSampleFabricLine3(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
+                                                             class="text-slate-400 truncate text-[11px] mt-0.5"
+                                                             :title="getSampleFabricLine3(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))">
+                                                            {{ getSampleFabricLine3(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) }}
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex items-center gap-0.5 shrink-0">
+                                                        <button @click.stop="openSampleFabricModal(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
+                                                                type="button"
+                                                                class="w-6 h-6 rounded flex items-center justify-center hover:bg-emerald-600 text-slate-400 hover:text-white shrink-0 cursor-pointer transition-colors"
+                                                                :class="isDarkMode ? 'bg-slate-800' : 'bg-slate-200'"
+                                                                :title="getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) ? 'FabricTag ile Bağlı (Kartela ID: #' + getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) + ') - Değiştirmek için tıklayın' : 'FabricTag Kumaş Deposundan Seç & Ata'">
+                                                            <i data-lucide="layers" class="w-3.5 h-3.5" :class="getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) ? 'text-emerald-500 hover:text-white' : ''"></i>
+                                                        </button>
+                                                        <button v-if="getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
+                                                                @click.stop="clearSampleFabricLink(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
+                                                                type="button"
+                                                                class="w-5 h-5 rounded flex items-center justify-center shrink-0 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer opacity-0 pointer-events-none group-hover/fab:opacity-100 group-hover/fab:pointer-events-auto transition-opacity"
+                                                                title="FabricTag Bağlantısını Kaldır">
+                                                            <i data-lucide="x" class="w-3 h-3"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Boş veya Düzenleme Modu -->
+                                                <div v-else class="flex items-center justify-between gap-1 w-full group/fab">
+                                                    <input :value="sample[col.key]"
+                                                           @blur="sample['_editingManualFabric_' + col.key] = false"
+                                                           @keyup.enter="$event.target.blur()"
+                                                           @change="updateSampleCell(sample, col.key, $event.target.value)"
+                                                           :placeholder="col.title + ' bilgisi / FT...'"
                                                            class="flex-1 min-w-0 bg-transparent border-0 outline-none text-xs font-medium hover:bg-slate-500/10 focus:bg-slate-500/10 rounded px-1.5 py-1 transition truncate">
-                                                    <button @click="openSampleFabricModal(sample)"
+                                                    <button @click.stop="openSampleFabricModal(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
                                                             type="button"
-                                                            class="shrink-0 px-1.5 py-0.5 rounded-lg border text-[10px] font-bold transition flex items-center gap-1 cursor-pointer select-none"
-                                                            :class="sample.fabrictag_id ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/25' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-emerald-500'"
-                                                            :title="sample.fabrictag_id ? 'FabricTag ile Bağlı (Kartela ID: #' + sample.fabrictag_id + ') - Değiştirmek için tıklayın' : 'FabricTag Kumaş Deposundan Seç & Ata'">
-                                                        <i data-lucide="layers" class="w-3 h-3 text-emerald-500"></i>
-                                                        <span class="text-[9px] font-mono">FT</span>
-                                                    </button>
-                                                    <button v-if="sample.fabrictag_id"
-                                                            @click="clearSampleFabricLink(sample)"
-                                                            type="button"
-                                                            class="hidden group-hover/fab:inline-flex shrink-0 p-0.5 text-slate-400 hover:text-rose-500 transition cursor-pointer"
-                                                            title="FabricTag Bağlantısını Kaldır">
-                                                        <i data-lucide="x" class="w-2.5 h-2.5"></i>
+                                                            class="w-6 h-6 rounded flex items-center justify-center hover:bg-emerald-600 text-slate-400 hover:text-white shrink-0 cursor-pointer transition-colors"
+                                                            :class="isDarkMode ? 'bg-slate-800' : 'bg-slate-200'"
+                                                            title="FabricTag Kumaş Deposundan Seç & Ata">
+                                                        <i data-lucide="layers" class="w-3.5 h-3.5"></i>
                                                     </button>
                                                 </div>
                                             </template>
@@ -8571,7 +8862,7 @@
                                                        class="w-full bg-transparent border-0 outline-none text-xs font-mono font-bold text-center hover:bg-slate-500/10 rounded px-1 py-1 transition">
                                             </template>
 
-                                            <!-- 11.1. KRİTİK / NOTLAR (2-3 KELİME GÖSTERİM, TIKLAYINCA MODERN POPUP) -->
+                                            <!-- 11.1. KRİTİK SÜTUNU (AYRI SÜTUN) -->
                                             <template v-else-if="col.key === 'critique'">
                                                 <div class="flex items-center gap-1.5 cursor-pointer group/crit px-1 py-1 rounded hover:bg-slate-500/10 transition select-none"
                                                      @click="openSampleCritiqueModal(sample)"
@@ -8584,8 +8875,19 @@
                                                     </div>
                                                     <div v-else class="text-[11px] text-slate-400 dark:text-slate-500 italic flex items-center gap-1 group-hover/crit:text-amber-500">
                                                         <i data-lucide="file-pen" class="w-3 h-3"></i>
-                                                        <span>+ Kritik Ekle</span>
+                                                        <span>+ Kritik</span>
                                                     </div>
+                                                </div>
+                                            </template>
+
+                                            <!-- 11.2. NOTLAR SÜTUNU (AYRI SÜTUN) -->
+                                            <template v-else-if="col.key === 'notes'">
+                                                <div class="flex items-center gap-1 w-full px-1 py-0.5">
+                                                    <input :value="sample.notes"
+                                                           @change="updateSampleCell(sample, 'notes', $event.target.value)"
+                                                           placeholder="Not ekle..."
+                                                           class="w-full bg-transparent border-0 outline-none text-xs font-medium hover:bg-slate-500/10 focus:bg-slate-500/10 rounded px-1.5 py-1 transition truncate"
+                                                           :title="sample.notes || 'Numune notu'">
                                                 </div>
                                             </template>
 
@@ -8601,36 +8903,69 @@
                                                 </div>
                                             </template>
 
-                                            <!-- 13. İŞLEMLER (Maliyet Oluştur & Sil) -->
-                                            <template v-else-if="col.key === 'actions'">
-                                                <div class="flex items-center justify-center gap-1.5">
-                                                    
-                                                    <!-- TALEP YAZDIR BUTONU -->
-                                                    <button type="button"
-                                                            @click="openSampleTalepModal(sample)"
-                                                            class="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10.5px] font-bold flex items-center gap-1 shadow-sm hover:brightness-110 active:scale-95 transition cursor-pointer select-none"
-                                                            title="Numune Talep Kartını Görüntüle, Yazdır & Excel'e Aktar">
-                                                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
-                                                        <span>Talep Yazdır</span>
-                                                    </button>
-
-                                                    <!-- MALİYET OLUŞTUR BUTONU -->
+                                            <!-- 13. MALİYET HÜCRESİ (Ayrı Sütun) -->
+                                            <template v-else-if="col.key === 'cost'">
+                                                <div class="flex items-center justify-center">
                                                     <button type="button"
                                                             @click="createCostFromSample(sample)"
-                                                            class="btn-theme px-2 py-1 rounded-lg text-white text-[10.5px] font-bold flex items-center gap-1 shadow-sm hover:brightness-110 active:scale-95 transition cursor-pointer select-none"
+                                                            class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition shadow-sm active:scale-95 cursor-pointer bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-100"
+                                                            style="color: inherit !important;"
                                                             title="Bu numune verileriyle serbest maliyet çalışması aç">
-                                                        <i data-lucide="calculator" class="w-3.5 h-3.5"></i>
-                                                        <span>Maliyet</span>
+                                                        <i data-lucide="calculator" class="w-3.5 h-3.5 text-sky-600 dark:text-sky-400"></i>
+                                                        <span class="font-bold text-slate-800 dark:text-slate-100">Maliyet</span>
                                                     </button>
+                                                </div>
+                                            </template>
 
-                                                    <!-- SİL BUTONU -->
+                                            <!-- 14. İŞLEM / TALEP YAZDIR HÜCRESİ (Ayrı Sütun) -->
+                                            <template v-else-if="col.key === 'talep'">
+                                                <div class="flex items-center justify-center">
+                                                    <button type="button"
+                                                            @click="openSampleTalepModal(sample)"
+                                                            class="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition shadow-sm active:scale-95 cursor-pointer bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-100"
+                                                            style="color: inherit !important;"
+                                                            title="Numune Talep Kartını Görüntüle, Yazdır & Excel'e Aktar">
+                                                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400"></i>
+                                                        <span class="font-bold text-slate-800 dark:text-slate-100">Talep Yazdır</span>
+                                                    </button>
+                                                </div>
+                                            </template>
+
+                                            <!-- 15. SİL HÜCRESİ (Ayrı Sütun) -->
+                                            <template v-else-if="col.key === 'delete'">
+                                                <div class="flex items-center justify-center">
                                                     <button type="button"
                                                             @click="deleteSampleRow(sample)"
-                                                            class="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
+                                                            class="w-7 h-7 rounded-lg inline-flex items-center justify-center text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 transition cursor-pointer"
                                                             title="Numuneyi Sil">
-                                                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
                                                     </button>
+                                                </div>
+                                            </template>
 
+                                            <!-- FALLBACK: actions (Eski yapı kalırsa) -->
+                                            <template v-else-if="col.key === 'actions'">
+                                                <div class="flex items-center justify-center gap-2">
+                                                    <button type="button"
+                                                            @click="createCostFromSample(sample)"
+                                                            class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 dark:bg-slate-800 dark:text-white"
+                                                            title="Maliyet">
+                                                        <i data-lucide="calculator" class="w-3.5 h-3.5 text-sky-600"></i>
+                                                        <span>Maliyet</span>
+                                                    </button>
+                                                    <button type="button"
+                                                            @click="openSampleTalepModal(sample)"
+                                                            class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 dark:bg-slate-800 dark:text-white"
+                                                            title="Talep Yazdır">
+                                                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-indigo-600"></i>
+                                                        <span>Talep Yazdır</span>
+                                                    </button>
+                                                    <button type="button"
+                                                            @click="deleteSampleRow(sample)"
+                                                            class="p-1 rounded-lg text-rose-500 hover:bg-rose-500/10 transition"
+                                                            title="Numuneyi Sil">
+                                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                                    </button>
                                                 </div>
                                             </template>
 
@@ -8660,9 +8995,31 @@
                                 </h3>
                                 <p class="text-xs text-slate-400 mt-0.5">Ön ve arka veya detay görseli ekleyin ya da değiştirin.</p>
                             </div>
-                            <button @click="sampleImageModalOpen = false" class="text-slate-400 hover:text-rose-500 p-1">
-                                <i data-lucide="x" class="w-5 h-5"></i>
-                            </button>
+                            <div class="flex items-center gap-2">
+                                <!-- Enden / Boydan Sığdırma Butonları -->
+                                <div class="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700 text-xs">
+                                    <span class="text-[10px] text-slate-400 font-bold px-1.5">Sığdırma:</span>
+                                    <button @click="setSampleImageFit(activeSampleItem, 'cover')"
+                                            type="button"
+                                            class="px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer"
+                                            :class="activeSampleItem.image_fit === 'cover' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'">
+                                        Enden Sığdır
+                                    </button>
+                                    <button @click="setSampleImageFit(activeSampleItem, 'contain')"
+                                            type="button"
+                                            class="px-2 py-0.5 rounded text-[11px] font-bold transition cursor-pointer"
+                                            :class="(activeSampleItem.image_fit || 'contain') === 'contain' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'">
+                                        Boydan Sığdır
+                                    </button>
+                                </div>
+                                <span class="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                    <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i>
+                                    <span>Ekran Görüntüsü: <b>Ctrl + V</b></span>
+                                </span>
+                                <button @click="sampleImageModalOpen = false" class="text-slate-400 hover:text-rose-500 p-1" title="Kapat">
+                                    <i data-lucide="x" class="w-5 h-5"></i>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -8677,13 +9034,20 @@
                                         Görsel Yok
                                     </div>
                                 </div>
-                                <div class="flex items-center gap-2 w-full">
-                                    <label class="flex-1 text-center py-1.5 px-3 rounded-lg btn-theme text-white text-xs font-bold cursor-pointer hover:brightness-110 shadow-sm">
-                                        <span>{{ activeSampleItem.image_url ? 'Değiştir' : 'Yükle' }}</span>
+                                <div class="flex items-center gap-1.5 w-full">
+                                    <label class="flex-1 text-center py-1.5 px-2 rounded-lg btn-theme text-white text-xs font-bold cursor-pointer hover:brightness-110 shadow-sm whitespace-nowrap">
+                                        <span>{{ activeSampleItem.image_url ? 'Dosya' : 'Dosya' }}</span>
                                         <input type="file" accept="image/*" class="hidden" @change="uploadSampleImageSlot(1, $event)">
                                     </label>
+                                    <button type="button" @click="pasteSampleImageSlot(1)"
+                                            class="flex-1 py-1.5 px-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm cursor-pointer active:scale-95 whitespace-nowrap"
+                                            title="Panodaki ekran alıntısını buraya yapıştır (veya klavyeden Ctrl + V)">
+                                        <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i>
+                                        <span>Yapıştır</span>
+                                        <span class="text-[9px] bg-purple-800/80 px-1 py-0.5 rounded font-mono hidden sm:inline">Ctrl+V</span>
+                                    </button>
                                     <button v-if="activeSampleItem.image_url" @click="deleteSampleImageSlot(1)"
-                                            class="p-1.5 rounded-lg border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 text-xs font-bold" title="Görseli Sil">
+                                            class="p-1.5 rounded-lg border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 text-xs font-bold shrink-0" title="Görseli Sil">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
                                 </div>
@@ -8700,13 +9064,20 @@
                                         Görsel Yok
                                     </div>
                                 </div>
-                                <div class="flex items-center gap-2 w-full">
-                                    <label class="flex-1 text-center py-1.5 px-3 rounded-lg btn-theme text-white text-xs font-bold cursor-pointer hover:brightness-110 shadow-sm">
-                                        <span>{{ activeSampleItem.image_url_2 ? 'Değiştir' : 'Yükle' }}</span>
+                                <div class="flex items-center gap-1.5 w-full">
+                                    <label class="flex-1 text-center py-1.5 px-2 rounded-lg btn-theme text-white text-xs font-bold cursor-pointer hover:brightness-110 shadow-sm whitespace-nowrap">
+                                        <span>{{ activeSampleItem.image_url_2 ? 'Dosya' : 'Dosya' }}</span>
                                         <input type="file" accept="image/*" class="hidden" @change="uploadSampleImageSlot(2, $event)">
                                     </label>
+                                    <button type="button" @click="pasteSampleImageSlot(2)"
+                                            class="flex-1 py-1.5 px-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm cursor-pointer active:scale-95 whitespace-nowrap"
+                                            title="Panodaki ekran alıntısını 2. görsel olarak yapıştır (veya klavyeden Ctrl + V)">
+                                        <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i>
+                                        <span>Yapıştır</span>
+                                        <span class="text-[9px] bg-amber-800/80 px-1 py-0.5 rounded font-mono hidden sm:inline">Pano</span>
+                                    </button>
                                     <button v-if="activeSampleItem.image_url_2" @click="deleteSampleImageSlot(2)"
-                                            class="p-1.5 rounded-lg border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 text-xs font-bold" title="Görseli Sil">
+                                            class="p-1.5 rounded-lg border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 text-xs font-bold shrink-0" title="Görseli Sil">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
                                 </div>
@@ -8730,14 +9101,14 @@
                     <div class="bg-slate-900 border border-slate-700 w-full max-w-[1550px] mx-auto rounded-2xl flex flex-col h-full shadow-2xl overflow-hidden">
                         
                         <!-- Header & Yazdırma Ayarları -->
-                        <div class="p-3 sm:p-4 border-b border-slate-800 bg-slate-950 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                        <div class="p-3 sm:p-4 border-b border-slate-800 bg-slate-950 flex flex-wrap items-center justify-between gap-3 shrink-0 no-print">
                             <div class="flex items-center gap-3">
                                 <div class="w-9 h-9 rounded-xl btn-theme text-white flex items-center justify-center font-bold">
                                     <i data-lucide="printer" class="w-4 h-4"></i>
                                 </div>
                                 <div>
                                     <h3 class="text-sm sm:text-base font-black text-white tracking-tight">
-                                        Numune & PPS A4 Yazdırma Önizleme
+                                        Numune Takip Listesi A4 Yazdırma Önizleme
                                     </h3>
                                     <p class="text-[11px] text-slate-400">
                                         Yazdırılacak kayıt sayısı: <b class="text-emerald-400 font-mono">{{ samplePrintRows.length }}</b> (Seçili veya filtrelenmiş numuneler)
@@ -8745,29 +9116,70 @@
                                 </div>
                             </div>
 
-                            <!-- Sayfa Ayarları (Yön & Boyut Sığdırma) -->
-                            <div class="flex flex-wrap items-center gap-3">
+                            <!-- Sayfa Ayarları (Yön & Sayfa Sığdırma & Ölçek) -->
+                            <div class="flex flex-wrap items-center gap-2.5">
                                 
+                                <!-- Sayfa Sığdırma Seçimi (Tek Sayfaya Sığdır vs Çoklu Sayfa) -->
+                                <div class="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-700 text-xs font-bold">
+                                    <button @click="setSamplePrintPageFit('single')"
+                                            type="button"
+                                            class="px-2.5 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer"
+                                            :class="samplePrintPageFit === 'single' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'"
+                                            title="Tüm seçili numuneleri tek bir A4 sayfasına sığacak şekilde otomatik ölçeklendir">
+                                        <i data-lucide="minimize-2" class="w-3.5 h-3.5"></i>
+                                        <span>Tek Sayfaya Sığdır</span>
+                                    </button>
+                                    <button @click="setSamplePrintPageFit('multi')"
+                                            type="button"
+                                            class="px-2.5 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer"
+                                            :class="samplePrintPageFit === 'multi' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'"
+                                            title="Çok sayıda numuneyi sayfalar halinde doğal akışta veya sayfa başı adetle yazdır">
+                                        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                        <span>Çoklu Sayfa</span>
+                                    </button>
+                                </div>
+
+                                <!-- Çoklu Sayfada Sayfa Başı Satır Adedi Seçici -->
+                                <div v-if="samplePrintPageFit === 'multi'" class="flex items-center gap-1 bg-slate-900 rounded-xl px-2.5 py-1 border border-slate-700 text-xs font-bold text-slate-300">
+                                    <span class="text-slate-400 text-[11px]">Sayfa Başı:</span>
+                                    <button v-for="rpp in [
+                                                { val: 0, label: 'Otomatik' },
+                                                { val: 10, label: '10' },
+                                                { val: 12, label: '12' },
+                                                { val: 15, label: '15' }
+                                            ]" 
+                                            :key="rpp.val"
+                                            @click="setSamplePrintRowsPerPage(rpp.val)"
+                                            type="button"
+                                            class="px-1.5 py-0.5 rounded text-[11px] font-mono transition cursor-pointer"
+                                            :class="samplePrintRowsPerPage === rpp.val ? 'bg-indigo-600 text-white font-extrabold' : 'hover:bg-slate-800 text-slate-400'">
+                                        {{ rpp.label }}
+                                    </button>
+                                </div>
+
                                 <!-- Yön Seçimi -->
                                 <div class="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-700 text-xs font-bold">
                                     <button @click="setSamplePrintOrientation('landscape')"
-                                            class="px-3 py-1 rounded-lg transition"
+                                            type="button"
+                                            class="px-2.5 py-1 rounded-lg transition cursor-pointer"
                                             :class="samplePrintOrientation === 'landscape' ? 'btn-theme text-white shadow-sm' : 'text-slate-400 hover:text-white'">
                                         Yatay (Landscape)
                                     </button>
                                     <button @click="setSamplePrintOrientation('portrait')"
-                                            class="px-3 py-1 rounded-lg transition"
+                                            type="button"
+                                            class="px-2.5 py-1 rounded-lg transition cursor-pointer"
                                             :class="samplePrintOrientation === 'portrait' ? 'btn-theme text-white shadow-sm' : 'text-slate-400 hover:text-white'">
                                         Dikey (Portrait)
                                     </button>
                                 </div>
 
                                 <!-- Sığdırma / Ölçek Butonları -->
-                                <div class="flex items-center gap-1.5 bg-slate-900 rounded-xl px-2.5 py-1 border border-slate-700 text-xs font-bold text-slate-300">
-                                    <span>Ölçek:</span>
-                                    <button v-for="sc in [80, 90, 95, 100, 105]" :key="sc"
+                                <div class="flex items-center gap-1 bg-slate-900 rounded-xl px-2 py-1 border border-slate-700 text-xs font-bold text-slate-300">
+                                    <span class="text-slate-400 text-[11px]">Ölçek:</span>
+                                    <button v-for="sc in [70, 75, 80, 90, 95, 100, 105]" :key="sc"
                                             @click="setSamplePrintScale(sc)"
-                                            class="px-2 py-0.5 rounded text-[11px] font-mono transition"
+                                            type="button"
+                                            class="px-1.5 py-0.5 rounded text-[11px] font-mono transition cursor-pointer"
                                             :class="samplePrintScale === sc ? 'bg-emerald-600 text-white font-extrabold' : 'hover:bg-slate-800 text-slate-400'">
                                         %{{ sc }}
                                     </button>
@@ -8776,6 +9188,7 @@
                                 <!-- Sütun Oranları (%) Açılır Menüsü (Width Adjustments) -->
                                 <div class="relative">
                                     <button @click="sampleWidthsDropdownOpen = !sampleWidthsDropdownOpen"
+                                            type="button"
                                             class="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5 shadow-sm"
                                             title="Her sütunun genişlik oranını (%) ayarlayın veya tablodan kenarları sürükleyin">
                                         <i data-lucide="columns" class="w-3.5 h-3.5 text-emerald-400"></i>
@@ -8793,7 +9206,7 @@
                                          class="absolute right-0 top-full mt-1.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3.5 z-50 flex flex-col gap-2 min-w-[320px] text-xs text-slate-200">
                                         <div class="text-[10.5px] font-black uppercase text-slate-400 pb-1.5 border-b border-slate-800 flex justify-between items-center">
                                             <span>Sütun Genişlik Oranları</span>
-                                            <span class="text-emerald-400 font-mono font-bold">Toplam %{{ Object.values(samplePrintColWidths).reduce((a,b)=>a+b,0) }}</span>
+                                            <span class="text-emerald-400 font-mono font-bold">Toplam %{{ Math.round(Object.values(samplePrintColWidths).reduce((a,b)=>a+b,0)) }}</span>
                                         </div>
                                         <div class="text-[10px] text-slate-400 leading-tight bg-slate-950/80 p-2 rounded-lg border border-slate-800">
                                             💡 Tablo başlıklarındaki kenar çizgilerini farenizle sürükleyerek de sütunları doğrudan canlı genişletip daraltabilirsiniz.
@@ -8804,6 +9217,7 @@
                                                 <span class="text-slate-300 font-medium text-[11px] truncate">{{ getSamplePrintColTitle(colKey) }}:</span>
                                                 <div class="flex items-center gap-1 shrink-0">
                                                     <button @click="adjustSamplePrintColWidth(colKey, -1)"
+                                                            type="button"
                                                             class="w-5 h-5 rounded bg-slate-800 hover:bg-red-500 hover:text-white font-bold text-center leading-none cursor-pointer"
                                                             title="1% Daralt">-</button>
                                                     <div class="relative flex items-center">
@@ -8817,6 +9231,7 @@
                                                          <span class="text-[10px] text-slate-500 ml-0.5 font-mono">%</span>
                                                     </div>
                                                     <button @click="adjustSamplePrintColWidth(colKey, 1)"
+                                                            type="button"
                                                             class="w-5 h-5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-white font-bold text-center leading-none cursor-pointer"
                                                             title="1% Genişlet">+</button>
                                                 </div>
@@ -8824,10 +9239,12 @@
                                         </div>
                                         <div class="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
                                             <button @click="distributeSamplePrintColWidths"
+                                                    type="button"
                                                     class="text-[10.5px] text-indigo-400 hover:text-indigo-300 hover:underline font-bold cursor-pointer">
                                                 ⚖️ %100'e Otomatik Dengele
                                             </button>
                                             <button @click="resetSamplePrintColWidths"
+                                                    type="button"
                                                     class="text-[10.5px] text-amber-400 hover:text-amber-300 hover:underline font-bold cursor-pointer">
                                                 Sıfırla
                                             </button>
@@ -8837,48 +9254,55 @@
 
                                 <!-- Excel İndir -->
                                 <button @click="exportSamplesExcel"
-                                        class="px-3 py-1.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition">
+                                        type="button"
+                                        class="px-3 py-1.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer">
                                     <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
                                     <span>Excel</span>
                                 </button>
 
                                 <!-- Yazdır Butonu -->
                                 <button @click="printSampleList"
-                                        class="btn-theme px-4 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shadow-md hover:brightness-110 active:scale-95 transition">
+                                        type="button"
+                                        class="btn-theme px-4 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shadow-md hover:brightness-110 active:scale-95 transition cursor-pointer">
                                     <i data-lucide="printer" class="w-3.5 h-3.5"></i>
                                     <span>A4 Yazdır</span>
                                 </button>
 
                                 <!-- Kapat Butonu -->
-                                <button @click="samplePrintModalOpen = false" class="p-1.5 rounded-xl text-slate-400 hover:text-rose-500">
+                                <button @click="samplePrintModalOpen = false" type="button" class="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 cursor-pointer">
                                     <i data-lucide="x" class="w-5 h-5"></i>
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Kağıt Önizleme Alanı (A4 Beyaz Kağıt) -->
-                        <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950 flex justify-center custom-scrollbar">
-                            <div id="sample-print-sheet"
-                                 class="bg-white text-slate-900 shadow-2xl p-6 transition-all"
+                        <!-- Kağıt Önizleme Alanı (A4 Beyaz Kağıtlar) -->
+                        <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950 flex flex-col items-center custom-scrollbar">
+                            <div v-for="(pageRows, pageIdx) in samplePrintPages" :key="'page-'+pageIdx"
+                                 class="sample-print-sheet bg-white text-slate-900 shadow-2xl p-6 transition-all mb-8 w-full max-w-full"
+                                 :class="{ 'page-break-after-always': pageIdx < samplePrintPages.length - 1 }"
                                  :style="{
                                      width: samplePrintOrientation === 'landscape' ? '297mm' : '210mm',
-                                     minHeight: samplePrintOrientation === 'landscape' ? '210mm' : '297mm',
+                                     minHeight: samplePrintPageFit === 'single' ? (samplePrintOrientation === 'landscape' ? '210mm' : '297mm') : 'auto',
+                                     boxSizing: 'border-box',
                                      zoom: (samplePrintScale / 100).toString()
                                  }">
                                 
                                 <!-- Kağıt Başlığı -->
-                                <div class="border-b-2 border-slate-900 pb-3 mb-4 flex items-center justify-between">
+                                <div class="border-b-2 border-slate-900 pb-2.5 mb-3 flex items-center justify-between">
                                     <div>
                                         <h1 class="text-xl font-black tracking-tight text-slate-900 uppercase">
-                                            NUMUNE & PPS TAKİP LİSTESİ
+                                            NUMUNE TAKİP LİSTESİ
                                         </h1>
-                                        <p class="text-xs font-bold text-slate-600 mt-0.5">
+                                        <p class="text-[11px] font-bold text-slate-600 mt-0.5">
                                             Elite Tekstil Üretim ve Kalite Takip Sistemi
                                         </p>
                                     </div>
                                     <div class="text-right text-xs">
                                         <div class="font-bold font-mono">Tarih: {{ new Date().toLocaleDateString('tr-TR') }}</div>
-                                        <div class="text-slate-500 text-[11px]">Toplam Numune: {{ samplePrintRows.length }} Adet</div>
+                                        <div class="text-slate-500 text-[11px]">
+                                            Toplam Numune: {{ samplePrintRows.length }} Adet
+                                            <span v-if="samplePrintPages.length > 1" class="font-bold text-slate-800"> • Sayfa {{ pageIdx + 1 }} / {{ samplePrintPages.length }}</span>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -8887,97 +9311,120 @@
                                        class="w-full text-left border-collapse border border-slate-400 text-xs">
                                     <thead>
                                         <tr class="bg-slate-100 border-b border-slate-400 text-[10px] font-black uppercase text-slate-800">
-                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.index || 4) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.index || 3) + '%' }">
                                                 <span>Sıra</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('index', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.image || 6) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.image || 7) + '%' }">
                                                 <span>Görsel</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('image', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.sample_type || 9) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.sample_type || 7) + '%' }">
                                                 <span>Numune Türü</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('sample_type', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.season || 8) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.season || 7) + '%' }">
                                                 <span>Sezon</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('season', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.customer_name || 10) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.customer_name || 10) + '%' }">
                                                 <span>Müşteri</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('customer_name', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_no || 9) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_no || 8) + '%' }">
                                                 <span>Model Kodu</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('style_no', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_name || 11) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_name || 11) + '%' }">
                                                 <span>Model Adı</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('style_name', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.request_date || 7) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.request_date || 7) + '%' }">
                                                 <span>Talep T.</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('request_date', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.delivery_date || 7) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.delivery_date || 7) + '%' }">
                                                 <span>Teslim T.</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('delivery_date', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.quantity_sizes || 8) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.quantity_sizes || 8) + '%' }">
                                                 <span>Adet & Beden</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('quantity_sizes', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info || 9) + '%' }">
-                                                <span>Kumaşı</span>
+                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info || 10) + '%' }">
+                                                <span>Kumaş 1</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('fabric_info', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters || 4) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters || 4) + '%' }">
                                                 <span>Metraj</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('unit_meters', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.critique || 8) + '%' }">
-                                                <span>Kritik / Not</span>
+                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.critique || 8) + '%' }">
+                                                <span>Kritik</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('critique', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1.5 text-center relative select-none" :style="{ width: (samplePrintColWidths.stage || 6) + '%' }">
+                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.notes || 8) + '%' }">
+                                                <span>Notlar</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('notes', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
+                                            <th class="p-1 text-center relative select-none" :style="{ width: (samplePrintColWidths.stage || 6) + '%' }">
                                                 <span>Aşama</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('stage', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-300">
-                                        <tr v-for="(s, idx) in samplePrintRows" :key="'pr-'+s.id" class="text-[10px] leading-tight">
-                                            <td class="p-1.5 border-r border-slate-300 text-center font-mono font-bold">{{ idx + 1 }}</td>
-                                            <td class="p-1 border-r border-slate-300 text-center">
-                                                <div class="w-8 h-8 mx-auto rounded border border-slate-300 overflow-hidden flex items-center justify-center bg-slate-50">
-                                                    <img v-if="s.image_url" :src="s.image_url" class="w-full h-full object-cover">
+                                        <tr v-for="(s, rowIdx) in pageRows" :key="'pr-'+s.id" class="text-[10px] leading-tight">
+                                            <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">
+                                                {{ (pageIdx * (samplePrintRowsPerPage || pageRows.length)) + rowIdx + 1 }}
+                                            </td>
+                                            <td class="p-1 border-r border-slate-300 text-center align-middle overflow-hidden">
+                                                <div class="w-full flex items-center justify-center">
+                                                    <img v-if="s.image_url" 
+                                                         :src="s.image_url" 
+                                                         class="w-full h-auto object-contain rounded border border-slate-200 block mx-auto transition-all"
+                                                         :style="{ 
+                                                             maxHeight: samplePrintPageFit === 'single' ? '42px' : ((samplePrintColWidths.image || 7) > 8 ? '85px' : '55px'),
+                                                             maxWidth: '100%' 
+                                                         }"
+                                                         alt="">
                                                     <span v-else class="text-[8px] text-slate-400 font-bold">-</span>
                                                 </div>
                                             </td>
-                                            <td class="p-1.5 border-r border-slate-300 text-center font-bold">{{ s.sample_type || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 font-medium">{{ s.season || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 font-bold">{{ s.customer_name || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 font-mono font-bold">{{ s.style_no || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 font-semibold">{{ s.style_name || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 text-center font-mono">{{ s.request_date || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 text-center font-mono font-bold">{{ s.delivery_date || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 font-medium">{{ s.quantity_sizes || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 text-[9.5px]">{{ s.fabric_info || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters || '-' }}</td>
-                                            <td class="p-1.5 border-r border-slate-300 text-[9.5px] overflow-hidden" :title="getCleanCritique(s.critique || s.notes)">
-                                                <div class="truncate w-full block font-normal leading-tight text-slate-800">
-                                                    {{ getCleanCritique(s.critique || s.notes) || '-' }}
+                                            <td class="p-1 border-r border-slate-300 text-center font-bold">{{ s.sample_type || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 font-medium">{{ s.season || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 font-bold">{{ s.customer_name || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 font-mono font-bold">{{ s.style_no || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 font-semibold">{{ s.style_name || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 text-center font-mono">{{ s.request_date || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.delivery_date || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 font-medium">{{ s.quantity_sizes || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
+                                                {{ getSamplePrintFabric(s) }}
+                                            </td>
+                                            <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 text-[9px] overflow-hidden" :title="getCleanCritique(s.critique)">
+                                                <div class="line-clamp-2 w-full block font-normal leading-tight text-slate-800">
+                                                    {{ getCleanCritique(s.critique) || '-' }}
                                                 </div>
                                             </td>
-                                            <td class="p-1.5 text-center font-semibold text-slate-900">
+                                            <td class="p-1 border-r border-slate-300 text-[9px] overflow-hidden" :title="getCleanCritique(s.notes)">
+                                                <div class="line-clamp-2 w-full block font-normal leading-tight text-slate-800">
+                                                    {{ getCleanCritique(s.notes) || '-' }}
+                                                </div>
+                                            </td>
+                                            <td class="p-1 text-center font-semibold text-slate-900">
                                                 <span>{{ s.stage || '-' }}</span>
                                             </td>
                                         </tr>
                                     </tbody>
                                 </table>
 
-
-
+                                <!-- Sayfa Alt Bilgisi -->
+                                <div v-if="samplePrintPages.length > 1" class="mt-3 pt-2 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+                                    <span>TexFlow Numune Takip Sistemi</span>
+                                    <span>Sayfa {{ pageIdx + 1 }} / {{ samplePrintPages.length }}</span>
+                                </div>
                             </div>
                         </div>
 
@@ -11157,9 +11604,16 @@
                         <i data-lucide="message-square" class="w-5 h-5"></i>
                     </div>
                     <div>
-                        <h3 class="text-sm sm:text-base font-black tracking-tight">Numune Kritiği & Revizyon Notları</h3>
+                        <h3 class="text-sm sm:text-base font-black tracking-tight">
+                            {{ isStyleCritique ? 'Model Kritiği & İmalat Notları' : 'Numune Kritiği & Revizyon Notları' }}
+                        </h3>
                         <p class="text-xs text-slate-400">
-                            {{ activeSampleCritiqueItem?.customer_name }} • {{ activeSampleCritiqueItem?.style_name }} ({{ activeSampleCritiqueItem?.style_no }}) - {{ activeSampleCritiqueItem?.sample_type }}
+                            <template v-if="isStyleCritique">
+                                {{ activeSampleCritiqueItem?.customer_name }} • {{ activeSampleCritiqueItem?.style_no }} {{ activeSampleCritiqueItem?.description ? ('- ' + activeSampleCritiqueItem?.description) : '' }}
+                            </template>
+                            <template v-else>
+                                {{ activeSampleCritiqueItem?.customer_name }} • {{ activeSampleCritiqueItem?.style_name }} ({{ activeSampleCritiqueItem?.style_no }}) - {{ activeSampleCritiqueItem?.sample_type }}
+                            </template>
                         </p>
                     </div>
                 </div>
@@ -11265,10 +11719,10 @@
 
                 </div>
 
-                <!-- Word Editör Metin Alanı<!-- Word Editör Metin Alanı (contenteditable) -->
+                <!-- Word Editör Metin Alanı (contenteditable) -->
                 <div>
                     <label class="block text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                        Ayrıntılı Numune Kritiği & Revizyon Notları:
+                        {{ isStyleCritique ? 'Ayrıntılı Model Kritiği & İmalat Notları:' : 'Ayrıntılı Numune Kritiği & Revizyon Notları:' }}
                     </label>
                     <div id="sample-critique-editor"
                          contenteditable="true"
@@ -11296,6 +11750,336 @@
                     <span>Kritiği Kaydet</span>
                 </button>
             </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- MODAL: ÇARŞAF LİSTESİ FORM YAZDIR (İMALAT FÖYÜ - A4 PRINT) -->
+    <!-- ========================================================================= -->
+    <div v-if="styleFormModalOpen"
+         id="style-form-modal"
+         class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 style-form-modal-backdrop select-none overflow-y-auto">
+        <div class="w-full max-w-4xl max-h-[96vh] rounded-2xl border shadow-2xl flex flex-col style-form-modal-container overflow-hidden"
+             :class="isDarkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'">
+            
+            <!-- Top Controls Toolbar (Hidden when printing) -->
+            <div class="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-3 shrink-0 style-form-top-bar no-print"
+                 :class="isDarkMode ? 'border-slate-800 bg-slate-950/80' : 'border-slate-200 bg-slate-50'">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-500 flex items-center justify-center">
+                        <i data-lucide="printer" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-black tracking-tight">İmalat Föyü</h3>
+                        <p class="text-[11px] text-slate-400">Yazdırma Önizleme ve Sayfa Ayarları</p>
+                    </div>
+                </div>
+
+                <!-- Print Options Toolbar -->
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <!-- Channel Mode (Kanallar ile Olduğu Gibi / Kanalları Topla) -->
+                    <div v-if="hasStyleFormChannels" class="flex items-center p-0.5 rounded-lg border shadow-xs"
+                         :class="isDarkMode ? 'bg-slate-950 border-slate-700' : 'bg-white border-slate-300'">
+                        <button type="button"
+                                @click="setStyleFormChannelMode('as_is')"
+                                class="px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer"
+                                :class="styleFormChannelMode === 'as_is' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 dark:hover:text-white'"
+                                title="Her kanalın beden ve adet dağılımını ayrı ayrı satır olarak gösterir">
+                            <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+                            <span>Kanallar ile Olduğu Gibi Yazdır</span>
+                        </button>
+                        <button type="button"
+                                @click="setStyleFormChannelMode('consolidated')"
+                                class="px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer"
+                                :class="styleFormChannelMode === 'consolidated' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 dark:hover:text-white'"
+                                title="Tüm kanallardaki adetleri beden bazında tek satırda toplayarak gösterir">
+                            <i data-lucide="merge" class="w-3.5 h-3.5"></i>
+                            <span>Kanalları Topla</span>
+                        </button>
+                    </div>
+
+                    <!-- Orientation (Boyuna / Enine) -->
+                    <div class="flex items-center p-0.5 rounded-lg border" :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-300'">
+                        <button type="button"
+                                @click="setStyleFormOrientation('portrait')"
+                                class="px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                :class="styleFormOrientation === 'portrait' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'">
+                            <span>Boyuna (Dikey)</span>
+                        </button>
+                        <button type="button"
+                                @click="setStyleFormOrientation('landscape')"
+                                class="px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                :class="styleFormOrientation === 'landscape' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'">
+                            <span>Enine (Yatay)</span>
+                        </button>
+                    </div>
+
+                    <!-- Page Fit (Tek Sayfa / Çok Sayfa) -->
+                    <div class="flex items-center p-0.5 rounded-lg border" :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-300'">
+                        <button type="button"
+                                @click="setStyleFormPageFit('single')"
+                                class="px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer"
+                                :class="styleFormPageFit === 'single' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                                title="Formu tek bir A4 sayfasına sığdıracak şekilde ölçekler">
+                            Tek Sayfaya Sığdır
+                        </button>
+                        <button type="button"
+                                @click="setStyleFormPageFit('multi')"
+                                class="px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer"
+                                :class="styleFormPageFit === 'multi' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                                title="Uzun kritiklerde otomatik 2 veya daha fazla sayfaya akar">
+                            Çok Sayfalı
+                        </button>
+                    </div>
+
+                    <!-- Zoom / Scale Control -->
+                    <div class="flex items-center gap-1 px-2 py-1 rounded-lg border" :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-300'">
+                        <button type="button" @click="setStyleFormScale(styleFormScale - 5)" class="w-5 h-5 rounded hover:bg-slate-700/40 text-slate-400 hover:text-white font-black text-center cursor-pointer select-none leading-none">-</button>
+                        <span class="w-10 text-center font-mono font-bold text-[11px]">{{ styleFormScale }}%</span>
+                        <button type="button" @click="setStyleFormScale(styleFormScale + 5)" class="w-5 h-5 rounded hover:bg-slate-700/40 text-slate-400 hover:text-white font-black text-center cursor-pointer select-none leading-none">+</button>
+                    </div>
+
+                    <!-- Print Button -->
+                    <button type="button"
+                            @click="printStyleForm"
+                            class="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition flex items-center gap-1.5 shadow-md hover:scale-105 active:scale-95 cursor-pointer">
+                        <i data-lucide="printer" class="w-4 h-4"></i>
+                        <span>Yazdır</span>
+                    </button>
+
+                    <!-- Close Button -->
+                    <button type="button"
+                            @click="closeStyleFormModal"
+                            class="p-1.5 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Content / Printable Page Container -->
+            <div class="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar bg-slate-50 dark:bg-slate-950">
+                <div id="style-form-print-area"
+                     class="mx-auto bg-transparent text-slate-900 p-3 sm:p-5 transition-transform origin-top"
+                     :style="{ maxWidth: styleFormOrientation === 'landscape' ? '1060px' : '780px', transform: 'scale(' + (styleFormScale / 100) + ')' }">
+                    
+                    <!-- 1. FORM BAŞLIĞI EN ÜSTTE ORTALI & TARİH ÇİZGİNİN ÜSTÜNDE -->
+                    <div class="relative pb-2 border-b-2 border-slate-900 mb-2">
+                        <!-- Tarih (Çizginin Üstünde, Sağa Hizalı) -->
+                        <div class="absolute right-0 bottom-2 text-xs font-bold text-slate-800">
+                            Tarih: <span class="font-mono font-semibold">{{ new Date().toLocaleDateString('tr-TR') }}</span>
+                        </div>
+                        <h1 class="text-2xl font-black uppercase tracking-wider text-slate-900 text-center">
+                            İMALAT FÖYÜ
+                        </h1>
+                    </div>
+
+                    <!-- 2. ÜRÜN GÖRSELİ VE BİLGİLERİ (KUTUCUKSUZ, ALT ALTA) -->
+                    <div class="flex gap-4 items-start my-2 p-1">
+                        <!-- Ürün Görseli (Sol Taraf) -->
+                        <div class="w-36 sm:w-44 h-44 sm:h-52 rounded border border-slate-300 bg-white overflow-hidden flex items-center justify-center p-1 shrink-0 shadow-xs">
+                            <img v-if="activeStyleFormItem?.image_url"
+                                 :src="activeStyleFormItem.image_url"
+                                 class="max-w-full max-h-full object-contain">
+                            <div v-else class="flex flex-col items-center justify-center text-slate-400">
+                                <i data-lucide="image" class="w-8 h-8 opacity-40"></i>
+                                <span class="text-[10px] font-bold mt-1">Görsel Yok</span>
+                            </div>
+                        </div>
+
+                        <!-- Ürün Detayları (Sağ Taraf - Kutucuksuz, Alt Alta) -->
+                        <div class="flex-1 min-w-0 flex flex-col justify-between py-0.5 text-xs">
+                            <div class="flex items-baseline gap-2 py-1 border-b border-slate-200">
+                                <span class="w-24 text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">Müşteri:</span>
+                                <span class="font-extrabold text-slate-900 text-sm truncate">{{ activeStyleFormItem?.customer_name || '-' }}</span>
+                            </div>
+                            <div class="flex items-baseline gap-2 py-1 border-b border-slate-200">
+                                <span class="w-24 text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">PO No:</span>
+                                <span class="font-mono font-extrabold text-slate-900 text-sm truncate">{{ currentStyleFormPoNumber || activeStyleFormItem?.po_number || '-' }}</span>
+                            </div>
+                            <div v-if="hasStyleFormChannels" class="flex items-baseline gap-2 py-1 border-b border-slate-200">
+                                <span class="w-24 text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">Kanal(lar):</span>
+                                <span class="font-bold text-indigo-700 text-xs truncate">
+                                    {{ currentStyleFormChannelText }}
+                                    <span class="text-[10px] text-slate-500 font-medium ml-1">
+                                        ({{ styleFormChannelMode === 'as_is' ? 'Kanallar ile Olduğu Gibi' : 'Kanallar Toplandı' }})
+                                    </span>
+                                </span>
+                            </div>
+                            <div v-else-if="activeStyleFormItem?.channel" class="flex items-baseline gap-2 py-1 border-b border-slate-200">
+                                <span class="w-24 text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">Kanal:</span>
+                                <span class="font-bold text-slate-800 text-xs truncate">{{ activeStyleFormItem.channel }}</span>
+                            </div>
+                            <div class="flex items-baseline gap-2 py-1 border-b border-slate-200">
+                                <span class="w-24 text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">Marka:</span>
+                                <span class="font-bold text-slate-900 truncate">{{ activeStyleFormItem?.resolved_brand || activeStyleFormItem?.brand || '-' }}</span>
+                            </div>
+                            <div class="flex items-baseline gap-2 py-1 border-b border-slate-200">
+                                <span class="w-24 text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">Model No:</span>
+                                <span class="font-black font-mono text-indigo-700 text-sm truncate">{{ activeStyleFormItem?.style_no || '-' }}</span>
+                            </div>
+                            <div class="flex items-baseline gap-2 py-1 border-b border-slate-200">
+                                <span class="w-24 text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">Model Tanımı:</span>
+                                <span class="font-semibold text-slate-800 leading-snug line-clamp-2">{{ activeStyleFormItem?.description || '-' }}</span>
+                            </div>
+                            <div v-if="activeStyleFormItem?.color_name" class="flex items-baseline gap-2 py-1 border-b border-slate-200">
+                                <span class="w-24 text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">Renk:</span>
+                                <span class="font-bold text-slate-900 truncate">{{ activeStyleFormItem.color_name }}</span>
+                            </div>
+                            <div class="flex items-baseline gap-2 py-1">
+                                <span class="w-24 text-[11px] font-bold text-slate-500 uppercase tracking-wide shrink-0">Termin Tarihi:</span>
+                                <span class="font-mono font-black text-rose-700 text-sm">{{ activeStyleFormItem?.delivery_date || '-' }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. KUMAŞ BİLGİLERİ (KOMPAKT, KUTUCUK İÇİNDE KUTUCUK OLMADAN, TEK SATIR DÜZENİ) -->
+                    <div class="my-2 py-1.5 px-2.5 border border-slate-300 rounded text-xs bg-transparent">
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-[11px] font-black uppercase tracking-wider text-slate-700 shrink-0">Kumaş:</span>
+                            <span class="font-semibold text-slate-900 leading-tight">
+                                {{ getStyleFormFabricClean(activeStyleFormItem, 1) || 'Kumaş 1 bilgisi girilmemiş' }}
+                            </span>
+                        </div>
+                        <div v-if="getStyleFormFabricClean(activeStyleFormItem, 2)" class="flex items-baseline gap-2 mt-1 pt-1 border-t border-slate-200">
+                            <span class="text-[11px] font-black uppercase tracking-wider text-slate-700 shrink-0">Kumaş 2:</span>
+                            <span class="font-semibold text-slate-900 leading-tight">
+                                {{ getStyleFormFabricClean(activeStyleFormItem, 2) }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- 4. SİPARİŞ BEDENLERİ VE ADETLERİ TABLOSU -->
+                    <div class="my-2 border border-slate-300 rounded overflow-hidden bg-transparent">
+                        <div class="px-2.5 py-1 bg-slate-100 border-b border-slate-300 flex items-center justify-between text-xs">
+                            <span class="text-[10px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                                <i data-lucide="scissors" class="w-3.5 h-3.5 text-indigo-600"></i>
+                                <span>SİPARİŞ BEDEN & ADET DAĞILIMI</span>
+                                <span v-if="hasStyleFormChannels" class="ml-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded border"
+                                      :class="styleFormChannelMode === 'as_is' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'">
+                                    {{ styleFormChannelMode === 'as_is' ? 'Kanallar ile Olduğu Gibi' : 'Kanallar Toplandı' }}
+                                </span>
+                            </span>
+                            <span class="text-xs font-mono font-bold text-slate-700">
+                                Toplam: <b class="text-indigo-700 font-black">{{ (currentStyleFormTotalQty || 0).toLocaleString('tr-TR') }} Adet</b>
+                            </span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <!-- SEÇENEK 1: KANALLAR İLE OLDUĞU GİBİ TABLOSU -->
+                            <table v-if="hasStyleFormChannels && styleFormChannelMode === 'as_is'" class="w-full text-center text-xs border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-300 text-[11px] font-bold text-slate-700">
+                                        <th class="p-1.5 border-r border-slate-300 bg-slate-100 text-left font-extrabold w-36">Kanal</th>
+                                        <th class="p-1.5 border-r border-slate-300 bg-slate-100 text-left font-bold text-slate-600 w-28">PO No</th>
+                                        <th v-for="sz in styleFormAllSizesHeader" :key="'ch_hdr_' + sz"
+                                            class="p-1.5 border-r border-slate-300 font-mono font-extrabold min-w-[40px]">
+                                            {{ sz }}
+                                        </th>
+                                        <th class="p-1.5 bg-indigo-50 text-indigo-900 font-extrabold min-w-[65px]">TOPLAM</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="chRow in styleFormChannelBreakdownRows" :key="'ch_r_' + chRow.id"
+                                        class="border-b border-slate-200 font-mono text-xs">
+                                        <td class="p-1.5 border-r border-slate-300 text-left font-bold text-slate-900 bg-slate-50/50">
+                                            <span class="inline-block px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-bold text-[10px] border border-indigo-200">
+                                                {{ chRow.channel }}
+                                            </span>
+                                        </td>
+                                        <td class="p-1.5 border-r border-slate-300 text-left font-mono font-semibold text-slate-700 text-[11px]">
+                                            {{ chRow.po_number }}
+                                        </td>
+                                        <td v-for="sz in styleFormAllSizesHeader" :key="'ch_val_' + chRow.id + '_' + sz"
+                                            class="p-1.5 border-r border-slate-300"
+                                            :class="(chRow.size_map[sz] || 0) > 0 ? 'text-slate-900 font-bold' : 'text-slate-300 font-normal'">
+                                            {{ (chRow.size_map[sz] || 0) > 0 ? (chRow.size_map[sz]).toLocaleString('tr-TR') : '-' }}
+                                        </td>
+                                        <td class="p-1.5 bg-slate-50 text-slate-900 font-black text-xs">
+                                            {{ (chRow.total_quantity || 0).toLocaleString('tr-TR') }}
+                                        </td>
+                                    </tr>
+                                    <!-- GENEL TOPLAM SATIRI -->
+                                    <tr class="bg-indigo-50/70 font-mono font-black text-slate-900 text-xs border-t-2 border-indigo-200">
+                                        <td colspan="2" class="p-1.5 border-r border-slate-300 text-left font-black text-indigo-950 uppercase tracking-wide">
+                                            GENEL TOPLAM
+                                        </td>
+                                        <td v-for="sz in styleFormAllSizesHeader" :key="'tot_sz_' + sz"
+                                            class="p-1.5 border-r border-slate-300 text-indigo-950 font-black">
+                                            {{ (styleFormTotalPerSize[sz] || 0) > 0 ? (styleFormTotalPerSize[sz]).toLocaleString('tr-TR') : '-' }}
+                                        </td>
+                                        <td class="p-1.5 bg-indigo-100/90 text-indigo-950 font-black text-xs">
+                                            {{ (currentStyleFormTotalQty || 0).toLocaleString('tr-TR') }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <!-- SEÇENEK 2: KANALLARI TOPLA VEYA TEK KANAL TABLOSU -->
+                            <table v-else class="w-full text-center text-xs border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-300 text-[11px] font-bold text-slate-700">
+                                        <th class="p-1.5 border-r border-slate-300 bg-slate-100 text-left font-extrabold w-20">Beden</th>
+                                        <th v-for="sz in styleFormSizesList" :key="'hd_' + sz.size_name"
+                                            class="p-1.5 border-r border-slate-300 font-mono font-extrabold min-w-[42px]">
+                                            {{ sz.size_name }}
+                                        </th>
+                                        <th class="p-1.5 bg-indigo-50 text-indigo-900 font-extrabold min-w-[65px]">TOPLAM</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="font-mono font-extrabold text-slate-900 text-xs">
+                                        <td class="p-1.5 border-r border-slate-300 bg-slate-50 text-left text-[11px] font-bold text-slate-600">Adet</td>
+                                        <td v-for="sz in styleFormSizesList" :key="'qty_' + sz.size_name"
+                                            class="p-1.5 border-r border-slate-300"
+                                            :class="sz.quantity > 0 ? 'text-slate-900' : 'text-slate-300 font-normal'">
+                                            {{ sz.quantity > 0 ? sz.quantity.toLocaleString('tr-TR') : '-' }}
+                                        </td>
+                                        <td class="p-1.5 bg-indigo-50/60 text-indigo-700 font-black text-xs">
+                                            {{ (currentStyleFormTotalQty || 0).toLocaleString('tr-TR') }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 5. ÜRÜN KRİTİKLERİ (KRİTİK SÜTUNUNA YAZILAN BİÇİMLENDİRMEYLE) -->
+                    <div class="my-2 border border-slate-300 rounded p-3 bg-transparent">
+                        <div class="text-[10.5px] uppercase font-black text-slate-800 tracking-wider mb-2 flex items-center gap-1.5 border-b border-slate-200 pb-1">
+                            <i data-lucide="file-text" class="w-3.5 h-3.5 text-indigo-600"></i>
+                            <span>ÜRÜN KRİTİKLERİ & İMALAT NOTLARI</span>
+                        </div>
+                        <div v-if="activeStyleFormItem?.critique && activeStyleFormItem.critique.trim()"
+                             class="prose max-w-none text-xs sm:text-sm text-slate-900 leading-relaxed select-text font-normal"
+                             v-html="activeStyleFormItem.critique">
+                        </div>
+                        <div v-else class="p-3 text-center text-xs text-slate-400 italic border border-dashed border-slate-200 rounded">
+                            Bu model için henüz bir imalat kritiği veya açıklama notu girilmemiş.
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Modal Footer (Screen View) -->
+            <div class="px-5 py-3 border-t flex items-center justify-between text-xs shrink-0 style-form-footer-actions no-print"
+                 :class="isDarkMode ? 'border-slate-800 bg-slate-950/80' : 'border-slate-200 bg-slate-50'">
+                <div class="text-slate-400 text-xs">
+                    Formu yazdırırken sayfa yönünü ve ölçeğini yukarıdaki araç çubuğundan ayarlayabilirsiniz.
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" @click="closeStyleFormModal"
+                            class="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 bg-white text-black font-extrabold transition cursor-pointer shadow-xs">
+                        Kapat
+                    </button>
+                    <button type="button" @click="printStyleForm"
+                            class="btn-theme px-5 py-2 rounded-xl text-white font-bold shadow-md hover:brightness-110 active:scale-95 transition flex items-center gap-1.5">
+                        <i data-lucide="printer" class="w-4 h-4"></i>
+                        <span>Yazdır (Ctrl+P)</span>
+                    </button>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -14542,26 +15326,13 @@
                         </span>
                     </div>
                     <p class="text-[11px] text-slate-400">
-                        Planlama aşamasındaki ve siparişi alınan modellerin kumaş bazlı sipariş miktarları
+                        Ekranda listelenen siparişlerin kumaş bazlı sipariş çizelgesi
                     </p>
                 </div>
             </div>
 
             <div class="flex items-center gap-2.5 flex-wrap">
-                <!-- Filtre Seçici (Planlama & Sipariş Alındı vs Tümü) -->
-                <div class="inline-flex rounded-xl p-1 border shadow-xs"
-                     :class="isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'">
-                    <button type="button" @click="kumasSiparisStatusFilter = 'planning_and_ordered'"
-                            class="px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-                            :class="kumasSiparisStatusFilter === 'planning_and_ordered' ? 'bg-white text-amber-600 shadow-xs dark:bg-slate-800 dark:text-amber-400' : 'text-slate-400 hover:text-slate-200'">
-                        <span>Planlama & Sipariş Alındı</span>
-                    </button>
-                    <button type="button" @click="kumasSiparisStatusFilter = 'all'"
-                            class="px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-                            :class="kumasSiparisStatusFilter === 'all' ? 'bg-white text-amber-600 shadow-xs dark:bg-slate-800 dark:text-amber-400' : 'text-slate-400 hover:text-slate-200'">
-                        <span>Tüm Siparişler</span>
-                    </button>
-                </div>
+                
 
                 <!-- Arama Kutusu -->
                 <div class="relative w-44 sm:w-56">
@@ -14640,7 +15411,7 @@
                             Kumaş Sipariş Listesi
                         </h2>
                         <p class="text-xs text-slate-500 font-medium mt-0.5" style="color: #64748b !important;">
-                            Aşama: {{ kumasSiparisStatusFilter === 'planning_and_ordered' ? 'Planlama Aşaması & Sipariş Alındı' : 'Tüm Siparişler' }} &bull; Toplam {{ kumasSiparisTotals.count }} Kalite &bull; {{ kumasSiparisTotals.totalModels }} Model
+                            Ekranda Listelenen Siparişler &bull; Toplam {{ kumasSiparisTotals.count }} Kalite &bull; {{ kumasSiparisTotals.totalModels }} Model
                         </p>
                     </div>
                     <div class="text-right">
@@ -14663,7 +15434,7 @@
 
                 <!-- BOŞ LİSTE UYARISI -->
                 <div v-if="!kumasSiparisList || !kumasSiparisList.length" class="py-16 text-center text-slate-400 font-medium italic">
-                    Seçili aşamada gösterilecek kumaş sipariş kaydı bulunamadı.
+                    Ekranda gösterilecek kumaş sipariş kaydı bulunamadı.
                 </div>
 
                 <!-- ANA TABLO -->
@@ -16235,7 +17006,7 @@
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20261022_1705_termin_fixed"></script>
+<script src="/static/js/app.js?v=20261029_1400_fixed"></script>
 
 </body>
 </html>
