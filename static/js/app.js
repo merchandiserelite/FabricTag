@@ -2294,27 +2294,88 @@ window.__texflowApp = createApp({
             variant = cleanFabricField(variant);
             color = cleanFabricField(color);
 
-            // Fallback from raw article if still missing
+            // Fallback from raw article or name if details are missing
             const rawArticle = slot === 2 ? (item.fabric_article_2 || item.fabric_type_2) : (item.fabric_article || item.fabric_type);
-            if ((!supplier || !name || !variant) && rawArticle) {
-                const raw = String(rawArticle).trim();
-                const parts = raw.split(' - ').map(p => p.trim()).filter(Boolean);
-                if (parts.length >= 2) {
+            const targetStr = cleanFabricField(rawArticle) || name || '';
+            if (targetStr) {
+                const parts = targetStr.split(' - ').map(p => p.trim()).filter(Boolean);
+                if (parts.length >= 3) {
                     if (!supplier) supplier = cleanFabricField(parts[0]);
-                    if (!name) {
-                        let second = parts[1];
-                        const matchCode = second.match(/\((.*?)\)/);
-                        if (matchCode) {
-                            if (!code) code = cleanFabricField(matchCode[1].replace(/ART\.?/i, '').trim());
-                            second = second.replace(/\(.*?\)/, '').trim();
-                        }
-                        name = cleanFabricField(second);
-                    }
-                    if (parts.length >= 3 && !variant) {
-                        variant = cleanFabricField(parts[2]);
+                    name = cleanFabricField(parts[1]);
+                    if (!code) code = cleanFabricField(parts[2]);
+                    else if (!variant && variant !== code) variant = cleanFabricField(parts[2]);
+                } else if (parts.length === 2) {
+                    if (!supplier) {
+                        supplier = cleanFabricField(parts[0]);
+                        name = cleanFabricField(parts[1]);
+                    } else if (!name || name === targetStr || name === parts[0]) {
+                        name = cleanFabricField(parts[1]);
                     }
                 } else if (parts.length === 1 && !name) {
                     name = cleanFabricField(parts[0]);
+                }
+            }
+
+            // 1. Kumaşçı ismini Kalite Adından tamamen temizle (ör: "ÖZEL TEKSTİL - VASA 02" -> "VASA 02")
+            if (supplier && name) {
+                const sLower = supplier.toLowerCase().trim();
+                const nLower = name.toLowerCase().trim();
+                if (nLower.startsWith(sLower)) {
+                    name = name.slice(supplier.length).replace(/^[\s\-_:/]+/, '').trim();
+                }
+            }
+
+            // 2. Kalite Adı içinde halen " - " kalmışsa ayır (ör: "(VIGO SATEN) - 27231") - parantezden ÖNCE çalıştırılır!
+            if (name && name.includes(' - ')) {
+                const subparts = name.split(' - ').map(p => p.trim()).filter(Boolean);
+                if (subparts.length >= 2) {
+                    name = subparts[0];
+                    if (!code) code = cleanFabricField(subparts[1]);
+                }
+            }
+
+            // 3. Kalite Adı içinde parantezli kod varsa veya tüm ad parantezliyse çıkar (ör: "VASA 02 (DA.20535)" vs "(VIGO SATEN)")
+            if (name) {
+                const codeMatch = name.match(/\(([^)]+)\)/);
+                if (codeMatch) {
+                    const inside = codeMatch[1].trim();
+                    const nameWithout = name.replace(/\s*\([^)]+\)\s*/g, ' ').trim();
+                    if (nameWithout) {
+                        if (!code) {
+                            code = cleanFabricField(inside.replace(/^ART\.?\s*/i, '').trim());
+                        }
+                        name = nameWithout;
+                    } else {
+                        name = inside;
+                    }
+                }
+            }
+
+            // 4. Kalite adını saran parantez ve tireleri temizle
+            name = name.replace(/^\((.*)\)$/, '$1').trim();
+            name = name.replace(/^[\s\-_:/]+|[\s\-_:/]+$/g, '').trim();
+
+            // 5. Kalite kodunu saran parantezleri temizle (ör: "(27231)" -> "27231")
+            if (code) {
+                code = code.replace(/^\((.*)\)$/, '$1').trim();
+            }
+
+            // 6. Varyant ile kod aynı ise varyantı temizle (ör: 27231 hem kod hem varyanta yazılmışsa)
+            if (variant && code && variant.toLowerCase() === code.toLowerCase()) {
+                variant = '';
+            }
+
+            // 7. Kalite kodu boş ama varyant bir kalite kodu gibi görünüyorsa
+            if (!code && variant && /^[0-9A-Za-z\.\-_/]+$/.test(variant)) {
+                code = variant;
+                variant = '';
+            }
+
+            // 8. Renk bilgisi boşsa modelin renginden al
+            if (!color) {
+                const itemColor = (item.color_name || item.color_code || '').trim();
+                if (itemColor) {
+                    color = cleanFabricField(itemColor);
                 }
             }
 
@@ -2348,9 +2409,11 @@ window.__texflowApp = createApp({
                 const meters1 = parseFloat(calc1.value) || 0;
                 const unit1 = (calc1.unit || 'M').toUpperCase();
 
-                const hasF1 = !!(f1.supplier || f1.code || f1.name || f1.variant || f1.color || s.fabric_article || meters1 > 0);
+                const fabricColor1 = f1.color || colorName;
+
+                const hasF1 = !!(f1.supplier || f1.code || f1.name || f1.variant || fabricColor1 || s.fabric_article || meters1 > 0);
                 if (hasF1) {
-                    const key1 = `${f1.supplier.toLowerCase()}___${f1.code.toLowerCase()}___${f1.name.toLowerCase()}___${f1.variant.toLowerCase()}___${f1.color.toLowerCase()}___${unit1}`;
+                    const key1 = `${(f1.supplier || '').toLowerCase()}___${(f1.code || '').toLowerCase()}___${(f1.name || '').toLowerCase()}___${(f1.variant || '').toLowerCase()}___${(fabricColor1 || '').toLowerCase()}___${unit1}`;
                     if (!groupsMap[key1]) {
                         groupsMap[key1] = {
                             key: key1,
@@ -2358,7 +2421,7 @@ window.__texflowApp = createApp({
                             code: f1.code,
                             name: f1.name,
                             variant: f1.variant,
-                            color: f1.color,
+                            color: fabricColor1,
                             totalMeters: 0,
                             unit: unit1,
                             modelsMap: {}
@@ -2381,9 +2444,11 @@ window.__texflowApp = createApp({
                     const meters2 = parseFloat(calc2.value) || 0;
                     const unit2 = (calc2.unit || 'M').toUpperCase();
 
-                    const hasF2 = !!(f2.supplier || f2.code || f2.name || f2.variant || f2.color || rawArt2 || meters2 > 0);
+                    const fabricColor2 = f2.color || colorName;
+
+                    const hasF2 = !!(f2.supplier || f2.code || f2.name || f2.variant || fabricColor2 || rawArt2 || meters2 > 0);
                     if (hasF2) {
-                        const key2 = `${f2.supplier.toLowerCase()}___${f2.code.toLowerCase()}___${f2.name.toLowerCase()}___${f2.variant.toLowerCase()}___${f2.color.toLowerCase()}___${unit2}`;
+                        const key2 = `${(f2.supplier || '').toLowerCase()}___${(f2.code || '').toLowerCase()}___${(f2.name || '').toLowerCase()}___${(f2.variant || '').toLowerCase()}___${(fabricColor2 || '').toLowerCase()}___${unit2}`;
                         if (!groupsMap[key2]) {
                             groupsMap[key2] = {
                                 key: key2,
@@ -2391,7 +2456,7 @@ window.__texflowApp = createApp({
                                 code: f2.code,
                                 name: f2.name,
                                 variant: f2.variant,
-                                color: f2.color,
+                                color: fabricColor2,
                                 totalMeters: 0,
                                 unit: unit2,
                                 modelsMap: {}
@@ -2455,10 +2520,15 @@ window.__texflowApp = createApp({
                 const nmA = a.name || 'zzz';
                 const nmB = b.name || 'zzz';
                 if (nmA.localeCompare(nmB, 'tr') !== 0) return nmA.localeCompare(nmB, 'tr');
+                const cdA = a.code || 'zzz';
+                const cdB = b.code || 'zzz';
+                if (cdA.localeCompare(cdB, 'tr') !== 0) return cdA.localeCompare(cdB, 'tr');
+                const colA = a.color || 'zzz';
+                const colB = b.color || 'zzz';
+                if (colA.localeCompare(colB, 'tr') !== 0) return colA.localeCompare(colB, 'tr');
                 const varA = a.variant || 'zzz';
                 const varB = b.variant || 'zzz';
-                if (varA.localeCompare(varB, 'tr') !== 0) return varA.localeCompare(varB, 'tr');
-                return (a.code || '').localeCompare(b.code || '', 'tr');
+                return varA.localeCompare(varB, 'tr');
             });
 
             return result;
@@ -2573,6 +2643,158 @@ window.__texflowApp = createApp({
                 document.execCommand('copy');
                 document.body.removeChild(ta);
                 triggerToast();
+            }
+        };
+
+        const downloadClientSideKumasExcel = (list, totals) => {
+            const dateStr = new Date().toLocaleDateString('tr-TR');
+            const totalCount = (totals && totals.count) || list.length;
+            const totalModels = (totals && totals.totalModels) || 0;
+            const totQty = (totals && (totals.combinedText || totals.formattedMeters)) || '0 M';
+            const dateFile = new Date().toISOString().slice(0, 10);
+
+            // 1. SheetJS ile Yerel .xlsx (Modern Excel) Dosyası Üretimi
+            if (typeof XLSX !== 'undefined') {
+                const aoa = [
+                    ["KUMAŞ SİPARİŞ LİSTESİ", "", "", "", "", "", "", `Tarih: ${dateStr}`],
+                    [`Ekranda Listelenen Siparişler • Toplam ${totalCount} Kalite • ${totalModels} Model`, "", "", "", "", "", "", `Toplam: ${totQty}`],
+                    [],
+                    ["#", "Kumaşçı", "Kalite Kodu", "Kalite Adı", "Kumaş Varyant", "Kumaş Renk", "Model Adları ve Renkleri", "Kumaş Sipariş Miktarı"]
+                ];
+
+                list.forEach((r, idx) => {
+                    aoa.push([
+                        idx + 1,
+                        r.supplier || '',
+                        r.code || '',
+                        r.name || '',
+                        r.variant || '',
+                        r.color || '',
+                        r.modelsAndColors || '',
+                        r.formattedTotalMeters || ''
+                    ]);
+                });
+
+                aoa.push([
+                    `TOPLAM (${totalCount} Kumaş Kalitesi)`,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    `${totalModels} Model Kaydı`,
+                    totQty
+                ]);
+
+                const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+                // Sütun genişlikleri ayarla
+                ws['!cols'] = [
+                    { wch: 6 },   // #
+                    { wch: 22 },  // Kumaşçı
+                    { wch: 16 },  // Kalite Kodu
+                    { wch: 26 },  // Kalite Adı
+                    { wch: 16 },  // Kumaş Varyant
+                    { wch: 18 },  // Kumaş Renk
+                    { wch: 45 },  // Model Adları ve Renkleri
+                    { wch: 22 }   // Kumaş Sipariş Miktarı
+                ];
+
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Kumas Siparis Listesi");
+                XLSX.writeFile(wb, `Kumas_Siparis_Listesi_${dateFile}.xlsx`);
+                return;
+            }
+
+            // 2. Yedek Fallback: UTF-8 BOM'lu CSV (Excel uyarı vermeden doğrudan açar)
+            let csvContent = "\ufeff";
+            csvContent += `KUMAŞ SİPARİŞ LİSTESİ;;;;;;;Tarih: ${dateStr}\n`;
+            csvContent += `Ekranda Listelenen Siparişler • Toplam ${totalCount} Kalite • ${totalModels} Model;;;;;;;Toplam: ${totQty}\n\n`;
+            csvContent += "#;Kumaşçı;Kalite Kodu;Kalite Adı;Kumaş Varyant;Kumaş Renk;Model Adları ve Renkleri;Kumaş Sipariş Miktarı\n";
+            list.forEach((r, idx) => {
+                const clean = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+                csvContent += `${idx + 1};${clean(r.supplier)};${clean(r.code)};${clean(r.name)};${clean(r.variant)};${clean(r.color)};${clean(r.modelsAndColors)};${clean(r.formattedTotalMeters)}\n`;
+            });
+            csvContent += `"TOPLAM (${totalCount} Kumaş Kalitesi)";;;;;;${totalModels} Model Kaydı;${totQty}\n`;
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Kumas_Siparis_Listesi_${dateFile}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        };
+
+                const isKumasSiparisExporting = ref(false);
+
+        const exportKumasSiparisExcel = async () => {
+            const list = kumasSiparisList.value || [];
+            if (list.length === 0) {
+                showToast('Aktarılacak kumaş sipariş kaydı bulunamadı.', 'warning');
+                return;
+            }
+
+            try {
+                isKumasSiparisExporting.value = true;
+                const payload = {
+                    rows: list.map(r => ({
+                        supplier: r.supplier || '',
+                        code: r.code || '',
+                        name: r.name || '',
+                        variant: r.variant || '',
+                        color: r.color || '',
+                        modelsAndColors: r.modelsAndColors || '',
+                        formattedTotalMeters: r.formattedTotalMeters || '',
+                        unit: r.unit || 'M'
+                    })),
+                    total_count: (kumasSiparisTotals.value && kumasSiparisTotals.value.count) || list.length,
+                    total_models: (kumasSiparisTotals.value && kumasSiparisTotals.value.totalModels) || 0,
+                    formatted_meters: (kumasSiparisTotals.value && kumasSiparisTotals.value.formattedMeters) || '',
+                    formatted_kg: (kumasSiparisTotals.value && kumasSiparisTotals.value.formattedKg) || '',
+                    combined_total: (kumasSiparisTotals.value && kumasSiparisTotals.value.combinedText) || ''
+                };
+
+                let downloaded = false;
+                try {
+                    const res = await fetch('/api/styles/export-kumas-siparis-excel', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(token.value ? { 'Authorization': `Bearer ${token.value}` } : {})
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                        const blob = await res.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        const dateStr = new Date().toISOString().slice(0, 10);
+                        a.download = `Kumas_Siparis_Listesi_${dateStr}.xlsx`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                        downloaded = true;
+                    }
+                } catch (fetchErr) {
+                    console.warn('Backend export fetch error, falling back to client-side generator:', fetchErr);
+                }
+
+                if (!downloaded) {
+                    downloadClientSideKumasExcel(list, kumasSiparisTotals.value);
+                }
+
+                showToast('Kumaş sipariş listesi Excel dosyası olarak başarıyla aktarıldı.', 'success');
+            } catch (err) {
+                console.error('Kumas siparis excel export error:', err);
+                showToast('Excel Aktarım Hatası: ' + (err.message || 'Bilinmeyen hata'), 'error');
+            } finally {
+                isKumasSiparisExporting.value = false;
             }
         };
 
@@ -3301,7 +3523,12 @@ window.__texflowApp = createApp({
             fabric_alert_days_1: 7,
             fabric_alert_color_1: '#fef08a',
             fabric_alert_days_2: 3,
-            fabric_alert_color_2: '#f87171'
+            fabric_alert_color_2: '#f87171',
+            fabric_received_threshold_1: 1.0,
+            fabric_received_color_1: '',
+            fabric_received_threshold_2: 5.0,
+            fabric_received_color_2: '#fef08a',
+            fabric_received_color_3: '#f87171'
         });
         const savingDefaults = ref(false);
 
@@ -3349,6 +3576,8 @@ window.__texflowApp = createApp({
                 customDefaults.value.default_overhead_rate = Number(customDefaults.value.default_overhead_rate) || 0;
                 customDefaults.value.default_mup_rate = Number(customDefaults.value.default_mup_rate) || 0;
                 customDefaults.value.default_commission_rate = Number(customDefaults.value.default_commission_rate) || 0;
+                customDefaults.value.fabric_received_threshold_1 = Number(customDefaults.value.fabric_received_threshold_1) || 0;
+                customDefaults.value.fabric_received_threshold_2 = Number(customDefaults.value.fabric_received_threshold_2) || 0;
                 customDefaults.value.order_alert_days_1 = Number(customDefaults.value.order_alert_days_1) || 0;
                 customDefaults.value.order_alert_days_2 = Number(customDefaults.value.order_alert_days_2) || 0;
                 customDefaults.value.fabric_alert_days_1 = Number(customDefaults.value.fabric_alert_days_1) || 0;
@@ -3388,7 +3617,12 @@ window.__texflowApp = createApp({
                 fabric_alert_days_1: 7,
                 fabric_alert_color_1: '#fef08a',
                 fabric_alert_days_2: 3,
-                fabric_alert_color_2: '#f87171'
+                fabric_alert_color_2: '#f87171',
+                fabric_received_threshold_1: 1.0,
+                fabric_received_color_1: '',
+                fabric_received_threshold_2: 5.0,
+                fabric_received_color_2: '#fef08a',
+                fabric_received_color_3: '#f87171'
             };
             showToast('Varsayılan oranlar ve renkler fabrika ayarlarına döndürüldü. Kaydetmeyi unutmayın.', 'info');
         };
@@ -3560,18 +3794,72 @@ window.__texflowApp = createApp({
         };
 
 
-        const getFabricReceivedMetersClass = (orderedMeters, receivedMeters) => {
+        const getFabricReceivedMetersStyle = (orderedMeters, receivedMeters) => {
+            if (!customDefaults.value.alerts_enabled) return {};
             const ord = parseFloat(orderedMeters) || 0;
             const rec = parseFloat(receivedMeters) || 0;
-            if (ord <= 0 || rec <= 0) return '';
+            if (ord <= 0 || rec <= 0) return {};
+
             const diffPercent = ((rec - ord) / ord) * 100;
             const absDiff = Math.abs(diffPercent);
-            if (absDiff > 5) {
-                return 'w-full bg-red-400 !text-black font-extrabold border border-red-500 shadow-sm rounded px-1.5 py-0.5';
+
+            const t1 = Number(customDefaults.value.fabric_received_threshold_1 ?? 1.0);
+            const t2 = Number(customDefaults.value.fabric_received_threshold_2 ?? 5.0);
+            const minT = Math.min(t1, t2);
+            const maxT = Math.max(t1, t2);
+
+            const c1 = customDefaults.value.fabric_received_color_1 || '';
+            const c2 = customDefaults.value.fabric_received_color_2 || '#fef08a';
+            const c3 = customDefaults.value.fabric_received_color_3 || '#f87171';
+
+            let bg = '';
+            if (absDiff <= minT) {
+                // 1. Aşama: Tolerans içi (sapma yok / ihmal edilebilir)
+                if (c1 && c1 !== 'transparent' && c1 !== 'none') {
+                    bg = c1;
+                }
+            } else if (absDiff <= maxT) {
+                // 2. Aşama: Orta sapma (kabul edilebilir fark)
+                bg = c2;
+            } else {
+                // 3. Aşama: Yüksek sapma (kritik / aşırı fark)
+                bg = c3;
             }
-            if (absDiff > 0 && absDiff <= 5) {
-                return 'w-full bg-amber-300 !text-black font-extrabold border border-amber-400 shadow-sm rounded px-1.5 py-0.5';
+
+            if (bg) {
+                return {
+                    backgroundColor: bg,
+                    color: getContrastTextColor(bg),
+                    borderRadius: '0.375rem',
+                    padding: '2px 4px',
+                    fontWeight: '800',
+                    border: '1px solid rgba(0,0,0,0.15)',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                    transition: 'background-color 0.2s ease'
+                };
             }
+            return {};
+        };
+
+        const getFabricReceivedMetersTextColor = (orderedMeters, receivedMeters) => {
+            const style = getFabricReceivedMetersStyle(orderedMeters, receivedMeters);
+            if (style && style.backgroundColor) {
+                return getContrastTextColor(style.backgroundColor);
+            }
+            return isDarkMode.value ? '#f1f5f9' : '#0f172a';
+        };
+
+        const getFabricReceivedMetersTooltip = (orderedMeters, receivedMeters) => {
+            const ord = parseFloat(orderedMeters) || 0;
+            const rec = parseFloat(receivedMeters) || 0;
+            if (ord <= 0 || rec <= 0) return 'Gelen kumaş miktarını girin';
+            const diffPercent = ((rec - ord) / ord) * 100;
+            const sign = diffPercent > 0 ? '+' : '';
+            const rounded = Math.round(diffPercent * 10) / 10;
+            return `Sipariş: ${ord} | Gelen: ${rec} (Fark: ${sign}${rounded}%)`;
+        };
+
+        const getFabricReceivedMetersClass = (orderedMeters, receivedMeters) => {
             return '';
         };
 
@@ -12584,9 +12872,11 @@ window.__texflowApp = createApp({
             { key: 'delivery_date', title: 'Teslim Tarihi', width: 115, sortable: true, filterable: true, align: 'center' },
             { key: 'quantity_sizes', title: 'Adet ve Beden', width: 155, sortable: false, filterable: true, align: 'left' },
             { key: 'fabric_info', title: 'Kumaş 1', width: 175, sortable: true, filterable: true, align: 'left' },
+            { key: 'unit_meters', title: 'Birim Kullanım 1', width: 110, sortable: true, filterable: false, align: 'center' },
             { key: 'fabric_info_2', title: 'Kumaş 2', width: 175, sortable: true, filterable: true, align: 'left' },
+            { key: 'unit_meters_2', title: 'Birim Kullanım 2', width: 110, sortable: true, filterable: false, align: 'center' },
             { key: 'fabric_info_3', title: 'Kumaş 3', width: 175, sortable: true, filterable: true, align: 'left' },
-            { key: 'unit_meters', title: 'Birim Metraj', width: 100, sortable: true, filterable: false, align: 'center' },
+            { key: 'unit_meters_3', title: 'Birim Kullanım 3', width: 110, sortable: true, filterable: false, align: 'center' },
             { key: 'critique', title: 'Kritik', width: 140, sortable: false, filterable: false, align: 'left' },
             { key: 'notes', title: 'Notlar', width: 140, sortable: false, filterable: false, align: 'left' },
             { key: 'stage', title: 'İşlem Aşaması', width: 145, sortable: true, filterable: true, align: 'center' },
@@ -12620,7 +12910,7 @@ window.__texflowApp = createApp({
             if (sampleActiveFabricCount.value < 1) sampleActiveFabricCount.value = 1;
             localStorage.setItem('sample_active_fabric_count', sampleActiveFabricCount.value.toString());
             syncSampleFabricColumns();
-            showToast('Kumaş sütunu kaldırıldı.', 'info');
+            showToast('Kumaş ve birim kullanım sütunu kaldırıldı.', 'info');
             refreshIcons();
         };
 
@@ -12631,22 +12921,63 @@ window.__texflowApp = createApp({
             }
             const idx1 = order.indexOf('fabric_info');
 
-            if (sampleActiveFabricCount.value >= 2) {
-                if (!order.includes('fabric_info_2')) {
-                    order.splice(idx1 + 1, 0, 'fabric_info_2');
-                }
+            // Birim Kullanım 1 (unit_meters) Kumaş 1'in hemen sağında
+            if (!order.includes('unit_meters')) {
+                order.splice(idx1 + 1, 0, 'unit_meters');
             } else {
-                order = order.filter(k => k !== 'fabric_info_2');
+                const curUmIdx = order.indexOf('unit_meters');
+                const curFiIdx = order.indexOf('fabric_info');
+                if (curUmIdx !== curFiIdx + 1) {
+                    order.splice(curUmIdx, 1);
+                    const newFiIdx = order.indexOf('fabric_info');
+                    order.splice(newFiIdx + 1, 0, 'unit_meters');
+                }
             }
 
-            const idx2 = order.indexOf('fabric_info_2');
-            const insertIdx3 = idx2 !== -1 ? idx2 + 1 : idx1 + 1;
-            if (sampleActiveFabricCount.value >= 3) {
-                if (!order.includes('fabric_info_3')) {
-                    order.splice(insertIdx3, 0, 'fabric_info_3');
+            // Kumaş 2 & Birim Kullanım 2
+            const uIdx1 = order.indexOf('unit_meters');
+            if (sampleActiveFabricCount.value >= 2) {
+                if (!order.includes('fabric_info_2')) {
+                    order.splice(uIdx1 + 1, 0, 'fabric_info_2');
+                }
+                const idx2 = order.indexOf('fabric_info_2');
+                if (!order.includes('unit_meters_2')) {
+                    order.splice(idx2 + 1, 0, 'unit_meters_2');
+                } else {
+                    const curUm2Idx = order.indexOf('unit_meters_2');
+                    const curFi2Idx = order.indexOf('fabric_info_2');
+                    if (curUm2Idx !== curFi2Idx + 1) {
+                        order.splice(curUm2Idx, 1);
+                        const newFi2Idx = order.indexOf('fabric_info_2');
+                        order.splice(newFi2Idx + 1, 0, 'unit_meters_2');
+                    }
                 }
             } else {
-                order = order.filter(k => k !== 'fabric_info_3');
+                order = order.filter(k => k !== 'fabric_info_2' && k !== 'unit_meters_2');
+            }
+
+            // Kumaş 3 & Birim Kullanım 3
+            if (sampleActiveFabricCount.value >= 3) {
+                const uIdx2 = order.indexOf('unit_meters_2');
+                const fIdx2 = order.indexOf('fabric_info_2');
+                const insertBase3 = uIdx2 !== -1 ? uIdx2 + 1 : (fIdx2 !== -1 ? fIdx2 + 1 : uIdx1 + 1);
+                if (!order.includes('fabric_info_3')) {
+                    order.splice(insertBase3, 0, 'fabric_info_3');
+                }
+                const idx3 = order.indexOf('fabric_info_3');
+                if (!order.includes('unit_meters_3')) {
+                    order.splice(idx3 + 1, 0, 'unit_meters_3');
+                } else {
+                    const curUm3Idx = order.indexOf('unit_meters_3');
+                    const curFi3Idx = order.indexOf('fabric_info_3');
+                    if (curUm3Idx !== curFi3Idx + 1) {
+                        order.splice(curUm3Idx, 1);
+                        const newFi3Idx = order.indexOf('fabric_info_3');
+                        order.splice(newFi3Idx + 1, 0, 'unit_meters_3');
+                    }
+                }
+            } else {
+                order = order.filter(k => k !== 'fabric_info_3' && k !== 'unit_meters_3');
             }
 
             if (!order.includes('notes')) {
@@ -12765,6 +13096,7 @@ window.__texflowApp = createApp({
             sampleColWidths.value = {};
             localStorage.removeItem('sample_col_order');
             localStorage.removeItem('sample_col_widths');
+            syncSampleFabricColumns();
             showToast('Numune tablosu sütun düzeni varsayılana sıfırlandı.', 'info');
         };
 
@@ -13663,7 +13995,11 @@ window.__texflowApp = createApp({
                     delivery_date: '',
                     quantity_sizes: '',
                     fabric_info: '',
+                    fabric_info_2: '',
+                    fabric_info_3: '',
                     unit_meters: '',
+                    unit_meters_2: '',
+                    unit_meters_3: '',
                     stage: 'Talep Oluşturuldu',
                     critique: '',
                     notes: ''
@@ -14001,7 +14337,7 @@ window.__texflowApp = createApp({
                 list = [...list].sort((a, b) => {
                     let va = a[col] || '';
                     let vb = b[col] || '';
-                    if (col === 'id' || col === 'unit_meters') {
+                    if (col === 'id' || col === 'unit_meters' || col === 'unit_meters_2' || col === 'unit_meters_3') {
                         const na = parseFloat(String(va).replace(',', '.')) || 0;
                         const nb = parseFloat(String(vb).replace(',', '.')) || 0;
                         return (na - nb) * dir;
@@ -14100,8 +14436,12 @@ window.__texflowApp = createApp({
             request_date: 6,
             delivery_date: 6,
             quantity_sizes: 8,
-            fabric_info: 10,
+            fabric_info: 9,
             unit_meters: 4,
+            fabric_info_2: 9,
+            unit_meters_2: 4,
+            fabric_info_3: 9,
+            unit_meters_3: 4,
             critique: 8,
             notes: 8,
             stage: 6
@@ -14137,9 +14477,11 @@ window.__texflowApp = createApp({
                 delivery_date: 'Teslim T.',
                 quantity_sizes: 'Adet & Beden',
                 fabric_info: 'Kumaş 1',
+                unit_meters: 'Birim Kullanım 1',
                 fabric_info_2: 'Kumaş 2',
+                unit_meters_2: 'Birim Kullanım 2',
                 fabric_info_3: 'Kumaş 3',
-                unit_meters: 'Metraj',
+                unit_meters_3: 'Birim Kullanım 3',
                 critique: 'Kritik',
                 notes: 'Notlar',
                 stage: 'Aşama'
@@ -14280,11 +14622,11 @@ window.__texflowApp = createApp({
             return pages.length ? pages : [[]];
         });
 
-        const getSamplePrintFabric = (sample) => {
+        const getSamplePrintFabric = (sample, slot = 1) => {
             if (!sample) return '-';
             // 1. FabricTag objesi varsa: Başlıksız, karışımsız, ağırlıksız temiz isim
-            if (sample.fabric_detail) {
-                const fd = sample.fabric_detail;
+            const fd = slot === 3 ? (sample.fabric_detail_3 || sample.fabric_detail) : (slot === 2 ? (sample.fabric_detail_2 || sample.fabric_detail) : sample.fabric_detail);
+            if (fd) {
                 const comp = (fd.company_name || '').trim();
                 const qName = isInvalidOrKodsuz(fd.quality_name) ? '' : String(fd.quality_name).trim();
                 const qCode = isInvalidOrKodsuz(fd.quality_code) ? '' : String(fd.quality_code).trim();
@@ -14298,7 +14640,7 @@ window.__texflowApp = createApp({
             }
 
             // 2. Ham metin varsa
-            let raw = (sample.fabric_info || '').trim();
+            let raw = (slot === 3 ? (sample.fabric_info_3 || '') : (slot === 2 ? (sample.fabric_info_2 || '') : (sample.fabric_info || ''))).trim();
             if (!raw) return '-';
 
             // Eğer bullet formatındaysa ("SOYLU - İnterlok • %100 Pamuk • 160 CM"): Sadece ilk parçayı al
@@ -14784,6 +15126,9 @@ return {
             getFabricArrivalDaysRemaining,
             getFabricArrivalDateStyleClass,
             getFabricReceivedMetersClass,
+            getFabricReceivedMetersStyle,
+            getFabricReceivedMetersTextColor,
+            getFabricReceivedMetersTooltip,
             customDefaults,
             savingDefaults,
             loadCustomDefaults,
@@ -15151,6 +15496,8 @@ return {
             openKumasSiparisModal,
             closeKumasSiparisModal,
             copyKumasSiparisTable,
+            exportKumasSiparisExcel,
+            isKumasSiparisExporting,
             printKumasSiparis,
 
             // Kesimhane

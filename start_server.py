@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     threading.Thread(target=wait_for_server_and_open_browser, args=(port,), daemon=True).start()
 
-    dev_mode = "--dev" in sys.argv or "--reload" in sys.argv
+    dev_mode = "--prod" not in sys.argv and "--no-reload" not in sys.argv
 
     if dev_mode:
         uvicorn.run(

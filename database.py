@@ -472,6 +472,8 @@ def init_db():
         fabrictag_id_2 INTEGER,
         fabrictag_id_3 INTEGER,
         unit_meters TEXT,
+        unit_meters_2 TEXT,
+        unit_meters_3 TEXT,
         stage TEXT DEFAULT 'Talep Oluşturuldu',
         notes TEXT,
         critique TEXT,
@@ -497,6 +499,10 @@ def init_db():
         cursor.execute("ALTER TABLE sample_items ADD COLUMN fabrictag_id_2 INTEGER")
     if "fabrictag_id_3" not in existing_sample_cols:
         cursor.execute("ALTER TABLE sample_items ADD COLUMN fabrictag_id_3 INTEGER")
+    if "unit_meters_2" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN unit_meters_2 TEXT")
+    if "unit_meters_3" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN unit_meters_3 TEXT")
     if "image_fit" not in existing_sample_cols:
         cursor.execute("ALTER TABLE sample_items ADD COLUMN image_fit TEXT DEFAULT 'contain'")
     if "display_order" not in existing_sample_cols:

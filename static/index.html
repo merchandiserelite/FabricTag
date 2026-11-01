@@ -1671,13 +1671,18 @@
                     <button @click="sidebarOpen = true" class="md:hidden p-2 rounded-lg border" :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-700'">
                         <i data-lucide="menu" class="w-5 h-5"></i>
                     </button>
-                    <!-- MENÜ GİZLE / GÖSTER DÜĞMESİ (MASAÜSTÜ) -->
-                    <button @click="toggleSidebar"
+                    <!-- MENÜYÜ GÖSTER DÜĞMESİ (MASAÜSTÜ - SADECE MENÜ GİZLİYKEN GÖRÜNÜR) -->
+                    <button v-if="sidebarCollapsed"
+                            @click="toggleSidebar"
                             class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition shadow-sm cursor-pointer"
                             :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'"
-                            :title="sidebarCollapsed ? 'Sol Menüyü Göster' : 'Sol Menüyü Gizle'">
-                        <i :data-lucide="sidebarCollapsed ? 'panel-left-open' : 'panel-left-close'" class="w-4 h-4 text-theme"></i>
-                        <span>{{ sidebarCollapsed ? 'Menüyü Göster' : 'Menüyü Gizle' }}</span>
+                            title="Sol Menüyü Göster">
+                        <svg class="w-4 h-4 text-theme" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="18" height="18" x="3" y="3" rx="2" />
+                            <path d="M9 3v18" />
+                            <path d="m14 9 3 3-3 3" />
+                        </svg>
+                        <span>Menüyü Göster</span>
                     </button>
                     <div class="shrink-0">
                         <h2 class="text-base font-bold tracking-tight whitespace-nowrap flex items-center gap-2" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
@@ -2314,15 +2319,6 @@
                     <div class="flex flex-col sm:flex-row gap-3 items-center justify-between p-3.5 rounded-2xl border"
                          :class="isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'">
                         <div class="flex items-center gap-2.5 flex-wrap">
-                            <span class="text-xs font-bold whitespace-nowrap" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
-                                Toplam: <span class="text-theme font-extrabold">{{ filteredStyles.length }}</span> Model / Varyant Satırı
-                            </span>
-                            <span v-if="sortColumn" class="text-[11px] bg-theme-light text-theme px-2 py-0.5 rounded-full font-medium flex items-center gap-1 border border-theme whitespace-nowrap">
-                                <span>Sıralama: <b>{{ getColumnTitleByKey(sortColumn) }}</b> ({{ sortDirection === 'asc' ? 'A-Z / Küçükten Büyüğe' : 'Z-A / Büyükten Küçüğe' }})</span>
-                                <button @click="clearSort" class="hover:text-red-400 ml-1">✕</button>
-                            </span>
-
-
                             <!-- KUMAŞ DEPOSUNDAKİ GİBİ HIZLI ARAMA ÇUBUĞU (MAX 2 KELİMELİK) -->
                             <div class="relative w-40 sm:w-52">
                                 <input v-model="carsafSearchQuery"
@@ -2373,6 +2369,12 @@
                                     <path d="M3 3v5h5"/>
                                 </svg>
                             </button>
+
+                            <!-- SIRALAMA ROZETİ (VARSA) -->
+                            <span v-if="sortColumn" class="text-[11px] bg-theme-light text-theme px-2 py-0.5 rounded-full font-medium flex items-center gap-1 border border-theme whitespace-nowrap">
+                                <span>Sıralama: <b>{{ getColumnTitleByKey(sortColumn) }}</b> ({{ sortDirection === 'asc' ? 'A-Z / Küçükten Büyüğe' : 'Z-A / Büyükten Küçüğe' }})</span>
+                                <button @click="clearSort" class="hover:text-red-400 ml-1">✕</button>
+                            </span>
                         </div>
                         <div class="flex items-center gap-1.5 flex-wrap ml-auto justify-end">
                             <!-- BEDENLERİ GİZLE / GÖSTER -->
@@ -2941,15 +2943,25 @@
 
                                             <!-- Gelen Kumaş 2 -->
                                             <template v-else-if="col.key === 'fabric_received_meters_2'">
-                                                <div class="flex items-center gap-1 text-center justify-center font-mono">
-                                                    <input v-model.number="newManualRow.fabric_received_meters_2" type="number" step="0.1" placeholder="0"
-                                                           class="w-full bg-white dark:bg-slate-900 border border-emerald-400 rounded px-1 py-1 text-xs text-center font-mono font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm">
-                                                    <span v-if="newManualRow.fabric_received_meters_2" class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0"
-                                                          :class="newManualRow.fabric_order_unit_2 === 'KG' ? 'bg-cyan-500/20 text-cyan-500 border-cyan-500/30' : 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30'">
-                                                        {{ newManualRow.fabric_order_unit_2 || 'M' }}
-                                                    </span>
-                                                </div>
-                                            </template>
+                                                 <div class="w-full flex items-center justify-center gap-1 text-center font-mono">
+                                                     <div class="w-full inline-flex items-center justify-center transition flex-1"
+                                                          :style="getFabricReceivedMetersStyle(item.fabric_ordered_meters_2, item.fabric_received_meters_2)"
+                                                          :title="getFabricReceivedMetersTooltip(item.fabric_ordered_meters_2, item.fabric_received_meters_2)">
+                                                         <input :value="item.fabric_received_meters_2 !== undefined && item.fabric_received_meters_2 !== null ? item.fabric_received_meters_2 : ''"
+                                                                @change="updateCellWithLog(item.id, 'fabric_received_meters_2', $event.target.value, 'Gelen Kumaş 2 Güncellendi')"
+                                                                placeholder="0"
+                                                                type="number" step="0.1"
+                                                                class="w-full bg-transparent border-0 outline-none text-center font-mono font-bold text-xs hover:bg-slate-500/10 rounded px-1 py-0.5 transition font-extrabold"
+                                                                :style="{ color: getFabricReceivedMetersTextColor(item.fabric_ordered_meters_2, item.fabric_received_meters_2) }">
+                                                     </div>
+                                                     <span v-if="item.fabric_received_meters_2 !== null && item.fabric_received_meters_2 !== undefined && String(item.fabric_received_meters_2).trim() !== ''"
+                                                           class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border shrink-0 select-none"
+                                                           :class="(item.fabric_order_unit_2 || 'M') === 'KG' ? 'bg-cyan-500/15 text-cyan-500 border-cyan-500/30' : 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'"
+                                                           title="Gelen Kumaş 2 Birimi (Kumaş Sipariş 2'den Alınır)">
+                                                         {{ item.fabric_order_unit_2 || 'M' }}
+                                                     </span>
+                                                 </div>
+                                             </template>
 
                                             <!-- Sezon -->
                                             <template v-else-if="col.key === 'season'">
@@ -3455,17 +3467,18 @@
                                             </template>
 
 
-                                            <!-- 17.3 GELEN KUMAŞ 1 (+/- %5 ÜZERİ KIRMIZI, +/- %0-%5 SARI UYARI - M VEYA KG BİRİMİ) -->
+                                            <!-- 17.3 GELEN KUMAŞ 1 (3 AŞAMALI % SAPMA UYARI RENKLERİ - M VEYA KG BİRİMİ) -->
                                             <template v-else-if="col.key === 'fabric_received_meters'">
                                                 <div class="w-full flex items-center justify-center gap-1 text-center font-mono">
                                                     <div class="w-full inline-flex items-center justify-center transition flex-1"
-                                                         :class="getFabricReceivedMetersClass(item.fabric_ordered_meters, item.fabric_received_meters)">
+                                                         :style="getFabricReceivedMetersStyle(item.fabric_ordered_meters, item.fabric_received_meters)"
+                                                         :title="getFabricReceivedMetersTooltip(item.fabric_ordered_meters, item.fabric_received_meters)">
                                                         <input :value="item.fabric_received_meters !== undefined && item.fabric_received_meters !== null ? item.fabric_received_meters : ''"
                                                                @change="updateCellWithLog(item.id, 'fabric_received_meters', $event.target.value, 'Gelen Kumaş 1 Güncellendi')"
                                                                placeholder="0"
                                                                type="number" step="0.1"
-                                                               class="w-full bg-transparent border-0 outline-none text-center font-mono font-bold text-xs hover:bg-slate-500/10 rounded px-1 py-0.5 transition"
-                                                               :class="getFabricReceivedMetersClass(item.fabric_ordered_meters, item.fabric_received_meters) ? '!text-black font-extrabold' : (isDarkMode ? 'text-white' : 'text-slate-900')">
+                                                               class="w-full bg-transparent border-0 outline-none text-center font-mono font-bold text-xs hover:bg-slate-500/10 rounded px-1 py-0.5 transition font-extrabold"
+                                                               :style="{ color: getFabricReceivedMetersTextColor(item.fabric_ordered_meters, item.fabric_received_meters) }">
                                                     </div>
                                                     <span v-if="item.fabric_received_meters !== null && item.fabric_received_meters !== undefined && String(item.fabric_received_meters).trim() !== ''"
                                                           class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border shrink-0 select-none"
@@ -8338,7 +8351,7 @@
                                            type="text"
                                            placeholder="Hızlı model, müşteri, kumaş ara..."
                                            class="w-full pl-9 pr-7 py-2 rounded-xl text-xs font-medium border outline-none transition shadow-sm"
-                                           :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-emerald-500'">
+                                           :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white focus:border-theme' : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-theme'">
                                     <button v-if="sampleSearchQuery" @click="sampleSearchQuery = ''"
                                             class="absolute right-2 top-2 text-slate-400 hover:text-slate-200">
                                         <i data-lucide="x" class="w-3.5 h-3.5"></i>
@@ -8359,27 +8372,24 @@
 
                                 <!-- Sütun Düzenini Sıfırla Butonu -->
                                 <button @click="resetSampleColOrder"
-                                        class="h-9 px-2.5 rounded-xl border flex items-center justify-center transition shadow-sm hover:brightness-110 active:scale-95 cursor-pointer select-none"
-                                        :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white' : 'bg-white border-slate-300 text-slate-700 hover:text-slate-900'"
+                                        class="h-9 w-9 rounded-xl btn-theme text-white flex items-center justify-center transition shadow-md hover:brightness-110 active:scale-95 cursor-pointer select-none shrink-0"
                                         title="Sütun Sırasını ve Genişliklerini Fabrika Ayarlarına Sıfırla">
                                     <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                                 </button>
 
-                                <!-- Kumaş 2 / 3 Sütunu Ekle / Kaldır Butonları -->
+                                <!-- Kumaş 2 / 3 Sütunu Ekle Butonu (2 Satırlı Çarşaf Stili) -->
                                 <button v-if="sampleActiveFabricCount < 3"
                                         @click="addSampleFabricColumn"
                                         type="button"
-                                        class="h-9 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition shadow-sm hover:brightness-110 active:scale-95 cursor-pointer select-none"
-                                        :class="isDarkMode ? 'bg-indigo-950/40 border-indigo-700/60 text-indigo-300 hover:text-white hover:bg-indigo-900/60' : 'bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-100'"
-                                        :title="'Tabloya Kumaş ' + (sampleActiveFabricCount + 1) + ' sütununu ekle'">
-                                    <i data-lucide="layers" class="w-4 h-4 text-indigo-500"></i>
-                                    <span>+ Kumaş {{ sampleActiveFabricCount + 1 }} Ekle</span>
+                                        class="h-9 px-2.5 rounded-xl btn-theme text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 select-none cursor-pointer"
+                                        :title="'Tabloya Kumaş ' + (sampleActiveFabricCount + 1) + ' ve Birim Kullanım sütununu ekle'">
+                                    <span>Kumaş {{ sampleActiveFabricCount + 1 }}</span>
+                                    <span class="text-[9.5px] text-white/90 font-semibold">Ekle</span>
                                 </button>
 
                                 <!-- Excel'e Aktar Butonu -->
                                 <button @click="exportSamplesExcel"
-                                        class="h-9 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition shadow-sm hover:brightness-110 active:scale-95 cursor-pointer select-none"
-                                        :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-400 hover:bg-slate-750' : 'bg-white border-slate-300 text-emerald-600 hover:bg-slate-50'"
+                                        class="h-9 px-3 rounded-xl btn-theme text-white text-xs font-bold flex items-center gap-1.5 shadow-md hover:brightness-110 active:scale-95 transition cursor-pointer select-none"
                                         title="Filtrelenmiş veya seçili kayıtları Excel dosyası olarak indir">
                                     <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
                                     <span>Excel</span>
@@ -8393,12 +8403,12 @@
                                     <span>Yazdır</span>
                                 </button>
 
-                                <!-- Yeni Numune Ekle Butonu -->
+                                <!-- Yeni Numune Ekle Butonu (Çarşaf Listesi Buton Yapısı) -->
                                 <button @click="addNewSampleRow"
-                                        class="h-9 px-3.5 rounded-xl btn-theme text-white text-xs font-bold flex items-center gap-1.5 shadow-md hover:brightness-110 active:scale-95 transition cursor-pointer select-none"
+                                        class="h-9 px-2.5 rounded-xl btn-theme text-white text-[10.5px] font-bold flex flex-col justify-center text-center leading-tight transition shadow-md hover:brightness-110 active:scale-95 select-none cursor-pointer"
                                         title="Tabloya yeni boş numune satırı ekle">
-                                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
-                                    <span>Yeni Numune</span>
+                                    <span>Yeni</span>
+                                    <span class="text-[9.5px] text-white/90 font-semibold">Numune</span>
                                 </button>
 
                             </div>
@@ -8457,11 +8467,11 @@
                                                     <div class="flex items-center gap-0.5 shrink-0">
                                                         
                                                         <!-- Kumaş 2 / 3 Kolonu Hızlı Kaldırma (X) Butonu -->
-                                                        <button v-if="col.key === 'fabric_info_2' || col.key === 'fabric_info_3'"
+                                                        <button v-if="col.key === 'fabric_info_2' || col.key === 'fabric_info_3' || col.key === 'unit_meters_2' || col.key === 'unit_meters_3'"
                                                                 type="button"
-                                                                @click.stop="removeSampleFabricColumn(col.key === 'fabric_info_3' ? 3 : 2)"
+                                                                @click.stop="removeSampleFabricColumn((col.key === 'fabric_info_3' || col.key === 'unit_meters_3') ? 3 : 2)"
                                                                 class="p-0.5 rounded hover:bg-rose-500 hover:text-white text-slate-400 transition cursor-pointer"
-                                                                :title="col.title + ' sütununu tablodan kaldır'">
+                                                                :title="col.title + ' ve bağlı sütunları tablodan kaldır'">
                                                             <i data-lucide="x" class="w-3 h-3"></i>
                                                         </button>
 
@@ -8470,21 +8480,21 @@
                                                                 class="flex flex-col items-center justify-center p-0.5 rounded hover:bg-slate-700/40 transition cursor-pointer"
                                                                 :title="'Sırala: ' + col.title">
                                                             <span class="text-[8.5px] leading-none transition select-none"
-                                                                  :class="sampleSortCol === col.key && sampleSortDir === 'asc' ? 'text-emerald-500 font-extrabold' : 'text-slate-400 opacity-60'">▲</span>
+                                                                  :class="sampleSortCol === col.key && sampleSortDir === 'asc' ? 'text-theme font-extrabold' : 'text-slate-400 opacity-60'">▲</span>
                                                             <span class="text-[8.5px] leading-none transition mt-0.5 select-none"
-                                                                  :class="sampleSortCol === col.key && sampleSortDir === 'desc' ? 'text-emerald-500 font-extrabold' : 'text-slate-400 opacity-60'">▼</span>
+                                                                  :class="sampleSortCol === col.key && sampleSortDir === 'desc' ? 'text-theme font-extrabold' : 'text-slate-400 opacity-60'">▼</span>
                                                         </button>
 
                                                         <!-- Süzgeç Butonu -->
                                                         <button v-if="col.filterable" type="button"
                                                                 @click.stop="toggleSampleFilterDropdown(col.key)"
                                                                 class="p-1 rounded hover:bg-slate-700/40 transition relative cursor-pointer"
-                                                                :class="hasActiveSampleFilter(col.key) ? 'text-emerald-500 font-bold' : 'text-slate-400'"
+                                                                :class="hasActiveSampleFilter(col.key) ? 'text-theme font-bold' : 'text-slate-400'"
                                                                 :title="'Süz: ' + col.title">
                                                             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
                                                             </svg>
-                                                            <span v-if="hasActiveSampleFilter(col.key)" class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                                                            <span v-if="hasActiveSampleFilter(col.key)" class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 btn-theme rounded-full animate-ping"></span>
                                                         </button>
 
                                                     </div>
@@ -8508,7 +8518,7 @@
                                                     <!-- Tümünü Seç / Temizle -->
                                                     <div class="flex items-center justify-between text-[11px] pb-1.5 mb-1.5 border-b"
                                                          :class="isDarkMode ? 'border-slate-800' : 'border-slate-200'">
-                                                        <button @click="selectAllSampleForColumn(col.key)" class="text-emerald-500 font-bold hover:underline">Tümünü Seç</button>
+                                                        <button @click="selectAllSampleForColumn(col.key)" class="text-theme font-bold hover:underline">Tümünü Seç</button>
                                                         <span class="text-slate-500">|</span>
                                                         <button @click="clearSampleColumnFilter(col.key)" class="text-rose-400 font-bold hover:underline">Temizle</button>
                                                     </div>
@@ -8520,7 +8530,7 @@
                                                             <input type="checkbox"
                                                                    :checked="isSampleValSelected(col.key, val)"
                                                                    @change="toggleSampleValSelection(col.key, val, $event.target.checked)"
-                                                                   class="rounded text-emerald-600 focus:ring-0">
+                                                                   class="rounded text-theme focus:ring-0">
                                                             <span class="truncate font-medium" :title="val">{{ val }}</span>
                                                         </label>
                                                     </div>
@@ -8537,7 +8547,7 @@
                                                                    class="flex-1 rounded px-2 py-1 text-xs border outline-none"
                                                                    :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
                                                             <button type="button" @click="addNewCustomSampleType"
-                                                                    class="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded transition shrink-0">
+                                                                    class="px-2 py-1 btn-theme text-white text-xs font-bold rounded transition shrink-0">
                                                                 Ekle
                                                             </button>
                                                         </div>
@@ -8555,7 +8565,7 @@
                                                                    class="flex-1 rounded px-2 py-1 text-xs border outline-none"
                                                                    :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
                                                             <button type="button" @click="addNewCustomSampleStage"
-                                                                    class="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded transition shrink-0">
+                                                                    class="px-2 py-1 btn-theme text-white text-xs font-bold rounded transition shrink-0">
                                                                 Ekle
                                                             </button>
                                                         </div>
@@ -8594,8 +8604,7 @@
                                                     </button>
                                                     <button @click="addNewSampleRow"
                                                             type="button"
-                                                            class="btn-theme px-4 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 shadow-md hover:brightness-110 active:scale-95 transition cursor-pointer">
-                                                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                                                            class="btn-theme px-4 py-1.5 rounded-xl text-white text-xs font-bold shadow-md hover:brightness-110 active:scale-95 transition cursor-pointer">
                                                         <span>Yeni Numune Ekle</span>
                                                     </button>
                                                 </div>
@@ -8853,13 +8862,14 @@
                                                 </div>
                                             </template>
 
-                                            <!-- 11. BİRİM METRAJI -->
-                                            <template v-else-if="col.key === 'unit_meters'">
-                                                <input :value="sample.unit_meters"
-                                                       @change="updateSampleCell(sample, 'unit_meters', $event.target.value)"
-                                                       placeholder="0.00"
+                                            <!-- 11. BİRİM KULLANIMI (1, 2, 3 - GRAMAJ VEYA METRAJ YAZILABİLİR) -->
+                                            <template v-else-if="col.key === 'unit_meters' || col.key === 'unit_meters_2' || col.key === 'unit_meters_3'">
+                                                <input :value="sample[col.key]"
+                                                       @change="updateSampleCell(sample, col.key, $event.target.value)"
+                                                       placeholder="0.00 m / gr"
                                                        type="text"
-                                                       class="w-full bg-transparent border-0 outline-none text-xs font-mono font-bold text-center hover:bg-slate-500/10 rounded px-1 py-1 transition">
+                                                       class="w-full bg-transparent border-0 outline-none text-xs font-mono font-bold text-center hover:bg-slate-500/10 focus:bg-slate-500/10 rounded px-1 py-1 transition"
+                                                       :title="(col.title || 'Birim Kullanım') + ': Gramaj veya Metraj olarak girilebilir (ör. 0.45 m veya 250 gr)'">
                                             </template>
 
                                             <!-- 11.1. KRİTİK SÜTUNU (AYRI SÜTUN) -->
@@ -9356,9 +9366,29 @@
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('fabric_info', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
                                             <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters || 4) + '%' }">
-                                                <span>Metraj</span>
+                                                <span>Birim Kul. 1</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('unit_meters', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
+                                            <template v-if="sampleActiveFabricCount >= 2">
+                                                <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info_2 || 9) + '%' }">
+                                                    <span>Kumaş 2</span>
+                                                    <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('fabric_info_2', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                                </th>
+                                                <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters_2 || 4) + '%' }">
+                                                    <span>Birim Kul. 2</span>
+                                                    <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('unit_meters_2', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                                </th>
+                                            </template>
+                                            <template v-if="sampleActiveFabricCount >= 3">
+                                                <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info_3 || 9) + '%' }">
+                                                    <span>Kumaş 3</span>
+                                                    <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('fabric_info_3', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                                </th>
+                                                <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters_3 || 4) + '%' }">
+                                                    <span>Birim Kul. 3</span>
+                                                    <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('unit_meters_3', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                                </th>
+                                            </template>
                                             <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.critique || 8) + '%' }">
                                                 <span>Kritik</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('critique', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
@@ -9400,9 +9430,21 @@
                                             <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.delivery_date || '-' }}</td>
                                             <td class="p-1 border-r border-slate-300 font-medium">{{ s.quantity_sizes || '-' }}</td>
                                             <td class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
-                                                {{ getSamplePrintFabric(s) }}
+                                                {{ getSamplePrintFabric(s, 1) }}
                                             </td>
                                             <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters || '-' }}</td>
+                                            <template v-if="sampleActiveFabricCount >= 2">
+                                                <td class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
+                                                    {{ getSamplePrintFabric(s, 2) }}
+                                                </td>
+                                                <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters_2 || '-' }}</td>
+                                            </template>
+                                            <template v-if="sampleActiveFabricCount >= 3">
+                                                <td class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
+                                                    {{ getSamplePrintFabric(s, 3) }}
+                                                </td>
+                                                <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters_3 || '-' }}</td>
+                                            </template>
                                             <td class="p-1 border-r border-slate-300 text-[9px] overflow-hidden" :title="getCleanCritique(s.critique)">
                                                 <div class="line-clamp-2 w-full block font-normal leading-tight text-slate-800">
                                                     {{ getCleanCritique(s.critique) || '-' }}
@@ -9565,7 +9607,7 @@
                                                         </td>
                                                     </tr>
                                                     <tr>
-                                                        <td class="w-24 p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Birim Metraj</td>
+                                                        <td class="w-24 p-1.5 font-bold bg-slate-100 text-slate-700 border-r border-slate-200">Birim Kullanım 1</td>
                                                         <td class="p-1.5 font-mono font-bold text-slate-900">{{ activeTalepSample?.unit_meters ? activeTalepSample.unit_meters + ' m' : '-' }}</td>
                                                     </tr>
                                                 </tbody>
@@ -10420,6 +10462,150 @@
                                             <!-- Canlı Önizleme -->
                                             <div class="px-2.5 py-1 rounded text-[11px] font-mono font-bold shadow-sm border border-black/10 truncate max-w-[90px]"
                                                  :style="{ backgroundColor: customDefaults.fabric_alert_color_2, color: getContrastTextColor(customDefaults.fabric_alert_color_2) }">
+                                                Önizleme
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ======================================================== -->
+                        <!-- BÖLÜM 3: GELEN KUMAŞ METRAJI SAPMA (%) UYARI RENKLERİ   -->
+                        <!-- ======================================================== -->
+                        <div class="p-5 rounded-xl border space-y-4"
+                             :class="isDarkMode ? 'bg-slate-800/30 border-slate-800' : 'bg-slate-50/80 border-slate-200/90'">
+                            <div class="flex items-center justify-between border-b pb-2.5"
+                                 :class="isDarkMode ? 'border-slate-700/60' : 'border-slate-200'">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+                                    <h4 class="text-xs font-extrabold tracking-wide uppercase" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">
+                                        Gelen Kumaş Metrajı Sapma (%) Uyarı Renkleri (3 Aşamalı)
+                                    </h4>
+                                </div>
+                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                                      :class="customDefaults.alerts_enabled ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-slate-500/10 text-slate-400'">
+                                    Çarşaf "Gelen Kumaş 1 & 2" Sütunları
+                                </span>
+                            </div>
+                            <p class="text-[11.5px] text-slate-400 leading-relaxed">
+                                Sipariş edilen kumaş miktarı ile depoya fiilen gelen metraj arasındaki yüzde farkına (± %) göre hücre arka plan dolgu rengini belirleyin. Eşik yüzdelerini ve renk paletini dilediğiniz gibi ayarlayabilirsiniz.
+                            </p>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                                <!-- 1. Aşama: Tolerans İçi (Sapma Yok / İhmal Edilebilir) -->
+                                <div class="p-3.5 rounded-xl border space-y-3 flex flex-col justify-between"
+                                     :class="isDarkMode ? 'bg-slate-900/60 border-slate-700/60' : 'bg-white border-slate-200'">
+                                    <div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs font-bold text-emerald-500">1. Aşama (Tolerans İçi):</span>
+                                            <span class="text-[10.5px] text-emerald-400 font-semibold">Sapma Yok / Az</span>
+                                        </div>
+                                        <p class="text-[11px] text-slate-400 mt-1">
+                                            Fark bu eşiğin altında ise renklendirme yapılmaz (veya seçilen renk uygulanır).
+                                        </p>
+                                    </div>
+                                    <div class="space-y-2.5 pt-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">± %</span>
+                                            <input type="number" min="0" max="50" step="0.5"
+                                                   v-model.number="customDefaults.fabric_received_threshold_1"
+                                                   class="w-16 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold text-center border outline-none"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">kadar</span>
+                                        </div>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <input type="color" :value="customDefaults.fabric_received_color_1 || '#ffffff'"
+                                                   @input="customDefaults.fabric_received_color_1 = $event.target.value"
+                                                   class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0"
+                                                   title="Renk Seç">
+                                            <input type="text" v-model="customDefaults.fabric_received_color_1"
+                                                   placeholder="Renksiz"
+                                                   class="w-20 px-2 py-1 rounded-md text-xs font-mono text-center border uppercase font-bold"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <button type="button" @click="customDefaults.fabric_received_color_1 = ''"
+                                                    class="px-2 py-1 text-[10.5px] font-bold rounded border hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                                                    :class="!customDefaults.fabric_received_color_1 ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : 'border-slate-300 text-slate-400'"
+                                                    title="Renklendirmeyi kaldır (Şeffaf)">
+                                                Renksiz
+                                            </button>
+                                            <!-- Canlı Önizleme -->
+                                            <div class="px-2.5 py-1 rounded text-[11px] font-mono font-bold shadow-sm border border-black/10 truncate"
+                                                 :style="customDefaults.fabric_received_color_1 ? { backgroundColor: customDefaults.fabric_received_color_1, color: getContrastTextColor(customDefaults.fabric_received_color_1) } : { backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc', color: isDarkMode ? '#94a3b8' : '#64748b' }">
+                                                {{ customDefaults.fabric_received_color_1 ? 'Önizleme' : 'Renksiz' }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 2. Aşama: Orta Sapma (Uyarı Eşiği) -->
+                                <div class="p-3.5 rounded-xl border space-y-3 flex flex-col justify-between"
+                                     :class="isDarkMode ? 'bg-slate-900/60 border-slate-700/60' : 'bg-white border-slate-200'">
+                                    <div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs font-bold text-amber-500">2. Aşama (Orta Sapma):</span>
+                                            <span class="text-[10.5px] text-amber-400 font-semibold">Uyarı / Fark Var</span>
+                                        </div>
+                                        <p class="text-[11px] text-slate-400 mt-1">
+                                            Sapma 1. eşik ile 2. eşik arasında ise bu uyarı rengi uygulanır.
+                                        </p>
+                                    </div>
+                                    <div class="space-y-2.5 pt-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">% {{ customDefaults.fabric_received_threshold_1 || 1 }} ile %</span>
+                                            <input type="number" min="0" max="100" step="0.5"
+                                                   v-model.number="customDefaults.fabric_received_threshold_2"
+                                                   class="w-16 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold text-center border outline-none"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">arası</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <input type="color" v-model="customDefaults.fabric_received_color_2"
+                                                   class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0"
+                                                   title="Renk Seç">
+                                            <input type="text" v-model="customDefaults.fabric_received_color_2"
+                                                   class="w-20 px-2 py-1 rounded-md text-xs font-mono text-center border uppercase font-bold"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <!-- Canlı Önizleme -->
+                                            <div class="px-2.5 py-1 rounded text-[11px] font-mono font-bold shadow-sm border border-black/10 truncate max-w-[90px]"
+                                                 :style="{ backgroundColor: customDefaults.fabric_received_color_2, color: getContrastTextColor(customDefaults.fabric_received_color_2) }">
+                                                Önizleme
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 3. Aşama: Yüksek Sapma (Kritik / Ciddi Fark) -->
+                                <div class="p-3.5 rounded-xl border space-y-3 flex flex-col justify-between"
+                                     :class="isDarkMode ? 'bg-slate-900/60 border-slate-700/60' : 'bg-white border-slate-200'">
+                                    <div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs font-bold text-rose-500">3. Aşama (Kritik Sapma):</span>
+                                            <span class="text-[10.5px] text-rose-400 font-semibold">Ciddi Fark</span>
+                                        </div>
+                                        <p class="text-[11px] text-slate-400 mt-1">
+                                            Sapma 2. eşiğin üzerinde ise (ciddi eksik veya fazla) bu renk uygulanır.
+                                        </p>
+                                    </div>
+                                    <div class="space-y-2.5 pt-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">%</span>
+                                            <input type="number" min="0" max="100" step="0.5"
+                                                   v-model.number="customDefaults.fabric_received_threshold_2"
+                                                   class="w-16 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold text-center border outline-none"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <span class="text-xs font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">üzeri</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <input type="color" v-model="customDefaults.fabric_received_color_3"
+                                                   class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0"
+                                                   title="Renk Seç">
+                                            <input type="text" v-model="customDefaults.fabric_received_color_3"
+                                                   class="w-20 px-2 py-1 rounded-md text-xs font-mono text-center border uppercase font-bold"
+                                                   :class="isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'">
+                                            <!-- Canlı Önizleme -->
+                                            <div class="px-2.5 py-1 rounded text-[11px] font-mono font-bold shadow-sm border border-black/10 truncate max-w-[90px]"
+                                                 :style="{ backgroundColor: customDefaults.fabric_received_color_3, color: getContrastTextColor(customDefaults.fabric_received_color_3) }">
                                                 Önizleme
                                             </div>
                                         </div>
@@ -15342,12 +15528,13 @@
                     <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5"></i>
                 </div>
 
-                <!-- Panoya Kopyala Butonu (Excel Uyumlu) -->
-                <button @click="copyKumasSiparisTable('excel')"
-                        class="px-3 py-1.5 rounded-xl border text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-                        title="Tabloyu kopyala (Excel'e doğrudan sütunlar halinde yapıştırılabilir)">
-                    <i data-lucide="copy" class="w-3.5 h-3.5 text-indigo-500"></i>
-                    <span>Excel'e Kopyala</span>
+                <!-- Excel'e Aktar Butonu (.xlsx İndir) -->
+                <button @click="exportKumasSiparisExcel"
+                        :disabled="isKumasSiparisExporting"
+                        class="px-3 py-1.5 rounded-xl border text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                        title="Ekranda listelenen kumaş sipariş çizelgesini Excel (.xlsx) dosyası olarak indir">
+                    <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-500"></i>
+                    <span>Excel'e Aktar</span>
                 </button>
 
                 <!-- Metin Olarak Kopyala Butonu (WhatsApp / Mail Uyumlu) -->
@@ -17006,7 +17193,10 @@
     </div>
 
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20261029_1400_fixed"></script>
+<!-- SheetJS for Native .xlsx generation -->
+<script src="/static/js/xlsx.full.min.js"></script>
+<!-- Application JS -->
+<script src="/static/js/app.js?v=20261101_sidebar_btn_v1"></script>
 
 </body>
 </html>

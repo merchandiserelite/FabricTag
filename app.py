@@ -2214,6 +2214,263 @@ def api_export_carsaf_excel_get(
     return generate_carsaf_print_excel_workbook(style_ids, title, company_id, consolidate, show_channels, col_order)
 
 
+# ----------------- KUMAŞ SİPARİŞ ÇİZELGESİ EXCEL EXPORT -----------------
+
+class KumasSiparisRowItem(BaseModel):
+    supplier: Optional[str] = ""
+    code: Optional[str] = ""
+    name: Optional[str] = ""
+    variant: Optional[str] = ""
+    color: Optional[str] = ""
+    modelsAndColors: Optional[str] = ""
+    formattedTotalMeters: Optional[str] = ""
+    unit: Optional[str] = "M"
+
+class KumasSiparisExportRequest(BaseModel):
+    rows: List[KumasSiparisRowItem] = []
+    total_count: int = 0
+    total_models: int = 0
+    formatted_meters: Optional[str] = ""
+    formatted_kg: Optional[str] = ""
+    combined_total: Optional[str] = ""
+
+def generate_kumas_siparis_excel_workbook(req: KumasSiparisExportRequest) -> Response:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Kumas Siparis Listesi"
+    
+    if hasattr(ws.views, 'sheetView') and len(ws.views.sheetView) > 0:
+        ws.views.sheetView[0].showGridLines = True
+
+    # Title block dimensions
+    ws.row_dimensions[2].height = 24
+    ws.row_dimensions[3].height = 18
+    ws.row_dimensions[4].height = 10
+    ws.row_dimensions[5].height = 26
+
+    ws["A2"] = "KUMAŞ SİPARİŞ LİSTESİ"
+    ws["A2"].font = Font(name="Calibri", size=15, bold=True, color="0F172A")
+    
+    date_str = datetime.now().strftime("%d.%m.%Y")
+    ws["A3"] = f"Ekranda Listelenen Siparişler • Toplam {req.total_count} Kalite • {req.total_models} Model"
+    ws["A3"].font = Font(name="Calibri", size=10, italic=True, color="64748B")
+
+    ws["H2"] = f"Tarih: {date_str}"
+    ws["H2"].font = Font(name="Calibri", size=10, bold=True, color="64748B")
+    ws["H2"].alignment = Alignment(horizontal="right", vertical="center")
+
+    tot_badge = req.combined_total or req.formatted_meters or "0 M"
+    ws["H3"] = f"Toplam: {tot_badge}"
+    ws["H3"].font = Font(name="Calibri", size=10, bold=True, color="047857")
+    ws["H3"].alignment = Alignment(horizontal="right", vertical="center")
+
+    headers = [
+        ("#", 6, "center"),
+        ("Kumaşçı", 22, "left"),
+        ("Kalite Kodu", 16, "center"),
+        ("Kalite Adı", 26, "left"),
+        ("Kumaş Varyant", 18, "left"),
+        ("Kumaş Renk", 18, "left"),
+        ("Model Adları ve Renkleri", 45, "left"),
+        ("Kumaş Sipariş Miktarı", 22, "right")
+    ]
+
+    header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+    header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+    header_border = Border(
+        left=Side(style='thin', color='334155'),
+        right=Side(style='thin', color='334155'),
+        top=Side(style='medium', color='0F172A'),
+        bottom=Side(style='medium', color='0F172A')
+    )
+
+    for col_idx, (h_title, col_width, h_align) in enumerate(headers, start=1):
+        cell = ws.cell(row=5, column=col_idx, value=h_title)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal=h_align, vertical="center", wrap_text=True)
+        cell.border = header_border
+        col_letter = get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = col_width
+
+    thin_border = Border(
+        left=Side(style='thin', color='E2E8F0'),
+        right=Side(style='thin', color='E2E8F0'),
+        top=Side(style='thin', color='E2E8F0'),
+        bottom=Side(style='thin', color='E2E8F0')
+    )
+
+    even_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+    odd_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+    qty_fill = PatternFill(start_color="F0FDF4", end_color="F0FDF4", fill_type="solid")
+
+    start_row = 6
+    for idx, r in enumerate(req.rows, start=1):
+        curr_row = start_row + idx - 1
+        ws.row_dimensions[curr_row].height = 22
+        row_fill = odd_fill if idx % 2 == 1 else even_fill
+
+        supplier_val = (r.supplier or "").strip()
+        code_val = (r.code or "").strip()
+        name_val = (r.name or "").strip()
+        variant_val = (r.variant or "").strip()
+        color_val = (r.color or "").strip()
+
+        # 1. Kumaşçı ismini Kalite Adından tamamen temizle (ör: "ÖZEL TEKSTİL - VASA 02" -> "VASA 02")
+        if supplier_val and name_val:
+            s_low = supplier_val.lower().strip()
+            n_low = name_val.lower().strip()
+            if n_low.startswith(s_low):
+                name_val = name_val[len(supplier_val):].lstrip(" -_:/").strip()
+
+        # 2. Kalite Adı içinde halen " - " kalmışsa ayır (ör: "(VIGO SATEN) - 27231") - parantezden ÖNCE çalıştırılır!
+        if name_val and ' - ' in name_val:
+            subparts = [p.strip() for p in name_val.split(' - ') if p.strip()]
+            if len(subparts) >= 2:
+                name_val = subparts[0]
+                if not code_val:
+                    code_val = subparts[1]
+
+        # 3. Kalite Adı içinde parantezli kod varsa veya tüm ad parantezliyse çıkar (ör: "VASA 02 (DA.20535)" vs "(VIGO SATEN)")
+        if name_val:
+            m = re.search(r'\(([^)]+)\)', name_val)
+            if m:
+                inside = m.group(1).strip()
+                name_wo = re.sub(r'\s*\([^)]+\)\s*', ' ', name_val).strip()
+                if name_wo:
+                    if not code_val:
+                        code_val = re.sub(r'^ART\.?\s*', '', inside, flags=re.I).strip()
+                    name_val = name_wo
+                else:
+                    name_val = inside
+
+        # 4. Kalite adını saran parantez ve tireleri temizle
+        name_val = re.sub(r'^\((.*)\)$', r'\1', name_val).strip()
+        name_val = name_val.strip(" -_:/")
+
+        # 5. Kalite kodunu saran parantezleri temizle (ör: "(27231)" -> "27231")
+        if code_val:
+            code_val = re.sub(r'^\((.*)\)$', r'\1', code_val).strip()
+
+        # 6. Varyant ile kod aynı ise varyantı temizle (ör: 27231 hem kod hem varyanta yazılmışsa)
+        if variant_val and code_val and variant_val.lower() == code_val.lower():
+            variant_val = ""
+
+        # 7. Kalite kodu boş ama varyant bir kalite kodu gibi görünüyorsa
+        if not code_val and variant_val and re.match(r'^[0-9A-Za-z\.\-_/]+$', variant_val):
+            code_val = variant_val
+            variant_val = ""
+
+        c1 = ws.cell(row=curr_row, column=1, value=idx)
+        c1.alignment = Alignment(horizontal="center", vertical="center")
+        c1.font = Font(name="Calibri", size=10, bold=True, color="64748B")
+        c1.fill = row_fill
+        c1.border = thin_border
+
+        c2 = ws.cell(row=curr_row, column=2, value=supplier_val)
+        c2.alignment = Alignment(horizontal="left", vertical="center")
+        c2.font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+        c2.fill = row_fill
+        c2.border = thin_border
+
+        c3 = ws.cell(row=curr_row, column=3, value=code_val)
+        c3.alignment = Alignment(horizontal="center", vertical="center")
+        c3.font = Font(name="Consolas", size=10, bold=True, color="334155")
+        c3.fill = row_fill
+        c3.border = thin_border
+
+        c4 = ws.cell(row=curr_row, column=4, value=name_val)
+        c4.alignment = Alignment(horizontal="left", vertical="center")
+        c4.font = Font(name="Calibri", size=10, bold=True, color="1E293B")
+        c4.fill = row_fill
+        c4.border = thin_border
+
+        c5 = ws.cell(row=curr_row, column=5, value=variant_val)
+        c5.alignment = Alignment(horizontal="left", vertical="center")
+        c5.font = Font(name="Calibri", size=10, color="334155")
+        c5.fill = row_fill
+        c5.border = thin_border
+
+        c6 = ws.cell(row=curr_row, column=6, value=color_val)
+        c6.alignment = Alignment(horizontal="left", vertical="center")
+        c6.font = Font(name="Calibri", size=10, bold=True, color="334155")
+        c6.fill = row_fill
+        c6.border = thin_border
+
+        c7 = ws.cell(row=curr_row, column=7, value=r.modelsAndColors or "")
+        c7.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        c7.font = Font(name="Calibri", size=9.5, color="0F172A")
+        c7.fill = row_fill
+        c7.border = thin_border
+
+        c8 = ws.cell(row=curr_row, column=8, value=r.formattedTotalMeters or "")
+        c8.alignment = Alignment(horizontal="right", vertical="center")
+        c8.font = Font(name="Consolas", size=10, bold=True, color="15803D")
+        c8.fill = qty_fill
+        c8.border = thin_border
+
+    tot_row = start_row + len(req.rows)
+    ws.row_dimensions[tot_row].height = 26
+    ws.merge_cells(start_row=tot_row, start_column=1, end_row=tot_row, end_column=6)
+
+    total_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+    total_border = Border(
+        left=Side(style='thin', color='334155'),
+        right=Side(style='thin', color='334155'),
+        top=Side(style='medium', color='0F172A'),
+        bottom=Side(style='medium', color='0F172A')
+    )
+
+    cell_tot_label = ws.cell(row=tot_row, column=1, value=f"TOPLAM ({req.total_count} Kumaş Kalitesi)")
+    cell_tot_label.font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+    cell_tot_label.alignment = Alignment(horizontal="left", vertical="center")
+
+    for col in range(1, 7):
+        c = ws.cell(row=tot_row, column=col)
+        c.fill = total_fill
+        c.border = total_border
+
+    cell_tot_models = ws.cell(row=tot_row, column=7, value=f"{req.total_models} Model Kaydı")
+    cell_tot_models.font = Font(name="Calibri", size=10, bold=True, color="CBD5E1")
+    cell_tot_models.alignment = Alignment(horizontal="left", vertical="center")
+    cell_tot_models.fill = total_fill
+    cell_tot_models.border = total_border
+
+    qty_val = req.combined_total or (f"{req.formatted_meters} + {req.formatted_kg}".strip(" +") if (req.formatted_meters or req.formatted_kg) else "0 M")
+    cell_tot_qty = ws.cell(row=tot_row, column=8, value=qty_val)
+    cell_tot_qty.font = Font(name="Consolas", size=11, bold=True, color="34D399")
+    cell_tot_qty.alignment = Alignment(horizontal="right", vertical="center")
+    cell_tot_qty.fill = total_fill
+    cell_tot_qty.border = total_border
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"Kumas_Siparis_Listesi_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    headers = {
+        'Content-Disposition': f'attachment; filename="{filename}"',
+        'Access-Control-Expose-Headers': 'Content-Disposition'
+    }
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers
+    )
+
+@app.post("/api/styles/export-kumas-siparis-excel")
+def api_export_kumas_siparis_excel(req: KumasSiparisExportRequest, authorization: Optional[str] = Header(None)):
+    user = None
+    if authorization:
+        t = authorization.replace("Bearer ", "").strip()
+        user = get_current_user(t)
+    return generate_kumas_siparis_excel_workbook(req)
+
+
 # ----------------- BUDGET EXCEL EXPORT (ÖRNEK BÜTÇE FORMATI) -----------------
 
 def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, company_id: int = 1) -> Response:
@@ -6417,7 +6674,7 @@ def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends
     cols = [
         "id", "company_id", "image_url", "image_url_2", "image_fit", "sample_type", "season", "customer_name",
         "style_name", "style_no", "request_date", "delivery_date", "quantity_sizes",
-        "fabric_info", "fabric_info_2", "fabric_info_3", "unit_meters", "stage", "notes", "critique",
+        "fabric_info", "fabric_info_2", "fabric_info_3", "unit_meters", "unit_meters_2", "unit_meters_3", "stage", "notes", "critique",
         "fabrictag_id", "fabrictag_id_2", "fabrictag_id_3", "display_order", "created_by", "created_at", "updated_at"
     ]
     cols_sql = ", ".join(cols)
@@ -6487,6 +6744,8 @@ def api_create_sample(payload: Dict[str, Any], user: Dict[str, Any] = Depends(re
     fabric_info_2 = str(payload.get("fabric_info_2") or "").strip()
     fabric_info_3 = str(payload.get("fabric_info_3") or "").strip()
     unit_meters = str(payload.get("unit_meters") or "").strip()
+    unit_meters_2 = str(payload.get("unit_meters_2") or "").strip()
+    unit_meters_3 = str(payload.get("unit_meters_3") or "").strip()
     stage = str(payload.get("stage") or "Talep Oluşturuldu").strip()
     notes = str(payload.get("notes") or "").strip()
     critique = str(payload.get("critique") or "").strip()
@@ -6507,13 +6766,13 @@ def api_create_sample(payload: Dict[str, Any], user: Dict[str, Any] = Depends(re
         INSERT INTO sample_items (
             company_id, sample_type, season, customer_name, style_name, style_no,
             request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3,
-            fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters,
+            fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters, unit_meters_2, unit_meters_3,
             stage, notes, critique, image_fit, display_order, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         company_id, sample_type, season, customer_name, style_name, style_no,
         request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3,
-        fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters,
+        fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters, unit_meters_2, unit_meters_3,
         stage, notes, critique, image_fit, display_order, created_by
     ))
     conn.commit()
@@ -6533,7 +6792,7 @@ def api_update_sample_cell(sample_id: int, payload: Dict[str, Any], user: Dict[s
         "sample_type", "season", "customer_name", "style_name", "style_no",
         "request_date", "delivery_date", "quantity_sizes", "fabric_info",
         "fabric_info_2", "fabric_info_3", "fabrictag_id", "fabrictag_id_2", "fabrictag_id_3",
-        "unit_meters", "stage", "notes", "critique", "image_fit", "display_order"
+        "unit_meters", "unit_meters_2", "unit_meters_3", "stage", "notes", "critique", "image_fit", "display_order"
     }
     if field not in allowed_fields:
         raise HTTPException(status_code=400, detail=f"Geçersiz alan: {field}")
@@ -6624,7 +6883,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
     company_id = user.get("company_id") or 1
     role = user.get("role")
 
-    sql_cols = "id, image_url, sample_type, season, customer_name, style_name, style_no, request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3, unit_meters, stage, notes, critique, fabrictag_id, fabrictag_id_2, fabrictag_id_3, display_order"
+    sql_cols = "id, image_url, sample_type, season, customer_name, style_name, style_no, request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3, unit_meters, unit_meters_2, unit_meters_3, stage, notes, critique, fabrictag_id, fabrictag_id_2, fabrictag_id_3, display_order"
 
     if role in ["superadmin", "masterdeveloper"]:
         query = f"SELECT {sql_cols} FROM sample_items WHERE 1=1"
@@ -6647,7 +6906,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
     fabric_details_map = {}
     fab_ids = set()
     for r in rows:
-        for fid_idx in [17, 18, 19]:
+        for fid_idx in [19, 20, 21]:
             if len(r) > fid_idx and r[fid_idx]:
                 fab_ids.add(r[fid_idx])
     fab_ids = list(fab_ids)
@@ -6728,7 +6987,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
 
     headers = [
         "Sıra", "Görsel", "Numune Türü", "Sezon", "Müşteri", "Model Adı", "Model Kodu",
-        "Talep Tarihi", "Teslim Tarihi", "Adet ve Beden", "Kumaş 1", "Kumaş 2", "Kumaş 3", "Birim Metraj (m)", "İşlem Aşaması", "Kritik", "Notlar"
+        "Talep Tarihi", "Teslim Tarihi", "Adet ve Beden", "Kumaş 1", "Birim Kullanım 1", "Kumaş 2", "Birim Kullanım 2", "Kumaş 3", "Birim Kullanım 3", "İşlem Aşaması", "Kritik", "Notlar"
     ]
 
     last_col_letter = get_column_letter(len(headers))
@@ -6775,8 +7034,8 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
             if c.startswith('• '): c = c[2:].strip()
             return c
 
-        clean_critique = strip_html_clean(r[16]) # critique
-        clean_notes = strip_html_clean(r[15]) # notes
+        clean_critique = strip_html_clean(r[18]) # critique
+        clean_notes = strip_html_clean(r[17]) # notes
 
         clean_fab_1 = clean_fabric_text_excel(r[10], fabric_details_map.get(r[17]))
         clean_fab_2 = clean_fabric_text_excel(r[11], fabric_details_map.get(r[18]))
@@ -6794,10 +7053,12 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
             r[8] or "",
             r[9] or "",
             clean_fab_1,
-            clean_fab_2,
-            clean_fab_3,
             r[13] or "",
+            clean_fab_2,
             r[14] or "",
+            clean_fab_3,
+            r[15] or "",
+            r[16] or "",
             clean_critique,
             clean_notes
         ]
@@ -7361,7 +7622,13 @@ DEFAULT_CUSTOM_SETTINGS = {
     "fabric_alert_days_1": 7,
     "fabric_alert_color_1": "#fef08a",
     "fabric_alert_days_2": 3,
-    "fabric_alert_color_2": "#f87171"
+    "fabric_alert_color_2": "#f87171",
+    # Gelen Kumaş Metrajı Sapma (%) Uyarı Renkleri
+    "fabric_received_threshold_1": 1.0,
+    "fabric_received_color_1": "",
+    "fabric_received_threshold_2": 5.0,
+    "fabric_received_color_2": "#fef08a",
+    "fabric_received_color_3": "#f87171"
 }
 
 @app.get("/api/custom-defaults")
