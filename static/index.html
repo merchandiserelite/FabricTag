@@ -1420,22 +1420,31 @@
             font-size: calc(var(--user-font-size, 12px) * var(--table-font-scale, 1)) !important;
         }
         html:not(.dark) .master-table tbody td,
-        html:not(.dark) .master-table tbody td *:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+        html:not(.dark) .master-table tbody td *:not(.poka-badge):not(.image-badge):not(.action-btn-icon):not(.image-fit-btn):not(.image-fit-btn *),
         html:not(.dark) .master-table tbody input,
         html:not(.dark) .master-table tbody select,
         html:not(.dark) .master-table tbody textarea,
-        html:not(.dark) .master-table tbody span:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
-        html:not(.dark) .master-table tbody div:not(.poka-badge):not(.image-badge):not(.action-btn-icon) {
+        html:not(.dark) .master-table tbody span:not(.poka-badge):not(.image-badge):not(.action-btn-icon):not(.image-fit-btn):not(.image-fit-btn *),
+        html:not(.dark) .master-table tbody div:not(.poka-badge):not(.image-badge):not(.action-btn-icon):not(.image-fit-btn):not(.image-fit-btn *) {
             color: var(--user-font-color, #0f172a) !important;
         }
         html.dark .master-table tbody td,
-        html.dark .master-table tbody td *:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
+        html.dark .master-table tbody td *:not(.poka-badge):not(.image-badge):not(.action-btn-icon):not(.image-fit-btn):not(.image-fit-btn *),
         html.dark .master-table tbody input,
         html.dark .master-table tbody select,
         html.dark .master-table tbody textarea,
-        html.dark .master-table tbody span:not(.poka-badge):not(.image-badge):not(.action-btn-icon),
-        html.dark .master-table tbody div:not(.poka-badge):not(.image-badge):not(.action-btn-icon) {
+        html.dark .master-table tbody span:not(.poka-badge):not(.image-badge):not(.action-btn-icon):not(.image-fit-btn):not(.image-fit-btn *),
+        html.dark .master-table tbody div:not(.poka-badge):not(.image-badge):not(.action-btn-icon):not(.image-fit-btn):not(.image-fit-btn *) {
             color: var(--user-font-color-dark, #f8fafc) !important;
+        }
+
+        /* GORSEL SUTUNU: En / Boy Hover Butonlari Icin Kesin Beyaz Yazi */
+        .image-fit-btn,
+        .image-fit-btn *,
+        button.image-fit-btn,
+        button.image-fit-btn span {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
         }
 
         /* EXCEL-LIKE FLUID AUTO-FIT FOR LAPTOPS AND LOWER RESOLUTIONS */
@@ -8684,17 +8693,19 @@
                                                         <div v-if="sample.image_url" class="absolute top-0.5 left-0.5 hidden group-hover:flex items-center gap-0.5 bg-black/90 rounded p-0.5 z-10 shadow border border-white/20 select-none">
                                                             <button type="button"
                                                                     @click.stop="setSampleImageFit(sample, 'cover')"
-                                                                    class="px-1.5 py-0.5 rounded text-[8px] font-extrabold leading-none transition cursor-pointer text-white !text-white"
-                                                                    :class="sample.image_fit === 'cover' ? 'bg-emerald-600 shadow-sm' : 'bg-transparent hover:bg-white/20 text-white/90 hover:text-white'"
+                                                                    style="color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;"
+                                                                    class="image-fit-btn px-1.5 py-0.5 rounded text-[8px] font-extrabold leading-none transition cursor-pointer"
+                                                                    :class="sample.image_fit === 'cover' ? 'bg-emerald-600 shadow-sm' : 'bg-transparent hover:bg-white/20'"
                                                                     title="Enden Sığdır (Genişlik doldur)">
-                                                                En
+                                                                <span class="image-fit-btn" style="color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;">En</span>
                                                             </button>
                                                             <button type="button"
                                                                     @click.stop="setSampleImageFit(sample, 'contain')"
-                                                                    class="px-1.5 py-0.5 rounded text-[8px] font-extrabold leading-none transition cursor-pointer text-white !text-white"
-                                                                    :class="(sample.image_fit || 'contain') === 'contain' ? 'bg-indigo-600 shadow-sm' : 'bg-transparent hover:bg-white/20 text-white/90 hover:text-white'"
+                                                                    style="color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;"
+                                                                    class="image-fit-btn px-1.5 py-0.5 rounded text-[8px] font-extrabold leading-none transition cursor-pointer"
+                                                                    :class="(sample.image_fit || 'contain') === 'contain' ? 'bg-indigo-600 shadow-sm' : 'bg-transparent hover:bg-white/20'"
                                                                     title="Boydan Sığdır (Tam orantılı göster)">
-                                                                Boy
+                                                                <span class="image-fit-btn" style="color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;">Boy</span>
                                                             </button>
                                                         </div>
 
@@ -17294,7 +17305,7 @@
 <!-- SheetJS for Native .xlsx generation -->
 <script src="/static/js/xlsx.full.min.js"></script>
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20261102_numune_print_v2"></script>
+<script src="/static/js/app.js?v=20261102_enboy_white_v3"></script>
 
 </body>
 </html>
