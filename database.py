@@ -544,56 +544,44 @@ def init_db():
     if "shipped_quantity" not in size_cols:
         cursor.execute("ALTER TABLE size_distributions ADD COLUMN shipped_quantity INTEGER DEFAULT 0")
 
-    # Default Seed Data if empty (Seed company first to satisfy foreign keys)
+    # Default Seed Company if empty
     cursor.execute("SELECT COUNT(*) FROM companies")
     if cursor.fetchone()[0] == 0:
         cursor.execute("""
         INSERT INTO companies (name, code, license_key, license_expires_at, is_active)
-        VALUES ('Elite Tekstil İmalat Sanayi', 'ELITE-01', 'TEX-MASTER-PRO-2030', '2030-12-31', 1)
+        VALUES ('Tekstil Üretim A.Ş.', 'TR-01', 'TRIAL-FREE-60D', '2030-12-31', 1)
         """)
-        company_id = cursor.lastrowid
-
-        # Superadmin
-        cursor.execute("""
-        INSERT INTO users (company_id, username, email, password_hash, full_name, role)
-        VALUES (NULL, 'superadmin', 'super@texflow.app', ?, 'Süper Yönetici (Master Developer)', 'superadmin')
-        """, (hash_password('admin123!'),))
-
-        # Admin
-        cursor.execute("""
-        INSERT INTO users (company_id, username, email, password_hash, full_name, role)
-        VALUES (?, 'yonetici', 'yonetici@elitetekstil.com', ?, 'Aslı Çelik (Firma Yöneticisi)', 'admin')
-        """, (company_id, hash_password('123456'),))
-
-        # Merchandiser
-        cursor.execute("""
-        INSERT INTO users (company_id, username, email, password_hash, full_name, role)
-        VALUES (?, 'merchandiser', 'mt@elitetekstil.com', ?, 'Müşteri Temsilcisi', 'merchandiser')
-        """, (company_id, hash_password('123456'),))
-
-        # Kesimhane
-        cursor.execute("""
-        INSERT INTO users (company_id, username, email, password_hash, full_name, role)
-        VALUES (?, 'kesimhane', 'kesim@elitetekstil.com', ?, 'Kesim Şefi', 'cutting')
-        """, (company_id, hash_password('123456'),))
-
-        # Depo
-        cursor.execute("""
-        INSERT INTO users (company_id, username, email, password_hash, full_name, role)
-        VALUES (?, 'depo', 'depo@elitetekstil.com', ?, 'Kumaş & Aksesuar Depo', 'warehouse')
-        """, (company_id, hash_password('123456'),))
 
     cursor.execute("SELECT id FROM companies LIMIT 1")
     crow = cursor.fetchone()
     company_id = crow[0] if crow else 1
 
-    # Ensure yonetici user exists
-    cursor.execute("SELECT COUNT(*) FROM users WHERE username = 'yonetici'")
+    # Ensure standard factory users exist if users table is empty
+    cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-        INSERT INTO users (company_id, username, email, password_hash, full_name, role)
-        VALUES (?, 'yonetici', 'yonetici@elitetekstil.com', ?, 'Yıldıray (Firma Yöneticisi)', 'admin')
-        """, (company_id, hash_password('123456'),))
+        std_users = [
+            ("firma_yoneticisi", "yonetici@tekstil.com", "Firma Yöneticisi", "admin", json.dumps({"all": True, "can_manage_users": True, "can_manage_licenses": True, "can_edit_menus": True})),
+            ("genel_mudur", "genelmudur@tekstil.com", "Genel Müdür", "admin", json.dumps({"all": True, "can_manage_users": True, "can_manage_licenses": True, "can_edit_menus": True})),
+            ("fabrika_muduru", "fabrika@tekstil.com", "Fabrika Müdürü", "admin", json.dumps({"all": True, "can_manage_users": True, "can_manage_licenses": True, "can_edit_menus": True})),
+            ("merchandiser", "merchandiser@tekstil.com", "Merchandiser", "merchandiser", json.dumps({
+                "can_view_all_data": True, "can_edit_all_data": True, "can_create_orders": True,
+                "can_delete_orders": True, "can_view_financials": True, "can_view_costs": True,
+                "can_edit_costs": True, "can_view_dashboard": True, "can_edit_menus": True,
+                "can_view_orders": True, "can_view_fabrictag": True,
+                "can_manage_users": False, "can_manage_licenses": False
+            })),
+            ("modelhane", "modelhane@tekstil.com", "Modelhane", "modelhane", json.dumps({"can_view_all_data": True, "can_edit_all_data": True, "can_view_orders": True, "can_view_fabrictag": True, "can_manage_users": False})),
+            ("planlama", "planlama@tekstil.com", "Planlama", "planlama", json.dumps({"can_view_all_data": True, "can_edit_all_data": True, "can_create_orders": True, "can_view_orders": True, "can_view_fabrictag": True, "can_manage_users": False})),
+            ("kesimhane", "kesimhane@tekstil.com", "Kesimhane", "cutting", json.dumps({"can_view_orders": True, "can_view_fabrictag": True, "can_manage_users": False})),
+            ("kumas_depo", "kumasdepo@tekstil.com", "Kumaş Depo", "fabric_warehouse", json.dumps({"can_view_orders": True, "can_view_fabrictag": True, "can_manage_users": False})),
+            ("aksesuar", "aksesuar@tekstil.com", "Aksesuar Depo", "aksesuar", json.dumps({"can_view_orders": True, "can_view_fabrictag": True, "can_manage_users": False}))
+        ]
+        p_hash = hash_password('123456')
+        for u, em, fn, r, p_json in std_users:
+            cursor.execute("""
+            INSERT INTO users (company_id, username, email, password_hash, full_name, role, permissions_json, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            """, (company_id, u, em, p_hash, fn, r, p_json))
 
     # Ensure ALL standard dynamic menus exist
     default_menus = [
@@ -609,7 +597,7 @@ def init_db():
         ("audit_logs", "Değişiklik Tarihçesi (Audit Log)", "Audit Logs", "history", "/audit-logs", 10, '["superadmin","admin","merchandiser"]'),
         ("menu_yonetimi", "Menü & Alan Özelleştirme", "Custom Fields & Menu Config", "sliders-horizontal", "/ayarlar/menuler", 11, '["superadmin","admin"]'),
         ("kullanici_yonetimi", "Kullanıcı & Yetki Yönetimi", "User & Role Management", "users", "/ayarlar/kullanicilar", 12, '["superadmin","admin"]'),
-        ("superadmin_panel", "Süper Admin & Lisanslama", "Super Admin & Licensing", "shield-alert", "/superadmin", 102, '["superadmin"]')
+        ("superadmin_panel", "Lisans", "License", "shield-check", "/superadmin", 102, '["admin","superadmin","masterdeveloper"]')
     ]
     for key, tr, en, icon, path, order, roles in default_menus:
         cursor.execute("SELECT COUNT(*) FROM dynamic_menus WHERE menu_key = ?", (key,))

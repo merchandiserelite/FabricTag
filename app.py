@@ -1,7861 +1,14054 @@
-"""
-TexFlow - Main FastAPI Web Application
-Column Resizing, Sorting, Dual Image Upload, Drag-Drop Images, Month-Year Grouping,
-Custom Dynamic Columns (+ Sütun Ekle), Save Changes & Discard Buttons
-"""
-
-import os
-import sys
-import json
-import shutil
-import re
-from pathlib import Path
-from typing import Optional, List, Dict, Any
-from datetime import datetime
-import time
-import urllib.request
-import xml.etree.ElementTree as ET
-
-
-from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPException, Header, Query
-
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
-from fastapi.staticfiles import StaticFiles
-import io
-import base64
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.drawing.image import Image as OpenpyxlImage
-from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
-from openpyxl.drawing.xdr import XDRPositiveSize2D
-from openpyxl.utils.units import pixels_to_EMU
-from openpyxl.utils import get_column_letter
-from PIL import Image as PILImage
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-from collections import defaultdict
-from pydantic import BaseModel
-
-from database import (
-    get_db, init_db, DB_PATH, UPLOADS_DIR, hash_password, FABRICTAG_DB_PATH,
-    get_carton_templates, get_carton_template_by_id, save_or_update_carton_template, delete_carton_template
-)
-from auth import authenticate_user, get_current_user, logout_user, ROLE_PERMISSIONS
-from parser_engine import OrderParserEngine
-from fabrictag_connector import FabricTagConnector
-
-init_db()
-
-app = FastAPI(title="TexFlow - Smart Textile Production Suite", version="2.8.0")
-
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-import license_manager
-license_manager.start_background_license_checker()
-
-@app.middleware("http")
-async def license_security_middleware(request: Request, call_next):
-    path = request.url.path
-    if path.startswith("/static") or path.startswith("/favicon.ico"):
-        res = await call_next(request)
-        if request.method == "GET" and res.status_code == 200:
-            res.headers["Cache-Control"] = "public, max-age=3600"
-        return res
-    
-    lic = license_manager.check_license()
-    if not lic.get("is_valid", True):
-        msg = lic.get("message", "Sistem lisansı sona ermiştir veya yetki iptal edilmiştir.")
-        dev_id = lic.get("device_id", "")
-        if path.startswith("/api/"):
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "error": "LICENSE_LOCKED",
-                    "status": lic.get("status", "LOCKED"),
-                    "message": msg,
-                    "device_id": dev_id
-                }
-            )
-        from fastapi.responses import HTMLResponse
-        html = f"""<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <title>TexFlow - Sistem Lisansı</title>
-    <style>
-        body {{ background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
-        .card {{ background: #1e293b; padding: 40px; border-radius: 16px; border: 1px solid #ef4444; max-width: 520px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }}
-        .icon {{ font-size: 48px; margin-bottom: 16px; }}
-        h2 {{ color: #ef4444; margin: 0 0 12px 0; font-size: 24px; }}
-        p {{ color: #94a3b8; font-size: 16px; line-height: 1.6; margin-bottom: 24px; }}
-        .badge {{ background: #334155; padding: 8px 16px; border-radius: 8px; font-family: monospace; font-size: 13px; color: #cbd5e1; display: inline-block; }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="icon">🔒</div>
-        <h2>Sistem Erişimi Kilitlendi</h2>
-        <p>{msg}</p>
-        <div class="badge">Cihaz: {dev_id}</div>
-    </div>
-</body>
-</html>"""
-        return HTMLResponse(content=html, status_code=403)
-        
-    return await call_next(request)
-
-@app.get("/api/system/license-status")
-def get_license_status():
-    return license_manager.check_license(force_remote=False)
-
-
-if getattr(sys, 'frozen', False):
-    BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
-    STATIC_DIR = BASE_DIR / "static"
-    if not STATIC_DIR.exists():
-        STATIC_DIR = Path(sys.executable).resolve().parent / "static"
-else:
-    BASE_DIR = Path(__file__).resolve().parent
-    STATIC_DIR = BASE_DIR / "static"
-
-STATIC_DIR.mkdir(exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-STYLE_IMAGES_DIR = UPLOADS_DIR / "styles"
-STYLE_IMAGES_DIR.mkdir(exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
-
-def require_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
-    token = None
-    if authorization:
-        if authorization.startswith("Bearer "):
-            token = authorization.split(" ")[1]
-        else:
-            token = authorization
-    user = get_current_user(token)
-    if not user:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT id, username, full_name, role, company_id FROM users WHERE username = 'yonetici'")
-        row = c.fetchone()
-        conn.close()
-        if row:
-            return {
-                "token": "default",
-                "user_id": row[0],
-                "username": row[1],
-                "full_name": row[2] or "Yönetici",
-                "role": row[3],
-                "company_id": row[4] or 1,
-                "company_name": "Sarto Fashion / TexFlow"
-            }
-        raise HTTPException(status_code=401, detail="Oturum süresi dolmuş veya geçersiz token.")
-    return user
-
-def require_superadmin(user: Dict[str, Any] = Depends(require_user)) -> Dict[str, Any]:
-    if user.get("role") != "superadmin":
-        raise HTTPException(status_code=403, detail="Bu işlem için Süper Admin yetkisi gereklidir.")
-    return user
-
-# ----------------- AUTH -----------------
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-@app.post("/api/auth/login")
-def api_login(req: LoginRequest):
-    session = authenticate_user(req.username, req.password)
-    if not session:
-        raise HTTPException(status_code=400, detail="Hatalı kullanıcı adı veya şifre.")
-    return session
-
-@app.get("/api/auth/me")
-def api_me(user: Dict[str, Any] = Depends(require_user)):
-    return user
-
-@app.post("/api/auth/logout")
-def api_logout(authorization: Optional[str] = Header(None)):
-    if authorization:
-        token = authorization.replace("Bearer ", "")
-        logout_user(token)
-
-# ----------------- KULLANICI & YETKİ YÖNETİMİ (USER MANAGEMENT REST API) -----------------
-
-class CreateUserRequest(BaseModel):
-    username: str
-    password: str
-    full_name: str
-    email: Optional[str] = ""
-    role: str = "user"  # masterdeveloper, admin, merchandiser, cutting, fabric_warehouse, user
-    company_id: Optional[int] = None
-    permissions: Optional[Dict[str, Any]] = None
-
-class UpdateUserRequest(BaseModel):
-    full_name: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
-    role: Optional[str] = None
-    is_active: Optional[int] = None
-    permissions: Optional[Dict[str, Any]] = None
-
-def check_can_manage_users(user: Dict[str, Any]):
-    role = user.get("role")
-    perms = user.get("permissions") or {}
-    if role in ["superadmin", "masterdeveloper", "admin"]:
-        return True
-    if perms.get("can_manage_users"):
-        return True
-    raise HTTPException(status_code=403, detail="Kullanıcıları görüntüleme ve yönetme yetkiniz bulunmamaktadır.")
-
-@app.get("/api/users")
-def api_get_users(user: Dict[str, Any] = Depends(require_user)):
-    check_can_manage_users(user)
-    conn = get_db()
-    c = conn.cursor()
-    
-    role = user.get("role")
-    company_id = user.get("company_id") or 1
-    
-    if role in ["superadmin", "masterdeveloper"]:
-        c.execute("""
-        SELECT u.id, u.company_id, u.username, u.email, u.full_name, u.role, u.permissions_json, u.is_active, u.created_at,
-               c.name as company_name
-        FROM users u
-        LEFT JOIN companies c ON u.company_id = c.id
-        ORDER BY u.id ASC
-        """)
-    else:
-        c.execute("""
-        SELECT u.id, u.company_id, u.username, u.email, u.full_name, u.role, u.permissions_json, u.is_active, u.created_at,
-               c.name as company_name
-        FROM users u
-        LEFT JOIN companies c ON u.company_id = c.id
-        WHERE u.company_id = ?
-        ORDER BY u.id ASC
-        """, (company_id,))
-        
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    
-    for r in rows:
-        try:
-            r["permissions"] = json.loads(r.get("permissions_json") or "{}")
-        except:
-            r["permissions"] = {}
-            
-    return rows
-
-@app.post("/api/users")
-def api_create_user(req: CreateUserRequest, user: Dict[str, Any] = Depends(require_user)):
-    check_can_manage_users(user)
-    
-    clean_username = req.username.strip().lower()
-    if not clean_username or len(clean_username) < 3:
-        raise HTTPException(status_code=400, detail="Kullanıcı adı en az 3 karakter olmalıdır.")
-    if not req.password or len(req.password) < 4:
-        raise HTTPException(status_code=400, detail="Şifre en az 4 karakter olmalıdır.")
-        
-    conn = get_db()
-    c = conn.cursor()
-    
-    c.execute("SELECT id FROM users WHERE username = ?", (clean_username,))
-    if c.fetchone():
-        conn.close()
-        raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten kullanılmaktadır.")
-        
-    role = user.get("role")
-    target_company_id = req.company_id if (role in ["superadmin", "masterdeveloper"] and req.company_id) else (user.get("company_id") or 1)
-    
-    target_role = req.role or "user"
-    if target_role in ["superadmin", "masterdeveloper"] and role not in ["superadmin", "masterdeveloper"]:
-        target_role = "user"
-        
-    pwd_hash = hash_password(req.password)
-    perms_json = json.dumps(req.permissions or {})
-    
-    c.execute("""
-    INSERT INTO users (company_id, username, email, password_hash, full_name, role, permissions_json, is_active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-    """, (target_company_id, clean_username, req.email or "", pwd_hash, req.full_name or clean_username, target_role, perms_json))
-    
-    new_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    
-    return {"status": "ok", "message": "Kullanıcı başarıyla oluşturuldu.", "user_id": new_id}
-
-@app.put("/api/users/{user_id}")
-def api_update_user(user_id: int, req: UpdateUserRequest, user: Dict[str, Any] = Depends(require_user)):
-    check_can_manage_users(user)
-    
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    target = c.fetchone()
-    if not target:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
-    target_dict = dict(target)
-    
-    role = user.get("role")
-    if role not in ["superadmin", "masterdeveloper"] and target_dict.get("company_id") != user.get("company_id"):
-        conn.close()
-        raise HTTPException(status_code=403, detail="Bu kullanıcı üzerinde işlem yapamazsınız.")
-        
-    updates = []
-    params = []
-    
-    if req.full_name is not None:
-        updates.append("full_name = ?")
-        params.append(req.full_name)
-    if req.email is not None:
-        updates.append("email = ?")
-        params.append(req.email)
-    if req.is_active is not None:
-        updates.append("is_active = ?")
-        params.append(req.is_active)
-    if req.role is not None:
-        if req.role in ["superadmin", "masterdeveloper"] and role not in ["superadmin", "masterdeveloper"]:
-            pass
-        else:
-            updates.append("role = ?")
-            params.append(req.role)
-    if req.permissions is not None:
-        updates.append("permissions_json = ?")
-        params.append(json.dumps(req.permissions))
-    if req.password and len(req.password.strip()) >= 4:
-        updates.append("password_hash = ?")
-        params.append(hash_password(req.password.strip()))
-        
-    if updates:
-        params.append(user_id)
-        c.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
-        conn.commit()
-        
-    conn.close()
-    return {"status": "ok", "message": "Kullanıcı güncellendi."}
-
-@app.delete("/api/users/{user_id}")
-def api_delete_user(user_id: int, user: Dict[str, Any] = Depends(require_user)):
-    check_can_manage_users(user)
-    
-    if user_id == user.get("id"):
-        raise HTTPException(status_code=400, detail="Kendi kullanıcınızı silemezsiniz.")
-        
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    target = c.fetchone()
-    if not target:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
-    target_dict = dict(target)
-    
-    if target_dict.get("role") in ["superadmin", "masterdeveloper"] and user.get("role") not in ["superadmin", "masterdeveloper"]:
-        conn.close()
-        raise HTTPException(status_code=403, detail="Süper yönetici hesabı silinemez.")
-        
-    c.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    c.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
-    conn.commit()
-    conn.close()
-    
-    return {"status": "ok", "message": "Kullanıcı başarıyla silindi."}
-# ----------------- TCMB GÜNCEL DÖVİZ KURLARI -----------------
-currency_cache = {
-    "data": None,
-    "last_fetched": 0
-}
-
-@app.get("/api/currency-rates")
-def api_get_currency_rates():
-    now = time.time()
-    # 10 dakika önbellek
-    if currency_cache["data"] and (now - currency_cache["last_fetched"] < 600):
-        return currency_cache["data"]
-
-    url = "https://www.tcmb.gov.tr/kurlar/today.xml"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    
-    try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            content = resp.read()
-            root = ET.fromstring(content)
-            tarih = root.attrib.get("Tarih", "")
-            
-            rates = []
-            symbols = {"USD": "$", "EUR": "€", "GBP": "£"}
-            names = {"USD": "Dolar", "EUR": "Euro", "GBP": "Sterlin"}
-            flags = {"USD": "🇺🇸", "EUR": "🇪🇺", "GBP": "🇬🇧"}
-            
-            for cur in root.findall("Currency"):
-                code = cur.attrib.get("CurrencyCode", "")
-                if code in ["USD", "EUR", "GBP"]:
-                    fb = cur.find("ForexBuying")
-                    fs = cur.find("ForexSelling")
-                    b_val = float(fb.text) if fb is not None and fb.text else 0.0
-                    s_val = float(fs.text) if fs is not None and fs.text else 0.0
-                    
-                    rates.append({
-                        "code": code,
-                        "name": names.get(code, code),
-                        "symbol": symbols.get(code, code),
-                        "flag": flags.get(code, ""),
-                        "buying": f"{b_val:.4f}".replace(".", ","),
-                        "selling": f"{s_val:.4f}".replace(".", ","),
-                        "selling_short": f"{s_val:.2f}".replace(".", ",")
-                    })
-            
-            # Sıralama: USD, EUR, GBP
-            order_map = {"USD": 1, "EUR": 2, "GBP": 3}
-            rates.sort(key=lambda x: order_map.get(x["code"], 99))
-
-            result = {
-                "status": "success",
-                "date": tarih,
-                "rates": rates
-            }
-            currency_cache["data"] = result
-            currency_cache["last_fetched"] = now
-            return result
-    except Exception as e:
-        if currency_cache["data"]:
-            return currency_cache["data"]
-        return {
-            "status": "error",
-            "message": str(e),
-            "date": datetime.now().strftime("%d.%m.%Y"),
-            "rates": [
-                {"code": "USD", "name": "Dolar", "symbol": "$", "flag": "🇺🇸", "buying": "48,19", "selling": "48,28", "selling_short": "48,28"},
-                {"code": "EUR", "name": "Euro", "symbol": "€", "flag": "🇪🇺", "buying": "55,88", "selling": "55,98", "selling_short": "55,98"},
-                {"code": "GBP", "name": "Sterlin", "symbol": "£", "flag": "🇬🇧", "buying": "65,13", "selling": "65,47", "selling_short": "65,47"}
-            ]
-        }
-
-# ----------------- DYNAMIC MENUS -----------------
-
-
-@app.get("/api/menus")
-def api_get_menus(user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    
-    c.execute("""
-    SELECT * FROM dynamic_menus 
-    WHERE (company_id = ? OR company_id IS NULL) AND is_visible = 1
-    ORDER BY sort_order ASC
-    """, (company_id,))
-    
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    
-    role = user.get("role")
-    perms = user.get("permissions") or {}
-    allowed_menus = []
-    
-    for m in rows:
-        m_key = m.get("menu_key")
-        
-        # 1. Herkese açık operasyonel menüler
-        if m_key in ["carsaf_liste", "siparis_yukle", "fabrictag_entegrasyon", "menu_yonetimi", "kesimhane", "yukleme_adetleri", "serbest_fiyat", "ceki_koli", "numune_takip"]:
-            allowed_menus.append(m)
-            continue
-            
-        # 2. Genel Bakış (Dashboard) - yetkilendirmeye tabi
-        if m_key == "dashboard":
-            if role in ["superadmin", "masterdeveloper", "admin"] or perms.get("can_view_dashboard"):
-                allowed_menus.append(m)
-            continue
-            
-        # 3. Kullanıcı Yönetimi - yetkilendirmeye tabi (masterdeveloper, admin veya can_manage_users)
-        if m_key == "kullanici_yonetimi":
-            if role in ["superadmin", "masterdeveloper", "admin"] or perms.get("can_manage_users"):
-                allowed_menus.append(m)
-            continue
-            
-        # 4. Süper Admin Paneli
-        if m_key == "superadmin_panel":
-            if role in ["superadmin", "masterdeveloper"]:
-                allowed_menus.append(m)
-            continue
-            
-        # Genel rol kontrolü
-        roles_list = json.loads(m.get("allowed_roles_json") or "[]")
-        if role in ["superadmin", "masterdeveloper"] or role in roles_list:
-            allowed_menus.append(m)
-            
-    return allowed_menus
-
-# ----------------- DASHBOARD & STATS -----------------
-
-@app.get("/api/dashboard/stats")
-def api_dashboard_stats(user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    
-    c.execute("SELECT COUNT(*), COALESCE(SUM(total_quantity), 0), COALESCE(SUM(total_amount), 0) FROM orders WHERE company_id = ?", (company_id,))
-    order_count, total_pcs, total_eur = c.fetchone()
-    
-    c.execute("SELECT COUNT(*) FROM styles WHERE company_id = ?", (company_id,))
-    style_count = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(*) FROM styles WHERE company_id = ? AND (fabric_ordered = 0 OR fabric_ordered IS NULL)", (company_id,))
-    fabric_waiting = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(*) FROM styles WHERE company_id = ? AND (pps_sent = 0 OR pps_sent IS NULL)", (company_id,))
-    pps_waiting = c.fetchone()[0]
-    
-    c.execute("""
-    SELECT o.po_number, o.customer_name, o.brand, o.delivery_date, s.style_no, s.color_name, s.total_quantity, s.status, s.image_url, s.image_url_2
-    FROM styles s
-    JOIN orders o ON s.order_id = o.id
-    WHERE s.company_id = ?
-    ORDER BY o.delivery_date ASC LIMIT 6
-    """, (company_id,))
-    upcoming_deadlines = [dict(r) for r in c.fetchall()]
-
-    conn.close()
-    
-    return {
-        "order_count": order_count,
-        "style_count": style_count,
-        "total_pieces": total_pcs,
-        "total_amount_eur": total_eur,
-        "fabric_waiting": fabric_waiting,
-        "pps_waiting": pps_waiting,
-        "upcoming_deadlines": upcoming_deadlines,
-        "fabrictag_connected": FabricTagConnector.is_connected()
-    }
-
-# ----------------- CUSTOM COLUMNS (SÜTUN EKLE) -----------------
-
-class CreateCustomColumnRequest(BaseModel):
-    title: str
-    col_type: str  # 'text', 'date', 'month_year', 'number', 'checkbox', 'select'
-    options: Optional[List[str]] = []
-    width: Optional[int] = 120
-
-@app.get("/api/custom-columns")
-def api_get_custom_columns(user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS custom_columns (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        company_id INTEGER DEFAULT 1,
-        col_key TEXT UNIQUE,
-        title TEXT NOT NULL,
-        col_type TEXT NOT NULL,
-        options_json TEXT,
-        width INTEGER DEFAULT 120,
-        sort_order INTEGER DEFAULT 99,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-    conn.commit()
-
-    c.execute("SELECT * FROM custom_columns WHERE company_id = ? ORDER BY sort_order ASC, id ASC", (company_id,))
-    rows = [dict(r) for r in c.fetchall()]
-    for r in rows:
-        r["options"] = json.loads(r.get("options_json") or "[]")
-    conn.close()
-    return rows
-
-@app.post("/api/custom-columns")
-def api_create_custom_column(req: CreateCustomColumnRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-
-    if req.col_type == "size":
-        clean_name = req.title.strip().upper()
-        col_key = f"size_{clean_name}"
-        req.title = clean_name
-    else:
-        clean_key = re.sub(r'[^a-zA-Z0-9_]', '', req.title.lower().replace(" ", "_").replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c"))
-        col_key = f"custom_{clean_key}_{datetime.now().strftime('%M%S')}"
-
-    c.execute("""
-    INSERT INTO custom_columns (company_id, col_key, title, col_type, options_json, width)
-    VALUES (?, ?, ?, ?, ?, ?)
-    """, (company_id, col_key, req.title, req.col_type, json.dumps(req.options or []), req.width or 120))
-    
-    new_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    return {
-        "status": "success", 
-        "id": new_id, 
-        "col_key": col_key, 
-        "title": req.title, 
-        "col_type": req.col_type, 
-        "options": req.options or [],
-        "width": req.width or 120
-    }
-
-@app.delete("/api/custom-columns/{col_id}")
-def api_delete_custom_column(col_id: int, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("DELETE FROM custom_columns WHERE id = ?", (col_id,))
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": "Sütun silindi."}
-
-class UpdateCustomFieldRequest(BaseModel):
-    style_id: int
-    col_key: str
-    value: Any
-
-@app.post("/api/styles/update-custom-field")
-def api_update_custom_field(req: UpdateCustomFieldRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-
-    c.execute("SELECT custom_fields_json, order_id FROM styles WHERE id = ?", (req.style_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    
-    fields = json.loads(row[0] or "{}")
-    old_val = fields.get(req.col_key, "")
-    fields[req.col_key] = req.value
-    new_json = json.dumps(fields)
-
-    c.execute("UPDATE styles SET custom_fields_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_json, req.style_id))
-    
-    user_name = user.get("full_name") or user.get("username")
-    c.execute("""
-    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'Özel Sütun Değeri Güncellendi')
-    """, (req.style_id, row[1], user.get("user_id"), user_name, req.col_key, str(old_val), str(req.value)))
-
-    conn.commit()
-    conn.close()
-    return {"status": "success", "custom_fields": fields}
-
-# ----------------- MASTER PRODUCTION SHEET (ÇARŞAF LİSTE) -----------------
-
-SIZE_SORT_ORDER = {
-    'XXS': 1, '2XS': 1, 'XS': 2, 'S/M': 3, 'S': 4, 'M': 5, 'L': 6, 'XL': 7,
-    'XXL': 8, '2XL': 8, 'XXXL': 9, '3XL': 9, '4XL': 10, '5XL': 11,
-    'STD': 12, 'FREE': 13, 'ONE SIZE': 14
-}
-
-def get_size_sort_key(sz: str):
-    s = str(sz).strip().upper()
-    # 1. Child month sizes (e.g. '12M/80', '18M/86', '24M/92', '12M', '6M', '0-3M')
-    m_month = re.match(r'^(\d+)(?:-(\d+))?\s*M(?:/(\d+))?$', s)
-    if m_month:
-        month = int(m_month.group(2)) if m_month.group(2) else int(m_month.group(1))
-        height = int(m_month.group(3)) if m_month.group(3) else 0
-        return (0, month, height, s)
-
-    # 2. Child slash sizes (e.g. '3/98', '4/104', '10/140')
-    m_slash = re.match(r'^(\d+)/(\d+)$', s)
-    if m_slash:
-        return (1, int(m_slash.group(1)), int(m_slash.group(2)), s)
-
-    # 3. Numeric sizes: ascending (e.g. 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52...)
-    try:
-        return (2, float(s.replace(',', '.')), 0, s)
-    except ValueError:
-        pass
-
-    # 4. Standard apparel sizes (XXS, XS, S, M, L, XL...)
-    if s in SIZE_SORT_ORDER:
-        return (3, SIZE_SORT_ORDER[s], 0, s)
-
-    return (4, 99, 0, s)
-
-@app.get("/api/styles")
-def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    role = user.get("role")
-    company_id = user.get("company_id") or 1
-    
-    if role in ["superadmin", "masterdeveloper"]:
-        sql = """
-        SELECT s.*, 
-               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date, o.status as order_status
-        FROM styles s
-        JOIN orders o ON s.order_id = o.id
-        ORDER BY o.id DESC, s.id ASC
-        """
-        c.execute(sql)
-    else:
-        sql = """
-        SELECT s.*, 
-               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date, o.status as order_status
-        FROM styles s
-        JOIN orders o ON s.order_id = o.id
-        WHERE s.company_id = ?
-        ORDER BY o.id DESC, s.id ASC
-        """
-        c.execute(sql, (company_id,))
-    styles = [dict(r) for r in c.fetchall()]
-    for s in styles:
-        if s.get("resolved_brand"):
-            s["brand"] = s["resolved_brand"]
-    
-    # Load FabricTag global lookup map once
-    ft_map = {}
-    try:
-        ft_conn = FabricTagConnector.get_connection()
-        if ft_conn:
-            ft_c = ft_conn.cursor()
-            ft_c.execute("SELECT id, internal_code, company_name, quality_name, quality_code, design_code, color, width, weight FROM fabrics")
-            for f_row in ft_c.fetchall():
-                f_d = dict(f_row)
-                if f_d.get("id"):
-                    ft_map[str(f_d["id"])] = f_d
-                if f_d.get("internal_code"):
-                    ft_map[f_d["internal_code"].upper()] = f_d
-            ft_conn.close()
-    except Exception:
-        pass
-
-    def resolve_fabric_meta(fab_id, raw_article):
-        found = None
-        if fab_id and str(fab_id) in ft_map:
-            found = ft_map[str(fab_id)]
-        elif raw_article:
-            m = re.search(r'ELT\d+', str(raw_article), re.IGNORECASE)
-            if m and m.group(0).upper() in ft_map:
-                found = ft_map[m.group(0).upper()]
-        return found
-
-    all_sizes_set = set()
-    style_ids = [s["id"] for s in styles]
-
-    # Pre-fetch all child relations in high-speed batches to eliminate 2,000+ sequential N+1 queries
-    sizes_by_style = defaultdict(list)
-    fl1_by_style = {}
-    fl2_by_style = {}
-    logs_by_style = defaultdict(list)
-    audit_counts = defaultdict(int)
-
-    if style_ids:
-        for i in range(0, len(style_ids), 500):
-            chunk = style_ids[i:i + 500]
-            placeholders = ",".join("?" for _ in chunk)
-
-            # 1. Size Distributions
-            c.execute(f"SELECT * FROM size_distributions WHERE style_id IN ({placeholders}) ORDER BY sort_order ASC, id ASC", chunk)
-            for row in c.fetchall():
-                sizes_by_style[row["style_id"]].append(dict(row))
-
-            # 2. Fabric Links (ordered ASC so highest id overwrites, matching ORDER BY id DESC LIMIT 1)
-            c.execute(f"SELECT * FROM fabric_links WHERE style_id IN ({placeholders}) ORDER BY id ASC", chunk)
-            for row in c.fetchall():
-                rd = dict(row)
-                sid = rd["style_id"]
-                slot = rd.get("fabric_slot")
-                if slot == 2:
-                    fl2_by_style[sid] = rd
-                elif slot == 1 or slot is None:
-                    fl1_by_style[sid] = rd
-
-            # 3. Production Status Logs (ordered DESC, take up to 15 per style)
-            c.execute(f"SELECT * FROM production_status_logs WHERE style_id IN ({placeholders}) ORDER BY id DESC", chunk)
-            for row in c.fetchall():
-                sid = row["style_id"]
-                if len(logs_by_style[sid]) < 15:
-                    logs_by_style[sid].append(dict(row))
-
-            # 4. Audit Log Counts
-            c.execute(f"SELECT style_id, COUNT(*) FROM audit_logs WHERE style_id IN ({placeholders}) GROUP BY style_id", chunk)
-            for row in c.fetchall():
-                audit_counts[row[0]] = row[1]
-
-    def is_empty_val(v):
-        if not v:
-            return True
-        sv = str(v).strip().upper()
-        return sv in ["", "KODSUZ", "YOK", "NONE", "NULL", "-"]
-
-    for s in styles:
-        sid = s["id"]
-        sizes_rows = sizes_by_style.get(sid, [])
-        s["sizes"] = sizes_rows
-        
-        size_map = {}
-        for sz in sizes_rows:
-            s_name = str(sz["size_name"]).strip()
-            qty = sz["quantity"] or 0
-            size_map[s_name] = qty
-            if qty > 0:
-                all_sizes_set.add(s_name)
-        s["size_map"] = size_map
-        
-        if sizes_rows:
-            sum_qty = sum(sz["quantity"] for sz in sizes_rows)
-            if sum_qty != s["total_quantity"]:
-                s["total_quantity"] = sum_qty
-            s["cut_total_quantity"] = sum((sz.get("cut_quantity") or 0) for sz in sizes_rows)
-            s["shipped_total_quantity"] = sum((sz.get("shipped_quantity") or 0) for sz in sizes_rows)
-        else:
-            s["cut_total_quantity"] = 0
-            s["shipped_total_quantity"] = 0
-        
-        s["custom_fields"] = json.loads(s.get("custom_fields_json") or "{}")
-
-        # Slot 1 Fabric resolution
-        fl1_dict = fl1_by_style.get(sid)
-        s["fabric_link"] = fl1_dict
-        f1_meta = resolve_fabric_meta(fl1_dict.get("fabrictag_id") if fl1_dict else None, s.get("fabric_article") or s.get("fabric_type"))
-        if f1_meta:
-            q_name = (f1_meta.get("quality_name") or "").strip()
-            q_code = (f1_meta.get("quality_code") or "").strip()
-            comp = (f1_meta.get("company_name") or "").strip()
-            des = (f1_meta.get("design_code") or "").strip()
-            col = (f1_meta.get("color") or "").strip()
-            s["fabric_company_1"] = comp
-            s["fabric_variant_1"] = des
-            s["fabric_color_1"] = col
-            if is_empty_val(q_name) and is_empty_val(q_code):
-                s["fabric_display_title_1"] = ""
-                s["fabric_quality_name_1"] = ""
-                s["fabric_quality_code_1"] = ""
-            else:
-                s["fabrictag_width"] = f1_meta.get("width")
-                s["fabrictag_weight"] = f1_meta.get("weight")
-                clean_name = "" if is_empty_val(q_name) else q_name
-                clean_code = "" if is_empty_val(q_code) else f"({q_code})"
-                q_combo = " ".join(filter(None, [clean_name, clean_code])).strip()
-                parts = []
-                if comp: parts.append(comp)
-                if q_combo: parts.append(q_combo)
-                if des: parts.append(des)
-                if col and not is_empty_val(col): parts.append(col)
-                s["fabric_display_title_1"] = " - ".join(parts) if parts else ""
-                s["fabric_quality_name_1"] = clean_name
-                s["fabric_quality_code_1"] = "" if is_empty_val(q_code) else q_code
-        else:
-            s["fabric_display_title_1"] = ""
-            s["fabric_quality_name_1"] = ""
-            s["fabric_quality_code_1"] = ""
-            s["fabric_company_1"] = ""
-            s["fabric_variant_1"] = ""
-            s["fabric_color_1"] = ""
-
-        # Slot 2 Fabric resolution
-        fl2_dict = fl2_by_style.get(sid)
-        s["fabric_link_2"] = fl2_dict
-        f2_meta = resolve_fabric_meta(fl2_dict.get("fabrictag_id") if fl2_dict else None, s.get("fabric_article_2") or s.get("fabric_type_2"))
-        if f2_meta:
-            q_name2 = (f2_meta.get("quality_name") or "").strip()
-            q_code2 = (f2_meta.get("quality_code") or "").strip()
-            comp2 = (f2_meta.get("company_name") or "").strip()
-            des2 = (f2_meta.get("design_code") or "").strip()
-            col2 = (f2_meta.get("color") or "").strip()
-            s["fabric_company_2"] = comp2
-            s["fabric_variant_2"] = des2
-            s["fabric_color_2"] = col2
-            if is_empty_val(q_name2) and is_empty_val(q_code2):
-                s["fabric_display_title_2"] = ""
-                s["fabric_quality_name_2"] = ""
-                s["fabric_quality_code_2"] = ""
-            else:
-                s["fabrictag_width_2"] = f2_meta.get("width")
-                s["fabrictag_weight_2"] = f2_meta.get("weight")
-                clean_name2 = "" if is_empty_val(q_name2) else q_name2
-                clean_code2 = "" if is_empty_val(q_code2) else f"({q_code2})"
-                q_combo2 = " ".join(filter(None, [clean_name2, clean_code2])).strip()
-                parts2 = []
-                if comp2: parts2.append(comp2)
-                if q_combo2: parts2.append(q_combo2)
-                if des2: parts2.append(des2)
-                if col2 and not is_empty_val(col2): parts2.append(col2)
-                s["fabric_display_title_2"] = " - ".join(parts2) if parts2 else ""
-                s["fabric_quality_name_2"] = clean_name2
-                s["fabric_quality_code_2"] = "" if is_empty_val(q_code2) else q_code2
-        else:
-            s["fabric_display_title_2"] = ""
-            s["fabric_quality_name_2"] = ""
-            s["fabric_quality_code_2"] = ""
-            s["fabric_company_2"] = ""
-            s["fabric_variant_2"] = ""
-            s["fabric_color_2"] = ""
-
-        if s.get("fabric_wastage_percent") is None:
-            s["fabric_wastage_percent"] = 5.0
-        if not s.get("fabric_order_unit"):
-            s["fabric_order_unit"] = "M"
-        if not s.get("fabric_price_currency_1"):
-            s["fabric_price_currency_1"] = s.get("currency") or "€"
-        if s.get("fabric_wastage_percent_2") is None:
-            s["fabric_wastage_percent_2"] = 5.0
-        if not s.get("fabric_order_unit_2"):
-            s["fabric_order_unit_2"] = "M"
-        if not s.get("fabric_price_currency_2"):
-            s["fabric_price_currency_2"] = s.get("currency") or "€"
-
-
-        if s.get("cost_data_json"):
-            try:
-                s["cost_data"] = json.loads(s["cost_data_json"])
-            except Exception:
-                s["cost_data"] = None
-        else:
-            s["cost_data"] = None
-
-        if s.get("actual_cost_data_json"):
-            try:
-                s["actual_cost_data"] = json.loads(s["actual_cost_data_json"])
-            except Exception:
-                s["actual_cost_data"] = None
-        else:
-            s["actual_cost_data"] = None
-
-        s["recent_logs"] = logs_by_style.get(sid, [])
-        s["audit_count"] = audit_counts.get(sid, 0)
-
-    # Also load custom columns
-    c.execute("SELECT * FROM custom_columns WHERE company_id = ? ORDER BY sort_order ASC, id ASC", (company_id,))
-    custom_cols = [dict(r) for r in c.fetchall()]
-    for col in custom_cols:
-        col["options"] = json.loads(col.get("options_json") or "[]")
-        if col.get("col_type") == "size" and col.get("title"):
-            all_sizes_set.add(str(col["title"]).strip().upper())
-
-    conn.close()
-    
-    sorted_sizes = sorted(list(all_sizes_set), key=get_size_sort_key)
-    
-    return {
-        "styles": styles,
-        "available_sizes": sorted_sizes,
-        "custom_columns": custom_cols
-    }
-
-# ----------------- BULK SAVE ENDPOINT -----------------
-
-class BulkSaveItem(BaseModel):
-    id: int
-    description: Optional[Any] = None
-    fabric_order_status: Optional[Any] = None
-    unit_price: Optional[Any] = None
-    status: Optional[Any] = None
-    fabric_ordered: Optional[Any] = None
-    pps_sent: Optional[Any] = None
-    shipping_sample_sent: Optional[Any] = None
-    unit_meters: Optional[Any] = None
-    unit_grams: Optional[Any] = None
-    fabric_wastage_percent: Optional[Any] = None
-    fabric_ordered_meters: Optional[Any] = None
-    fabric_price_1: Optional[Any] = None
-    fabric_price_currency_1: Optional[Any] = None
-    fabric_arrival_date: Optional[Any] = None
-    fabric_received_meters: Optional[Any] = None
-    unit_meters_2: Optional[Any] = None
-    unit_grams_2: Optional[Any] = None
-    fabric_wastage_percent_2: Optional[Any] = None
-    fabric_ordered_meters_2: Optional[Any] = None
-    fabric_price_2: Optional[Any] = None
-    fabric_price_currency_2: Optional[Any] = None
-    fabric_arrival_date_2: Optional[Any] = None
-    fabric_received_meters_2: Optional[Any] = None
-    channel: Optional[Any] = None
-    size_map: Optional[Dict[str, Any]] = None
-    custom_fields: Optional[Dict[str, Any]] = None
-
-class BulkSaveRequest(BaseModel):
-    items: List[BulkSaveItem]
-
-@app.post("/api/styles/bulk-save")
-def api_bulk_save_styles(req: BulkSaveRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    user_name = user.get("full_name") or user.get("username")
-    saved_count = 0
-
-    for item in req.items:
-        u_price = None
-        if item.unit_price is not None and str(item.unit_price).strip() != "":
-            try:
-                u_price = float(str(item.unit_price).replace(",", "."))
-            except Exception:
-                pass
-
-        fp1 = None
-        if item.fabric_price_1 is not None and str(item.fabric_price_1).strip() != "":
-            try:
-                fp1 = float(str(item.fabric_price_1).replace(",", "."))
-            except Exception:
-                pass
-
-        fp2 = None
-        if item.fabric_price_2 is not None and str(item.fabric_price_2).strip() != "":
-            try:
-                fp2 = float(str(item.fabric_price_2).replace(",", "."))
-            except Exception:
-                pass
-
-        c.execute("""
-        UPDATE styles SET
-            description = COALESCE(?, description),
-            fabric_order_status = COALESCE(?, fabric_order_status),
-            unit_price = COALESCE(?, unit_price),
-            status = COALESCE(?, status),
-            unit_meters = COALESCE(?, unit_meters),
-            unit_grams = COALESCE(?, unit_grams),
-            fabric_wastage_percent = COALESCE(?, fabric_wastage_percent),
-            fabric_ordered_meters = COALESCE(?, fabric_ordered_meters),
-            fabric_price_1 = COALESCE(?, fabric_price_1),
-            fabric_price_currency_1 = COALESCE(?, fabric_price_currency_1),
-            unit_meters_2 = COALESCE(?, unit_meters_2),
-            unit_grams_2 = COALESCE(?, unit_grams_2),
-            fabric_wastage_percent_2 = COALESCE(?, fabric_wastage_percent_2),
-            fabric_ordered_meters_2 = COALESCE(?, fabric_ordered_meters_2),
-            fabric_price_2 = COALESCE(?, fabric_price_2),
-            fabric_price_currency_2 = COALESCE(?, fabric_price_currency_2),
-            fabric_arrival_date = COALESCE(?, fabric_arrival_date),
-            fabric_received_meters = COALESCE(?, fabric_received_meters),
-            fabric_arrival_date_2 = COALESCE(?, fabric_arrival_date_2),
-            fabric_received_meters_2 = COALESCE(?, fabric_received_meters_2),
-            channel = COALESCE(?, channel),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        """, (
-            item.description,
-            item.fabric_order_status,
-            u_price,
-            item.status,
-            item.unit_meters,
-            item.unit_grams,
-            item.fabric_wastage_percent,
-            item.fabric_ordered_meters,
-            fp1,
-            item.fabric_price_currency_1,
-            item.unit_meters_2,
-            item.unit_grams_2,
-            item.fabric_wastage_percent_2,
-            item.fabric_ordered_meters_2,
-            fp2,
-            item.fabric_price_currency_2,
-            item.fabric_arrival_date,
-            item.fabric_received_meters,
-            item.fabric_arrival_date_2,
-            item.fabric_received_meters_2,
-            item.channel,
-            item.id
-        ))
-
-
-        if item.custom_fields is not None:
-            c.execute("UPDATE styles SET custom_fields_json = ? WHERE id = ?", (json.dumps(item.custom_fields), item.id))
-
-        if item.size_map:
-            for sz_name, sz_qty in item.size_map.items():
-                try:
-                    qty_int = int(str(sz_qty).strip() or 0)
-                except Exception:
-                    qty_int = 0
-                c.execute("SELECT id FROM size_distributions WHERE style_id = ? AND size_name = ?", (item.id, sz_name))
-                row = c.fetchone()
-                if row:
-                    c.execute("UPDATE size_distributions SET quantity = ? WHERE id = ?", (qty_int, row[0]))
-                else:
-                    c.execute("INSERT INTO size_distributions (style_id, size_name, quantity) VALUES (?, ?, ?)", (item.id, sz_name, qty_int))
-            
-            c.execute("SELECT SUM(quantity) FROM size_distributions WHERE style_id = ?", (item.id,))
-            new_tot = c.fetchone()[0] or 0
-            c.execute("UPDATE styles SET total_quantity = ?, total_amount = ? * COALESCE(unit_price, 0) WHERE id = ?", (new_tot, new_tot, item.id))
-        
-        saved_count += 1
-
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": f"{saved_count} satırdaki tüm değişiklikler başarıyla kaydedildi."}
-
-
-# ----------------- DELETE STYLE / ORDER -----------------
-
-def check_can_delete_orders(user: Dict[str, Any]):
-    role = user.get("role")
-    perms = user.get("permissions") or {}
-    if role in ["superadmin", "masterdeveloper", "admin"]:
-        return True
-    if perms.get("can_delete_orders"):
-        return True
-    raise HTTPException(status_code=403, detail="Sipariş ve modelleri silme yetkiniz bulunmamaktadır.")
-
-@app.delete("/api/styles/{style_id}")
-def api_delete_style(style_id: int, user: Dict[str, Any] = Depends(require_user)):
-    check_can_delete_orders(user)
-    conn = get_db()
-    c = conn.cursor()
-
-    c.execute("SELECT order_id, style_no, color_name, total_quantity FROM styles WHERE id = ?", (style_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Silinecek model bulunamadı.")
-    
-    order_id, style_no, color_name, total_qty = row[0], row[1], row[2], row[3]
-
-    try:
-        c.execute("DELETE FROM audit_logs WHERE style_id = ?", (style_id,))
-        c.execute("DELETE FROM size_distributions WHERE style_id = ?", (style_id,))
-        c.execute("DELETE FROM production_status_logs WHERE style_id = ?", (style_id,))
-        c.execute("DELETE FROM fabric_links WHERE style_id = ?", (style_id,))
-        c.execute("DELETE FROM styles WHERE id = ?", (style_id,))
-
-        c.execute("SELECT COUNT(*), COALESCE(SUM(total_quantity), 0), COALESCE(SUM(total_amount), 0) FROM styles WHERE order_id = ?", (order_id,))
-        rem_count, rem_qty, rem_amt = c.fetchone()
-
-        if rem_count == 0:
-            c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
-        else:
-            c.execute("UPDATE orders SET total_quantity = ?, total_amount = ? WHERE id = ?", (rem_qty, rem_amt, order_id))
-
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(status_code=500, detail=f"Silme hatası: {str(e)}")
-
-
-# ----------------- ORDER MANAGEMENT & PERMANENT DELETE -----------------
-
-@app.get("/api/orders/list")
-def api_get_orders_list(user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    role = user.get("role")
-    comp_id = user.get("company_id")
-    
-    if role in ["superadmin", "masterdeveloper"]:
-        c.execute("""
-            SELECT o.id, o.po_number, o.customer_name, o.brand, o.season, o.order_date, o.delivery_date,
-                   o.total_quantity, o.total_amount, o.currency, o.status, o.created_at,
-                   COUNT(s.id) as styles_count,
-                   GROUP_CONCAT(DISTINCT s.style_no) as style_names
-            FROM orders o
-            LEFT JOIN styles s ON s.order_id = o.id
-            GROUP BY o.id
-            ORDER BY o.id DESC
-        """)
-    else:
-        c.execute("""
-            SELECT o.id, o.po_number, o.customer_name, o.brand, o.season, o.order_date, o.delivery_date,
-                   o.total_quantity, o.total_amount, o.currency, o.status, o.created_at,
-                   COUNT(s.id) as styles_count,
-                   GROUP_CONCAT(DISTINCT s.style_no) as style_names
-            FROM orders o
-            LEFT JOIN styles s ON s.order_id = o.id
-            WHERE o.company_id = ?
-            GROUP BY o.id
-            ORDER BY o.id DESC
-        """, (comp_id or 1,))
-        
-    rows = [dict(r) for r in c.fetchall()]
-    
-    if rows:
-        order_ids = [r["id"] for r in rows]
-        placeholders = ",".join("?" for _ in order_ids)
-        c.execute(f"""
-            SELECT id, order_id, style_no, description, color_code, color_name, total_quantity, status, image_url
-            FROM styles
-            WHERE order_id IN ({placeholders})
-            ORDER BY id ASC
-        """, tuple(order_ids))
-        all_styles = [dict(s) for s in c.fetchall()]
-        styles_map = {}
-        for s in all_styles:
-            styles_map.setdefault(s["order_id"], []).append(s)
-        for r in rows:
-            r["styles"] = styles_map.get(r["id"], [])
-            # Also build a comprehensive search string for colors and styles
-            color_parts = []
-            for s in r["styles"]:
-                if s.get("color_code"):
-                    color_parts.append(str(s["color_code"]).strip())
-                if s.get("color_name"):
-                    color_parts.append(str(s["color_name"]).strip())
-            r["color_names"] = ", ".join(dict.fromkeys(color_parts))
-
-    conn.close()
-    return rows
-
-@app.delete("/api/orders/{order_id}")
-def api_delete_order(order_id: int, user: Dict[str, Any] = Depends(require_user)):
-    check_can_delete_orders(user)
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT id, po_number, customer_name FROM orders WHERE id = ?", (order_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Sipariş bulunamadı.")
-    
-    po_num, cust = row["po_number"], row["customer_name"]
-
-    try:
-        c.execute("SELECT id FROM styles WHERE order_id = ?", (order_id,))
-        style_ids = [r["id"] for r in c.fetchall()]
-
-        for s_id in style_ids:
-            c.execute("DELETE FROM audit_logs WHERE style_id = ?", (s_id,))
-            c.execute("DELETE FROM size_distributions WHERE style_id = ?", (s_id,))
-            c.execute("DELETE FROM production_status_logs WHERE style_id = ?", (s_id,))
-            c.execute("DELETE FROM fabric_links WHERE style_id = ?", (s_id,))
-        
-        c.execute("DELETE FROM styles WHERE order_id = ?", (order_id,))
-        c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(status_code=500, detail=f"Sipariş silme hatası: {str(e)}")
-
-    conn.close()
-    return {"status": "success", "message": f"Sipariş (PO: {po_num}, Müşteri: {cust}) ve tüm modelleri kalıcı olarak silindi."}
-
-class BulkDeleteOrdersRequest(BaseModel):
-    order_ids: List[int]
-
-@app.post("/api/orders/bulk-delete")
-def api_bulk_delete_orders(req: BulkDeleteOrdersRequest, user: Dict[str, Any] = Depends(require_user)):
-    if not req.order_ids:
-        return {"status": "success", "deleted_count": 0}
-    
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        for order_id in req.order_ids:
-            c.execute("SELECT id FROM styles WHERE order_id = ?", (order_id,))
-            style_ids = [r["id"] for r in c.fetchall()]
-            for s_id in style_ids:
-                c.execute("DELETE FROM audit_logs WHERE style_id = ?", (s_id,))
-                c.execute("DELETE FROM size_distributions WHERE style_id = ?", (s_id,))
-                c.execute("DELETE FROM production_status_logs WHERE style_id = ?", (s_id,))
-                c.execute("DELETE FROM fabric_links WHERE style_id = ?", (s_id,))
-            c.execute("DELETE FROM styles WHERE order_id = ?", (order_id,))
-            c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(status_code=500, detail=f"Toplu silme hatası: {str(e)}")
-
-    conn.close()
-    return {"status": "success", "deleted_count": len(req.order_ids)}
-
-
-
-
-def get_excel_currency_format(cur_code: str = "EUR") -> tuple[str, str]:
-    """
-    Excel'e aktarılan tüm para birimlerinde sembolü rakamın önüne alır.
-    Türkçe Excel'de '#,##0.00' formatı küsüratı virgül ',', binlikleri nokta '.' olarak görüntüler.
-    Hücreye gerçek sayı (float) yazıldığında Excel bunu tam olarak sayı/para birimi olarak algılar.
-    Örnek:
-      EUR: symbol='€', format='"€" #,##0.00' -> '€ 26,25'
-      TRY: symbol='₺', format='"₺" #,##0.00' -> '₺ 1.250,50'
-      USD: symbol='$', format='"$" #,##0.00' -> '$ 45,50'
-      GBP: symbol='£', format='"£" #,##0.00' -> '£ 30,00'
-    """
-    c = str(cur_code or "EUR").upper().strip()
-    if c in ["USD", "$"]:
-        return "$", '"$" #,##0.00'
-    elif c in ["TL", "TRY", "₺"]:
-        return "₺", '"₺" #,##0.00'
-    elif c in ["GBP", "£"]:
-        return "£", '"£" #,##0.00'
-    else:
-        return "€", '"€" #,##0.00'
-
-def safe_price_float(val):
-    if val is None or str(val).strip() == "":
-        return None
-    if isinstance(val, (int, float)):
-        return float(val)
-    try:
-        s_clean = str(val).strip().replace("€", "").replace("₺", "").replace("$", "").replace("£", "").replace("TL", "").replace("EUR", "").replace("USD", "").strip()
-        s_clean = s_clean.replace(",", ".")
-        return float(s_clean)
-    except Exception:
-        return None
-
-def safe_unit_float(val):
-    if val is None or str(val).strip() == "":
-        return None
-    if isinstance(val, (int, float)):
-        return float(val)
-    try:
-        s_clean = str(val).strip()
-        m = re.search(r'[-+]?[0-9]+[.,]?[0-9]*', s_clean)
-        if m:
-            num_str = m.group(0).replace(",", ".")
-            return float(num_str)
-        return None
-    except Exception:
-        return None
-
-class ExportExcelRequest(BaseModel):
-    style_ids: Optional[List[int]] = None
-
-def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, company_id: int = 1) -> Response:
-    conn = get_db()
-    c = conn.cursor()
-    
-    if style_ids and len(style_ids) > 0:
-        placeholders = ",".join("?" for _ in style_ids)
-        order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
-        sql = f"""
-        SELECT s.*, 
-               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
-        FROM styles s
-        JOIN orders o ON s.order_id = o.id
-        WHERE s.company_id = ? AND s.id IN ({placeholders})
-        ORDER BY {order_by_clause}
-        """
-        params = [company_id] + style_ids
-    else:
-        sql = """
-        SELECT s.*, 
-               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
-        FROM styles s
-        JOIN orders o ON s.order_id = o.id
-        WHERE s.company_id = ?
-        ORDER BY o.id DESC, s.id ASC
-        """
-        params = [company_id]
-        
-    c.execute(sql, tuple(params))
-    styles = [dict(r) for r in c.fetchall()]
-    all_style_ids = [s["id"] for s in styles]
-    
-    # 1. Beden Dağılımlarını Topla
-    sizes_by_style = {}
-    present_size_names = []
-    size_seen = set()
-    
-    if all_style_ids:
-        pl_ids = ",".join("?" for _ in all_style_ids)
-        c.execute(f"""
-        SELECT style_id, size_name, quantity, sort_order
-        FROM size_distributions
-        WHERE style_id IN ({pl_ids})
-        ORDER BY sort_order ASC, id ASC
-        """, tuple(all_style_ids))
-        for sz_row in c.fetchall():
-            sid = sz_row["style_id"]
-            sname = str(sz_row["size_name"]).strip()
-            qty = sz_row["quantity"] or 0
-            if sid not in sizes_by_style:
-                sizes_by_style[sid] = {}
-            sizes_by_style[sid][sname] = qty
-            if sname not in size_seen and qty > 0:
-                size_seen.add(sname)
-                present_size_names.append(sname)
-                
-    present_size_names.sort(key=get_size_sort_key)
-    
-    # 2. Kumaş Bağlantılarını Topla (fabric_links)
-    fl_by_style = {}
-    if all_style_ids:
-        pl_ids = ",".join("?" for _ in all_style_ids)
-        c.execute(f"""
-        SELECT * FROM fabric_links WHERE style_id IN ({pl_ids}) ORDER BY id ASC
-        """, tuple(all_style_ids))
-        for fl in c.fetchall():
-            sid = fl["style_id"]
-            if sid not in fl_by_style:
-                fl_by_style[sid] = dict(fl)
-
-    # FabricTag detaylarını entegre et
-    ft_map = {}
-    try:
-        ft_conn = FabricTagConnector.get_connection()
-        if ft_conn:
-            ft_c = ft_conn.cursor()
-            ft_c.execute("SELECT id, internal_code, company_name, quality_name, quality_code, design_code, color, width, weight, composition FROM fabrics")
-            for f_row in ft_c.fetchall():
-                f_d = dict(f_row)
-                if f_d.get("id"):
-                    ft_map[str(f_d["id"])] = f_d
-                if f_d.get("internal_code"):
-                    ft_map[f_d["internal_code"].upper()] = f_d
-                if f_d.get("quality_code"):
-                    ft_map[f_d["quality_code"].upper()] = f_d
-            ft_conn.close()
-    except Exception:
-        pass
-        
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Sipariş Listesi"
-    
-    # Modern Excel Görünümü: Izgara çizgilerini göster ve üst başlığı dondur
-    ws.views.sheetView[0].showGridLines = True
-    ws.freeze_panes = "B2"
-    
-    # Başlıkları Oluştur
-    headers = [
-        "Görsel", "Müşteri", "Marka", "Kanal", "Sezon", "PO No", "Model No", 
-        "Renk Kodu", "Renk Adı"
-    ]
-    
-    size_col_start = len(headers) + 1
-    for sz_name in present_size_names:
-        headers.append(f"Beden {sz_name}")
-    size_col_end = len(headers)
-    
-    col_idx_qty = len(headers) + 1
-    headers.append("Toplam Adet")
-    col_idx_price = len(headers) + 1
-    headers.append("Birim Fiyat")
-    col_idx_currency = len(headers) + 1
-    headers.append("Döviz")
-    col_idx_amount = len(headers) + 1
-    headers.append("Toplam Tutar")
-    
-    # Kumaş Bilgileri Sütunları (FabricTag Kumaş Deposu)
-    headers.extend([
-        "Kumaşçı",
-        "Kalite Kodu",
-        "Kalite Adı",
-        "Varyant",
-        "Renk",
-        "Karışım",
-        "Ağırlık",
-        "En",
-        "Birim Metraj (M)",
-        "Birim Gramaj (GR)",
-        "Birim Metraj 2 (M)",
-        "Birim Gramaj 2 (GR)",
-        "Sipariş Kumaş (M/KG)",
-        "Gelen Kumaş (M/KG)",
-        "Kumaş Durumu / Termin"
-    ])
-    
-    col_idx_ordered_fabric = headers.index("Sipariş Kumaş (M/KG)") + 1
-    col_idx_received_fabric = headers.index("Gelen Kumaş (M/KG)") + 1
-    
-    # Diğer Sütunlar
-    headers.extend([
-        "Sipariş Tarihi",
-        "Yükleme Tarihi",
-        "Üretim Aşaması",
-        "Beden Dağılımı (Özet)",
-        "Notlar"
-    ])
-    
-    # Modern Başlık Tasarımı (Koyu Füme / Slate Navy, Beyaz Kalın Yazı)
-    header_font = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
-    header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    
-    header_border = Border(
-        left=Side(style="thin", color="334155"),
-        right=Side(style="thin", color="334155"),
-        top=Side(style="thin", color="0F172A"),
-        bottom=Side(style="medium", color="0F172A")
-    )
-    
-    ws.row_dimensions[1].height = 34
-    for col_num, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_num, value=h)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_align
-        cell.border = header_border
-        
-    # Görsel sütunu genişliği
-    ws.column_dimensions["A"].width = 18
-    img_buffers = []
-    
-    # Hücre kenarlık ve yazı tipleri
-    cell_border = Border(
-        left=Side(style="thin", color="E2E8F0"),
-        right=Side(style="thin", color="E2E8F0"),
-        top=Side(style="thin", color="E2E8F0"),
-        bottom=Side(style="thin", color="E2E8F0")
-    )
-    
-    font_normal = Font(name="Segoe UI", size=9.5, color="1E293B")
-    font_bold = Font(name="Segoe UI", size=9.5, bold=True, color="0F172A")
-    font_style_no = Font(name="Segoe UI", size=10, bold=True, color="0F172A")
-    font_muted = Font(name="Segoe UI", size=9, color="94A3B8")
-    
-    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-    
-    align_center = Alignment(horizontal="center", vertical="center")
-    align_left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    align_left = Alignment(horizontal="left", vertical="center")
-    
-    last_row = 1
-    
-    for idx, s in enumerate(styles, start=2):
-        last_row = idx
-        ws.row_dimensions[idx].height = 75
-        current_fill = fill_white if (idx % 2 == 0) else fill_zebra
-        
-        # Beden dağılımı metni
-        style_size_map = sizes_by_style.get(s["id"], {})
-        sizes_summary_str = ", ".join(f"{sz}: {qty}" for sz, qty in style_size_map.items() if qty > 0)
-        
-        # Notlar
-        notes_val = s.get("notes") or ""
-        if not notes_val and s.get("custom_fields_json"):
-            try:
-                cf = json.loads(s["custom_fields_json"])
-                notes_val = cf.get("notes") or cf.get("notlar") or ""
-            except Exception:
-                pass
-                
-        qty = s.get("total_quantity") or 0
-        price = s.get("unit_price") or 0
-        tot_amt = (price or 0) * (qty or 0)
-        
-        # Kumaş Bilgileri (FabricTag ve stiller tablosu harmanlanır)
-        fl = fl_by_style.get(s["id"], {})
-        f_meta = None
-        if fl.get("fabrictag_id") and str(fl["fabrictag_id"]) in ft_map:
-            f_meta = ft_map[str(fl["fabrictag_id"])]
-        if not f_meta:
-            raw_art = str(s.get("fabric_article") or s.get("fabric_type") or "")
-            m_elt = re.search(r'ELT\d+', raw_art, re.IGNORECASE)
-            if m_elt and m_elt.group(0).upper() in ft_map:
-                f_meta = ft_map[m_elt.group(0).upper()]
-        if not f_meta and fl.get("fabric_code") and fl["fabric_code"].upper() in ft_map:
-            f_meta = ft_map[fl["fabric_code"].upper()]
-
-        def clean_field(val):
-            if not val:
-                return ""
-            sv = str(val).strip()
-            if sv.upper() in ["KODSUZ", "YOK", "NONE", "NULL", "-", "—", "İSİMSİZ", "ISIMSIZ", "TANIMSIZ", "BİLGİSİ YOK", "BILGISI YOK", "BİLGİ YOK", "BILGI YOK", "BELİRTİLMEDİ", "BELIRTILMEDI"]:
-                return ""
-            return sv
-
-        def clean_weight(val):
-            v = clean_field(val)
-            if not v:
-                return ""
-            v_num = re.sub(r'^(gr|gramaj|weight)[:\s]*', '', v, flags=re.I).strip()
-            if v_num.isdigit():
-                return f"{v_num} gr"
-            return v
-
-        def clean_width(val):
-            v = clean_field(val)
-            if not v:
-                return ""
-            v_num = re.sub(r'^(en|genişlik|width)[:\s]*', '', v, flags=re.I).strip()
-            if v_num.isdigit():
-                return f"{v_num} cm"
-            return v
-
-        fabric_supplier_val = clean_field(f_meta.get("company_name") if f_meta else (fl.get("supplier") or s.get("fabric_company_1") or ""))
-        fabric_qcode_val = clean_field(f_meta.get("quality_code") if f_meta else (fl.get("fabric_code") or s.get("fabric_quality_code_1") or ""))
-        fabric_qname_val = clean_field(f_meta.get("quality_name") if f_meta else (fl.get("fabric_name") or s.get("fabric_quality_name_1") or s.get("fabric_article") or ""))
-        fabric_variant_val = clean_field(f_meta.get("design_code") if f_meta else (s.get("fabric_variant_1") or ""))
-        fabric_color_val = clean_field(f_meta.get("color") if f_meta else (s.get("fabric_color_1") or ""))
-        fabric_comp_val = clean_field(f_meta.get("composition") if f_meta else (fl.get("composition") or s.get("fabric_composition") or ""))
-        fabric_weight_val = clean_weight(f_meta.get("weight") if f_meta else (s.get("fabric_weight") or fl.get("ft_weight") or ""))
-        fabric_width_val = clean_width(f_meta.get("width") if f_meta else (s.get("fabric_width") or fl.get("ft_width") or ""))
-
-        fabric_ordered_m = s.get("fabric_ordered_meters") or 0.0
-        fabric_received_m = s.get("fabric_received_meters") or 0.0
-        fabric_status_val = s.get("fabric_order_status") or fl.get("status") or ""
-        
-        # A Sütunu: Görsel Hücresi
-        cell_a = ws.cell(row=idx, column=1)
-        cell_a.border = cell_border
-        cell_a.fill = current_fill
-        
-        img_url = s.get("image_url") or s.get("image_url_2")
-        img_added = False
-        if img_url:
-            try:
-                pil_img = None
-                if img_url.startswith("data:image"):
-                    hdr, enc = img_url.split(",", 1)
-                    pil_img = PILImage.open(io.BytesIO(base64.b64decode(enc)))
-                elif img_url.startswith("/uploads/"):
-                    p = UPLOADS_DIR / img_url.replace("/uploads/", "").lstrip("/")
-                    if p.exists():
-                        pil_img = PILImage.open(p)
-                elif Path(img_url).exists():
-                    pil_img = PILImage.open(img_url)
-                    
-                if pil_img:
-                    pil_img = pil_img.convert("RGB")
-                    pil_img.thumbnail((105, 88), PILImage.Resampling.LANCZOS)
-                    buf = io.BytesIO()
-                    pil_img.save(buf, format="JPEG", quality=88)
-                    buf.seek(0)
-                    img_buffers.append(buf)
-                    xl_img = OpenpyxlImage(buf)
-                    img_w = pil_img.width
-                    img_h = pil_img.height
-
-                    # Hücrede En ve Boydan Ortalama (Horizontal & Vertical Center)
-                    # Sütun A genişliği: 18 karakter (~140px), Satır yüksekliği: 75pt (~100px)
-                    col_w_px = 140
-                    row_h_px = 100
-                    x_off_px = max(0, (col_w_px - img_w) // 2)
-                    y_off_px = max(0, (row_h_px - img_h) // 2)
-
-                    marker = AnchorMarker(col=0, colOff=pixels_to_EMU(x_off_px), row=idx - 1, rowOff=pixels_to_EMU(y_off_px))
-                    size = XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h))
-                    xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
-                    ws.add_image(xl_img)
-                    img_added = True
-            except Exception:
-                pass
-                
-        if not img_added:
-            cell_a.value = "[Görsel Yok]"
-            cell_a.alignment = align_center
-            cell_a.font = font_muted
-            
-        # Satır Verilerini Sırayla Doldur
-        # 1. Temel Bilgiler (2-9)
-        ws.cell(row=idx, column=2, value=s.get("customer_name") or "").alignment = align_left
-        ws.cell(row=idx, column=2).font = font_bold
-        ws.cell(row=idx, column=3, value=s.get("brand") or "").alignment = align_left
-        ws.cell(row=idx, column=4, value=s.get("channel") or "").alignment = align_left
-        ws.cell(row=idx, column=5, value=s.get("season") or "").alignment = align_center
-        ws.cell(row=idx, column=6, value=s.get("po_number") or "").alignment = align_center
-        ws.cell(row=idx, column=6).font = font_bold
-        ws.cell(row=idx, column=7, value=s.get("style_no") or "").alignment = align_center
-        ws.cell(row=idx, column=7).font = font_style_no
-        ws.cell(row=idx, column=8, value=s.get("color_code") or "").alignment = align_center
-        ws.cell(row=idx, column=9, value=s.get("color_name") or "").alignment = align_left_wrap
-        
-        # 2. Beden Dağılımı Sütunları (TÜM RAKAMLAR ORTALI)
-        for s_idx, sz_name in enumerate(present_size_names, start=size_col_start):
-            sz_qty = style_size_map.get(sz_name)
-            c_sz = ws.cell(row=idx, column=s_idx, value=sz_qty if sz_qty else None)
-            c_sz.alignment = align_center
-            if sz_qty:
-                c_sz.number_format = "#,##0"
-                c_sz.font = font_bold
-                
-        # 3. Miktar ve Fiyatlar (TÜM RAKAMLAR ORTALI, PARA BİRİMİ ÖNDE, VİRGÜLLÜ)
-        c_qty = ws.cell(row=idx, column=col_idx_qty, value=qty)
-        c_qty.alignment = align_center
-        c_qty.number_format = "#,##0"
-        c_qty.font = font_bold
-        
-        cur_sym, cur_fmt = get_excel_currency_format(s.get("currency"))
-
-        c_prc = ws.cell(row=idx, column=col_idx_price)
-        c_prc.alignment = align_center
-        prc_num = safe_price_float(price)
-        c_prc.value = prc_num if prc_num is not None else 0.0
-        c_prc.number_format = cur_fmt
-        
-        c_cur = ws.cell(row=idx, column=col_idx_currency, value=cur_sym)
-        c_cur.alignment = align_center
-        
-        c_amt = ws.cell(row=idx, column=col_idx_amount)
-        c_amt.alignment = align_center
-        amt_num = safe_price_float(tot_amt)
-        c_amt.value = amt_num if amt_num is not None else 0.0
-        c_amt.number_format = cur_fmt
-        c_amt.font = font_bold
-        
-        # 4. Kumaş Bilgileri Sütunları (Kumaşçı, Kalite Kodu, Kalite Adı, Varyant, Renk, Karışım, Ağırlık, En)
-        ws.cell(row=idx, column=headers.index("Kumaşçı") + 1, value=fabric_supplier_val).alignment = align_left
-        ws.cell(row=idx, column=headers.index("Kalite Kodu") + 1, value=fabric_qcode_val).alignment = align_center
-        ws.cell(row=idx, column=headers.index("Kalite Adı") + 1, value=fabric_qname_val).alignment = align_left_wrap
-        ws.cell(row=idx, column=headers.index("Varyant") + 1, value=fabric_variant_val).alignment = align_center
-        ws.cell(row=idx, column=headers.index("Renk") + 1, value=fabric_color_val).alignment = align_center
-        ws.cell(row=idx, column=headers.index("Karışım") + 1, value=fabric_comp_val).alignment = align_left_wrap
-        ws.cell(row=idx, column=headers.index("Ağırlık") + 1, value=fabric_weight_val).alignment = align_center
-        ws.cell(row=idx, column=headers.index("En") + 1, value=fabric_width_val).alignment = align_center
-        
-        # Birim Metraj ve Gramajlar (mt ve gr)
-        u_meters = safe_unit_float(s.get("unit_meters") or s.get("pps_unit_meters"))
-        c_um = ws.cell(row=idx, column=headers.index("Birim Metraj (M)") + 1, value=u_meters)
-        c_um.alignment = align_center
-        if u_meters is not None:
-            c_um.number_format = "#,##0.00"
-
-        u_grams = safe_unit_float(s.get("unit_grams"))
-        c_ug = ws.cell(row=idx, column=headers.index("Birim Gramaj (GR)") + 1, value=u_grams)
-        c_ug.alignment = align_center
-        if u_grams is not None:
-            c_ug.number_format = "#,##0.##"
-
-        u_meters_2 = safe_unit_float(s.get("unit_meters_2"))
-        c_um2 = ws.cell(row=idx, column=headers.index("Birim Metraj 2 (M)") + 1, value=u_meters_2)
-        c_um2.alignment = align_center
-        if u_meters_2 is not None:
-            c_um2.number_format = "#,##0.00"
-
-        u_grams_2 = safe_unit_float(s.get("unit_grams_2"))
-        c_ug2 = ws.cell(row=idx, column=headers.index("Birim Gramaj 2 (GR)") + 1, value=u_grams_2)
-        c_ug2.alignment = align_center
-        if u_grams_2 is not None:
-            c_ug2.number_format = "#,##0.##"
-
-        # Kumaş Metrajları (TÜM RAKAMLAR ORTALI)
-        c_ord_f = ws.cell(row=idx, column=col_idx_ordered_fabric, value=fabric_ordered_m if fabric_ordered_m else None)
-        c_ord_f.alignment = align_center
-        if fabric_ordered_m:
-            c_ord_f.number_format = "#,##0.0"
-            
-        c_rec_f = ws.cell(row=idx, column=col_idx_received_fabric, value=fabric_received_m if fabric_received_m else None)
-        c_rec_f.alignment = align_center
-        if fabric_received_m:
-            c_rec_f.number_format = "#,##0.0"
-            c_rec_f.font = font_bold
-            
-        ws.cell(row=idx, column=headers.index("Kumaş Durumu / Termin") + 1, value=fabric_status_val).alignment = align_left_wrap
-        
-        # 5. Tarihler, Aşama ve Notlar
-        ws.cell(row=idx, column=headers.index("Sipariş Tarihi") + 1, value=s.get("order_date") or "").alignment = align_center
-        ws.cell(row=idx, column=headers.index("Yükleme Tarihi") + 1, value=s.get("delivery_date") or "").alignment = align_center
-        ws.cell(row=idx, column=headers.index("Üretim Aşaması") + 1, value=s.get("status") or "Planlama aşamasında").alignment = align_center
-        ws.cell(row=idx, column=headers.index("Üretim Aşaması") + 1).font = font_bold
-        
-        ws.cell(row=idx, column=headers.index("Beden Dağılımı (Özet)") + 1, value=sizes_summary_str).alignment = align_left_wrap
-        ws.cell(row=idx, column=headers.index("Notlar") + 1, value=notes_val).alignment = align_left_wrap
-
-        # Tüm hücrelerin çerçevesini ve zemin rengini uygula
-        for c_idx in range(2, len(headers) + 1):
-            cell = ws.cell(row=idx, column=c_idx)
-            cell.border = cell_border
-            cell.fill = current_fill
-            if not cell.font or cell.font.name != "Segoe UI":
-                cell.font = font_normal
-
-    # Modern Genel Toplam Satırı
-    if last_row >= 2:
-        sum_row = last_row + 1
-        ws.row_dimensions[sum_row].height = 30
-        sum_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-        sum_border = Border(
-            top=Side(style="thin", color="94A3B8"),
-            bottom=Side(style="double", color="0F172A"),
-            left=Side(style="thin", color="E2E8F0"),
-            right=Side(style="thin", color="E2E8F0")
-        )
-        
-        for c_idx in range(1, len(headers) + 1):
-            cell = ws.cell(row=sum_row, column=c_idx)
-            cell.fill = sum_fill
-            cell.border = sum_border
-            cell.font = Font(name="Segoe UI", size=10, bold=True, color="0F172A")
-            cell.alignment = align_center
-            
-        ws.cell(row=sum_row, column=2, value="GENEL TOPLAM").alignment = Alignment(horizontal="left", vertical="center")
-        
-        # Beden Sütunları Toplamları (ORTALI)
-        for s_idx in range(size_col_start, size_col_end + 1):
-            c_letter = get_column_letter(s_idx)
-            c_sz_sum = ws.cell(row=sum_row, column=s_idx, value=f"=SUM({c_letter}2:{c_letter}{last_row})")
-            c_sz_sum.number_format = "#,##0"
-            c_sz_sum.alignment = align_center
-        
-        # Adet Toplamı (ORTALI)
-        col_qty_letter = get_column_letter(col_idx_qty)
-        cell_qty = ws.cell(row=sum_row, column=col_idx_qty, value=f"=SUM({col_qty_letter}2:{col_qty_letter}{last_row})")
-        cell_qty.number_format = "#,##0"
-        cell_qty.alignment = align_center
-        
-        # Tutar Toplamı (ORTALI, PARA BİRİMİ ÖNDE, VİRGÜLLÜ)
-        col_amt_letter = get_column_letter(col_idx_amount)
-        cell_amt = ws.cell(row=sum_row, column=col_idx_amount, value=f"=SUM({col_amt_letter}2:{col_amt_letter}{last_row})")
-        first_cur = styles[0].get("currency") if styles else "EUR"
-        _, tot_cur_fmt = get_excel_currency_format(first_cur)
-        cell_amt.number_format = tot_cur_fmt
-        cell_amt.alignment = align_center
-        
-        # Kumaş Metraj Toplamları (ORTALI)
-        col_ordf_letter = get_column_letter(col_idx_ordered_fabric)
-        c_ordf_sum = ws.cell(row=sum_row, column=col_idx_ordered_fabric, value=f"=SUM({col_ordf_letter}2:{col_ordf_letter}{last_row})")
-        c_ordf_sum.number_format = "#,##0.0"
-        c_ordf_sum.alignment = align_center
-        
-        col_recf_letter = get_column_letter(col_idx_received_fabric)
-        c_recf_sum = ws.cell(row=sum_row, column=col_idx_received_fabric, value=f"=SUM({col_recf_letter}2:{col_recf_letter}{last_row})")
-        c_recf_sum.number_format = "#,##0.0"
-        c_recf_sum.alignment = align_center
-        
-        # Otomatik Filtreleme (AutoFilter) Etkinleştir
-        last_col_letter = get_column_letter(len(headers))
-        ws.auto_filter.ref = f"A1:{last_col_letter}{last_row}"
-
-    # Sütun Genişliklerini İçeriğe Göre Otomatik Dengele
-    for col_idx in range(2, len(headers) + 1):
-        col_letter = get_column_letter(col_idx)
-        max_len = 0
-        for cell in ws[col_letter]:
-            val_str = str(cell.value or "")
-            if val_str.startswith("="):
-                continue
-            if "\n" in val_str:
-                lines = val_str.split("\n")
-                max_len = max(max_len, max(len(l) for l in lines))
-            else:
-                max_len = max(max_len, len(val_str))
-        # Beden sütunları dar kalsın (en az 9, en çok 14)
-        if size_col_start <= col_idx <= size_col_end:
-            ws.column_dimensions[col_letter].width = max(9, min(14, max_len + 3))
-        else:
-            ws.column_dimensions[col_letter].width = max(11, min(45, max_len + 3))
-
-    conn.close()
-
-    out = io.BytesIO()
-    wb.save(out)
-    out.seek(0)
-    
-    filename = f"Siparisler_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-    val = out.getvalue()
-    return Response(
-        content=val,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Length": str(len(val)),
-            "Cache-Control": "no-cache, no-store, must-revalidate"
-        }
-    )
-
-@app.get("/api/styles/export-excel")
-def api_export_styles_excel_get(ids: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
-    user = None
-    if authorization:
-        t = authorization.replace("Bearer ", "").strip()
-        user = get_current_user(t)
-    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
-    
-    style_ids = None
-    if ids:
-        try:
-            style_ids = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
-        except Exception:
-            pass
-            
-    return generate_styles_excel_workbook(style_ids, company_id)
-
-@app.post("/api/styles/export-excel")
-def api_export_styles_excel_post(req: ExportExcelRequest, authorization: Optional[str] = Header(None)):
-    user = None
-    if authorization:
-        t = authorization.replace("Bearer ", "").strip()
-        user = get_current_user(t)
-    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
-    
-    return generate_styles_excel_workbook(req.style_ids, company_id)
-
-# ----------------- ÖZET YAZDIR İMALAT ÇARŞAF EXCEL EXPORT -----------------
-
-def generate_carsaf_print_excel_workbook(
-    style_ids: Optional[List[int]] = None,
-    title: Optional[str] = None,
-    company_id: int = 1,
-    consolidate: Optional[str] = "0",
-    show_channels: Optional[str] = "0",
-    col_order: Optional[str] = None
-) -> Response:
-    conn = get_db()
-    c = conn.cursor()
-    
-    if style_ids and len(style_ids) > 0:
-        placeholders = ",".join("?" for _ in style_ids)
-        order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
-        sql = f"""
-        SELECT s.*, 
-               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
-        FROM styles s
-        JOIN orders o ON s.order_id = o.id
-        WHERE s.company_id = ? AND s.id IN ({placeholders})
-        ORDER BY {order_by_clause}
-        """
-        params = [company_id] + style_ids
-    else:
-        sql = """
-        SELECT s.*, 
-               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
-        FROM styles s
-        JOIN orders o ON s.order_id = o.id
-        WHERE s.company_id = ?
-        ORDER BY o.id DESC, s.id ASC
-        """
-        params = [company_id]
-        
-    c.execute(sql, tuple(params))
-    styles = [dict(r) for r in c.fetchall()]
-    
-    is_show_channels = show_channels in ["1", "true", "True", True]
-
-    # Kanalları topla seçeneği aktifse aynı model ve renkteki satırları birleştirip adetleri topla
-    if consolidate in ["1", "true", "True", True]:
-        consolidated = []
-        groups = {}
-        for s in styles:
-            s_cust = (s.get("customer_name") or s.get("brand") or "").strip().upper()
-            s_no = (s.get("style_no") or "").strip().upper()
-            c_code = (s.get("color_code") or "").strip().upper()
-            c_name = (s.get("color_name") or "").strip().upper()
-            group_key = f"{s_cust}___{s_no}___{c_name}___{c_code}"
-            
-            qty = int(s.get("total_quantity") or 0)
-            s_chan = (s.get("channel") or "").strip()
-            if group_key not in groups:
-                new_s = dict(s)
-                new_s["total_quantity"] = qty
-                new_s["_channels_list"] = [s_chan] if s_chan else []
-                groups[group_key] = new_s
-                consolidated.append(new_s)
-            else:
-                groups[group_key]["total_quantity"] += qty
-                if s_chan and s_chan not in groups[group_key].get("_channels_list", []):
-                    groups[group_key].setdefault("_channels_list", []).append(s_chan)
-                if not groups[group_key].get("image_url") and s.get("image_url"):
-                    groups[group_key]["image_url"] = s.get("image_url")
-                if not groups[group_key].get("image_url_2") and s.get("image_url_2"):
-                    groups[group_key]["image_url_2"] = s.get("image_url_2")
-                if not groups[group_key].get("notes") and s.get("notes"):
-                    groups[group_key]["notes"] = s.get("notes")
-        for item in consolidated:
-            if "_channels_list" in item:
-                item["channel"] = ", ".join(item["_channels_list"])
-        styles = consolidated
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "İmalat Çarşaf Özeti"
-    ws.views.sheetView[0].showGridLines = True
-    
-    fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-    fill_title = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-    fill_total = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
-    
-    border_thin = Border(
-        left=Side(style="thin", color="64748B"),
-        right=Side(style="thin", color="64748B"),
-        top=Side(style="thin", color="64748B"),
-        bottom=Side(style="thin", color="64748B")
-    )
-    border_total = Border(
-        left=Side(style="thin", color="64748B"),
-        right=Side(style="thin", color="64748B"),
-        top=Side(style="thin", color="64748B"),
-        bottom=Side(style="double", color="0F172A")
-    )
-    
-    font_title = Font(name="Segoe UI", size=13, bold=True, color="0F172A")
-    font_header = Font(name="Segoe UI", size=10.5, bold=True, color="000000")
-    font_bold = Font(name="Segoe UI", size=10, bold=True, color="0F172A")
-    font_normal = Font(name="Segoe UI", size=9.5, color="1E293B")
-    font_total = Font(name="Segoe UI", size=10.5, bold=True, color="0F172A")
-    font_muted = Font(name="Segoe UI", size=8.5, color="94A3B8")
-    
-    align_center = Alignment(horizontal="center", vertical="center")
-    align_left = Alignment(horizontal="left", vertical="center")
-    align_left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    
-    # Sütun Tanımları ve Sıralaması
-    col_defs = {
-        "image": {"title": "GÖRSEL", "width": 16, "align": align_center},
-        "style": {"title": "STYLE", "width": 18, "align": align_center},
-        "color": {"title": "RENK", "width": 22, "align": align_left_wrap},
-        "channel": {"title": "KANAL", "width": 16, "align": align_center},
-        "fabric": {"title": "KUMAŞ", "width": 30, "align": align_left_wrap},
-        "quantity": {"title": "ADET", "width": 12, "align": align_center},
-        "price": {"title": "PRICE", "width": 14, "align": align_center},
-        "notes": {"title": "NOTLAR", "width": 26, "align": align_left_wrap},
-    }
-
-    default_order = ["image", "style", "color", "channel", "fabric", "quantity", "price", "notes"] if is_show_channels else ["image", "style", "color", "fabric", "quantity", "price", "notes"]
-    
-    if col_order:
-        requested = [k.strip() for k in col_order.split(",") if k.strip() in col_defs]
-        if not is_show_channels:
-            requested = [k for k in requested if k != "channel"]
-        col_keys = []
-        for k in requested:
-            if k not in col_keys:
-                col_keys.append(k)
-        for k in default_order:
-            if k not in col_keys:
-                col_keys.append(k)
-    else:
-        col_keys = default_order
-
-    num_cols = len(col_keys)
-
-    # 1. Başlık Banner'ı
-    header_title_text = (title or "MÜŞTERİ SEZON İMALAT ÇARŞAF LİSTESİ").strip().upper()
-    last_col_letter = get_column_letter(num_cols)
-    ws.merge_cells(f"A1:{last_col_letter}1")
-
-    title_cell = ws["A1"]
-    title_cell.value = header_title_text
-    title_cell.font = font_title
-    title_cell.alignment = align_center
-    title_cell.fill = fill_title
-    ws.row_dimensions[1].height = 32
-    for c_idx in range(1, num_cols + 1):
-        ws.cell(row=1, column=c_idx).border = border_thin
-        
-    # 2. Sütun Başlıkları
-    ws.row_dimensions[2].height = 25
-    for c_idx, col_key in enumerate(col_keys, start=1):
-        c_def = col_defs[col_key]
-        c_cell = ws.cell(row=2, column=c_idx, value=c_def["title"])
-        c_cell.fill = fill_yellow
-        c_cell.font = font_header
-        c_cell.alignment = align_center if col_key in ("image", "style", "channel", "quantity", "price") else align_left
-        c_cell.border = border_thin
-        col_letter = get_column_letter(c_idx)
-        ws.column_dimensions[col_letter].width = c_def["width"]
-        
-    # 3. Satırlar
-    curr_row = 2
-    for s in styles:
-        curr_row += 1
-        row_fill = fill_white if (curr_row % 2 == 1) else fill_zebra
-        ws.row_dimensions[curr_row].height = 75
-        
-        for c_idx, col_key in enumerate(col_keys, start=1):
-            cell = ws.cell(row=curr_row, column=c_idx)
-            cell.fill = row_fill
-            cell.border = border_thin
-            
-            if col_key == "image":
-                img_added = False
-                img_url = s.get("image_url") or s.get("image_url_2")
-                if img_url and os.path.exists(UPLOADS_DIR):
-                    try:
-                        fn = os.path.basename(img_url.split("?")[0])
-                        possible_paths = [
-                            os.path.join(UPLOADS_DIR, fn),
-                            os.path.join(UPLOADS_DIR, "styles", fn)
-                        ]
-                        img_path = next((p for p in possible_paths if os.path.isfile(p)), None)
-                        if img_path:
-                            with PILImage.open(img_path) as pil_img:
-                                orig_w, orig_h = pil_img.size
-                                max_w, max_h = 95, 90
-                                ratio = min(max_w / max(1, orig_w), max_h / max(1, orig_h))
-                                new_w = max(1, int(orig_w * ratio))
-                                new_h = max(1, int(orig_h * ratio))
-
-                            xl_img = OpenpyxlImage(img_path)
-                            xl_img.width = new_w
-                            xl_img.height = new_h
-
-                            col_w_px = int(col_defs["image"]["width"] * 7.5)
-                            row_h_px = int(75 * 1.33)
-                            x_off_px = max(0, (col_w_px - new_w) // 2)
-                            y_off_px = max(0, (row_h_px - new_h) // 2)
-
-                            marker = AnchorMarker(col=c_idx - 1, colOff=pixels_to_EMU(x_off_px), row=curr_row - 1, rowOff=pixels_to_EMU(y_off_px))
-                            size = XDRPositiveSize2D(pixels_to_EMU(new_w), pixels_to_EMU(new_h))
-                            xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
-                            ws.add_image(xl_img)
-                            img_added = True
-                    except Exception:
-                        pass
-
-                if not img_added:
-                    cell.value = "[Resim Yok]"
-                    cell.font = font_muted
-                    cell.alignment = align_center
-
-            elif col_key == "style":
-                cell.value = s.get("style_no") or ""
-                cell.font = font_bold
-                cell.alignment = align_center
-
-            elif col_key == "color":
-                c_code = (s.get("color_code") or "").strip()
-                c_name = (s.get("color_name") or "").strip()
-                if c_code and c_name:
-                    c_name_clean = re.sub(rf'\s*\({re.escape(c_code)}\)', '', c_name, flags=re.IGNORECASE).strip()
-                    if c_code.lower() in c_name_clean.lower():
-                        color_disp = c_name_clean
-                    else:
-                        color_disp = f"{c_code} {c_name_clean}".strip()
-                else:
-                    color_disp = c_name or c_code or "-"
-                cell.value = color_disp
-                cell.font = font_bold
-                cell.alignment = align_left_wrap
-
-            elif col_key == "channel":
-                cell.value = s.get("channel") or "-"
-                cell.font = font_bold
-                cell.alignment = align_center
-
-            elif col_key == "fabric":
-                fabric_text = s.get("fabric_article") or s.get("fabric_type") or "-"
-                cell.value = fabric_text
-                cell.font = font_normal
-                cell.alignment = align_left_wrap
-
-            elif col_key == "quantity":
-                qty = int(s.get("total_quantity") or 0)
-                cell.value = qty
-                cell.font = font_bold
-                cell.alignment = align_center
-                cell.number_format = "#,##0"
-
-            elif col_key == "price":
-                p_val = s.get("unit_price")
-                cur_sym, cur_fmt = get_excel_currency_format(s.get("currency"))
-                cell.font = font_bold
-                cell.alignment = align_center
-                pf = safe_price_float(p_val)
-                if pf is not None:
-                    cell.value = pf
-                    cell.number_format = cur_fmt
-                elif p_val is not None and str(p_val).strip() != "":
-                    s_clean = str(p_val).strip().replace(".", ",")
-                    cell.value = f"{cur_sym} {s_clean}"
-                else:
-                    cell.value = None
-
-            elif col_key == "notes":
-                notes_val = s.get("notes") or ""
-                if not notes_val and s.get("custom_fields_json"):
-                    try:
-                        cf = json.loads(s["custom_fields_json"])
-                        notes_val = cf.get("notes") or cf.get("notlar") or ""
-                    except Exception:
-                        pass
-                cell.value = notes_val
-                cell.font = font_normal
-                cell.alignment = align_left_wrap
-
-    # 4. Toplam Satırı
-    if curr_row >= 3:
-        sum_row = curr_row + 1
-        ws.row_dimensions[sum_row].height = 28
-        for c_idx in range(1, num_cols + 1):
-            c = ws.cell(row=sum_row, column=c_idx)
-            c.fill = fill_total
-            c.border = border_total
-
-        label_col = 2 if num_cols >= 2 else 1
-        ws.cell(row=sum_row, column=label_col, value=f"TOPLAM ({len(styles)} Model)").font = font_total
-        ws.cell(row=sum_row, column=label_col).alignment = align_center
-        
-        if "quantity" in col_keys:
-            qty_col_idx = col_keys.index("quantity") + 1
-            qty_col_letter = get_column_letter(qty_col_idx)
-            cell_sum_qty = ws.cell(row=sum_row, column=qty_col_idx, value=f"=SUM({qty_col_letter}3:{qty_col_letter}{curr_row})")
-            cell_sum_qty.font = font_total
-            cell_sum_qty.alignment = align_center
-            cell_sum_qty.number_format = "#,##0"
-
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    
-    val = output.getvalue()
-    raw_fname = (title or "Imalat_Ozet_Listesi").strip()
-    safe_fname = re.sub(r'[^a-zA-Z0-9_\-]', '_', raw_fname)[:40]
-    filename = f"{safe_fname}.xlsx"
-    
-    return Response(
-        content=val,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Length": str(len(val)),
-            "Cache-Control": "no-cache, no-store, must-revalidate"
-        }
-    )
-
-@app.get("/api/styles/export-carsaf-excel")
-def api_export_carsaf_excel_get(
-    ids: Optional[str] = Query(None),
-    title: Optional[str] = Query(None),
-    consolidate: Optional[str] = Query("0"),
-    show_channels: Optional[str] = Query("0"),
-    col_order: Optional[str] = Query(None),
-    authorization: Optional[str] = Header(None)
-):
-    user = None
-    if authorization:
-        t = authorization.replace("Bearer ", "").strip()
-        user = get_current_user(t)
-    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
-    
-    style_ids = None
-    if ids:
-        try:
-            style_ids = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
-        except Exception:
-            pass
-            
-    return generate_carsaf_print_excel_workbook(style_ids, title, company_id, consolidate, show_channels, col_order)
-
-
-# ----------------- KUMAŞ SİPARİŞ ÇİZELGESİ EXCEL EXPORT -----------------
-
-class KumasSiparisRowItem(BaseModel):
-    supplier: Optional[str] = ""
-    code: Optional[str] = ""
-    name: Optional[str] = ""
-    variant: Optional[str] = ""
-    color: Optional[str] = ""
-    modelsAndColors: Optional[str] = ""
-    formattedTotalMeters: Optional[str] = ""
-    unit: Optional[str] = "M"
-
-class KumasSiparisExportRequest(BaseModel):
-    rows: List[KumasSiparisRowItem] = []
-    total_count: int = 0
-    total_models: int = 0
-    formatted_meters: Optional[str] = ""
-    formatted_kg: Optional[str] = ""
-    combined_total: Optional[str] = ""
-
-def generate_kumas_siparis_excel_workbook(req: KumasSiparisExportRequest) -> Response:
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Kumas Siparis Listesi"
-    
-    if hasattr(ws.views, 'sheetView') and len(ws.views.sheetView) > 0:
-        ws.views.sheetView[0].showGridLines = True
-
-    # Title block dimensions
-    ws.row_dimensions[2].height = 24
-    ws.row_dimensions[3].height = 18
-    ws.row_dimensions[4].height = 10
-    ws.row_dimensions[5].height = 26
-
-    ws["A2"] = "KUMAŞ SİPARİŞ LİSTESİ"
-    ws["A2"].font = Font(name="Calibri", size=15, bold=True, color="0F172A")
-    
-    date_str = datetime.now().strftime("%d.%m.%Y")
-    ws["A3"] = f"Ekranda Listelenen Siparişler • Toplam {req.total_count} Kalite • {req.total_models} Model"
-    ws["A3"].font = Font(name="Calibri", size=10, italic=True, color="64748B")
-
-    ws["H2"] = f"Tarih: {date_str}"
-    ws["H2"].font = Font(name="Calibri", size=10, bold=True, color="64748B")
-    ws["H2"].alignment = Alignment(horizontal="right", vertical="center")
-
-    tot_badge = req.combined_total or req.formatted_meters or "0 M"
-    ws["H3"] = f"Toplam: {tot_badge}"
-    ws["H3"].font = Font(name="Calibri", size=10, bold=True, color="047857")
-    ws["H3"].alignment = Alignment(horizontal="right", vertical="center")
-
-    headers = [
-        ("#", 6, "center"),
-        ("Kumaşçı", 22, "left"),
-        ("Kalite Kodu", 16, "center"),
-        ("Kalite Adı", 26, "left"),
-        ("Kumaş Varyant", 18, "left"),
-        ("Kumaş Renk", 18, "left"),
-        ("Model Adları ve Renkleri", 45, "left"),
-        ("Kumaş Sipariş Miktarı", 22, "right")
-    ]
-
-    header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
-    header_border = Border(
-        left=Side(style='thin', color='334155'),
-        right=Side(style='thin', color='334155'),
-        top=Side(style='medium', color='0F172A'),
-        bottom=Side(style='medium', color='0F172A')
-    )
-
-    for col_idx, (h_title, col_width, h_align) in enumerate(headers, start=1):
-        cell = ws.cell(row=5, column=col_idx, value=h_title)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal=h_align, vertical="center", wrap_text=True)
-        cell.border = header_border
-        col_letter = get_column_letter(col_idx)
-        ws.column_dimensions[col_letter].width = col_width
-
-    thin_border = Border(
-        left=Side(style='thin', color='E2E8F0'),
-        right=Side(style='thin', color='E2E8F0'),
-        top=Side(style='thin', color='E2E8F0'),
-        bottom=Side(style='thin', color='E2E8F0')
-    )
-
-    even_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-    odd_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-    qty_fill = PatternFill(start_color="F0FDF4", end_color="F0FDF4", fill_type="solid")
-
-    start_row = 6
-    for idx, r in enumerate(req.rows, start=1):
-        curr_row = start_row + idx - 1
-        ws.row_dimensions[curr_row].height = 22
-        row_fill = odd_fill if idx % 2 == 1 else even_fill
-
-        supplier_val = (r.supplier or "").strip()
-        code_val = (r.code or "").strip()
-        name_val = (r.name or "").strip()
-        variant_val = (r.variant or "").strip()
-        color_val = (r.color or "").strip()
-
-        # 1. Kumaşçı ismini Kalite Adından tamamen temizle (ör: "ÖZEL TEKSTİL - VASA 02" -> "VASA 02")
-        if supplier_val and name_val:
-            s_low = supplier_val.lower().strip()
-            n_low = name_val.lower().strip()
-            if n_low.startswith(s_low):
-                name_val = name_val[len(supplier_val):].lstrip(" -_:/").strip()
-
-        # 2. Kalite Adı içinde halen " - " kalmışsa ayır (ör: "(VIGO SATEN) - 27231") - parantezden ÖNCE çalıştırılır!
-        if name_val and ' - ' in name_val:
-            subparts = [p.strip() for p in name_val.split(' - ') if p.strip()]
-            if len(subparts) >= 2:
-                name_val = subparts[0]
-                if not code_val:
-                    code_val = subparts[1]
-
-        # 3. Kalite Adı içinde parantezli kod varsa veya tüm ad parantezliyse çıkar (ör: "VASA 02 (DA.20535)" vs "(VIGO SATEN)")
-        if name_val:
-            m = re.search(r'\(([^)]+)\)', name_val)
-            if m:
-                inside = m.group(1).strip()
-                name_wo = re.sub(r'\s*\([^)]+\)\s*', ' ', name_val).strip()
-                if name_wo:
-                    if not code_val:
-                        code_val = re.sub(r'^ART\.?\s*', '', inside, flags=re.I).strip()
-                    name_val = name_wo
-                else:
-                    name_val = inside
-
-        # 4. Kalite adını saran parantez ve tireleri temizle
-        name_val = re.sub(r'^\((.*)\)$', r'\1', name_val).strip()
-        name_val = name_val.strip(" -_:/")
-
-        # 5. Kalite kodunu saran parantezleri temizle (ör: "(27231)" -> "27231")
-        if code_val:
-            code_val = re.sub(r'^\((.*)\)$', r'\1', code_val).strip()
-
-        # 6. Varyant ile kod aynı ise varyantı temizle (ör: 27231 hem kod hem varyanta yazılmışsa)
-        if variant_val and code_val and variant_val.lower() == code_val.lower():
-            variant_val = ""
-
-        # 7. Kalite kodu boş ama varyant bir kalite kodu gibi görünüyorsa
-        if not code_val and variant_val and re.match(r'^[0-9A-Za-z\.\-_/]+$', variant_val):
-            code_val = variant_val
-            variant_val = ""
-
-        c1 = ws.cell(row=curr_row, column=1, value=idx)
-        c1.alignment = Alignment(horizontal="center", vertical="center")
-        c1.font = Font(name="Calibri", size=10, bold=True, color="64748B")
-        c1.fill = row_fill
-        c1.border = thin_border
-
-        c2 = ws.cell(row=curr_row, column=2, value=supplier_val)
-        c2.alignment = Alignment(horizontal="left", vertical="center")
-        c2.font = Font(name="Calibri", size=10, bold=True, color="0F172A")
-        c2.fill = row_fill
-        c2.border = thin_border
-
-        c3 = ws.cell(row=curr_row, column=3, value=code_val)
-        c3.alignment = Alignment(horizontal="center", vertical="center")
-        c3.font = Font(name="Consolas", size=10, bold=True, color="334155")
-        c3.fill = row_fill
-        c3.border = thin_border
-
-        c4 = ws.cell(row=curr_row, column=4, value=name_val)
-        c4.alignment = Alignment(horizontal="left", vertical="center")
-        c4.font = Font(name="Calibri", size=10, bold=True, color="1E293B")
-        c4.fill = row_fill
-        c4.border = thin_border
-
-        c5 = ws.cell(row=curr_row, column=5, value=variant_val)
-        c5.alignment = Alignment(horizontal="left", vertical="center")
-        c5.font = Font(name="Calibri", size=10, color="334155")
-        c5.fill = row_fill
-        c5.border = thin_border
-
-        c6 = ws.cell(row=curr_row, column=6, value=color_val)
-        c6.alignment = Alignment(horizontal="left", vertical="center")
-        c6.font = Font(name="Calibri", size=10, bold=True, color="334155")
-        c6.fill = row_fill
-        c6.border = thin_border
-
-        c7 = ws.cell(row=curr_row, column=7, value=r.modelsAndColors or "")
-        c7.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        c7.font = Font(name="Calibri", size=9.5, color="0F172A")
-        c7.fill = row_fill
-        c7.border = thin_border
-
-        c8 = ws.cell(row=curr_row, column=8, value=r.formattedTotalMeters or "")
-        c8.alignment = Alignment(horizontal="right", vertical="center")
-        c8.font = Font(name="Consolas", size=10, bold=True, color="15803D")
-        c8.fill = qty_fill
-        c8.border = thin_border
-
-    tot_row = start_row + len(req.rows)
-    ws.row_dimensions[tot_row].height = 26
-    ws.merge_cells(start_row=tot_row, start_column=1, end_row=tot_row, end_column=6)
-
-    total_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
-    total_border = Border(
-        left=Side(style='thin', color='334155'),
-        right=Side(style='thin', color='334155'),
-        top=Side(style='medium', color='0F172A'),
-        bottom=Side(style='medium', color='0F172A')
-    )
-
-    cell_tot_label = ws.cell(row=tot_row, column=1, value=f"TOPLAM ({req.total_count} Kumaş Kalitesi)")
-    cell_tot_label.font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
-    cell_tot_label.alignment = Alignment(horizontal="left", vertical="center")
-
-    for col in range(1, 7):
-        c = ws.cell(row=tot_row, column=col)
-        c.fill = total_fill
-        c.border = total_border
-
-    cell_tot_models = ws.cell(row=tot_row, column=7, value=f"{req.total_models} Model Kaydı")
-    cell_tot_models.font = Font(name="Calibri", size=10, bold=True, color="CBD5E1")
-    cell_tot_models.alignment = Alignment(horizontal="left", vertical="center")
-    cell_tot_models.fill = total_fill
-    cell_tot_models.border = total_border
-
-    qty_val = req.combined_total or (f"{req.formatted_meters} + {req.formatted_kg}".strip(" +") if (req.formatted_meters or req.formatted_kg) else "0 M")
-    cell_tot_qty = ws.cell(row=tot_row, column=8, value=qty_val)
-    cell_tot_qty.font = Font(name="Consolas", size=11, bold=True, color="34D399")
-    cell_tot_qty.alignment = Alignment(horizontal="right", vertical="center")
-    cell_tot_qty.fill = total_fill
-    cell_tot_qty.border = total_border
-
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-
-    filename = f"Kumas_Siparis_Listesi_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    headers = {
-        'Content-Disposition': f'attachment; filename="{filename}"',
-        'Access-Control-Expose-Headers': 'Content-Disposition'
-    }
-    return Response(
-        content=output.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers
-    )
-
-@app.post("/api/styles/export-kumas-siparis-excel")
-def api_export_kumas_siparis_excel(req: KumasSiparisExportRequest, authorization: Optional[str] = Header(None)):
-    user = None
-    if authorization:
-        t = authorization.replace("Bearer ", "").strip()
-        user = get_current_user(t)
-    return generate_kumas_siparis_excel_workbook(req)
-
-
-# ----------------- BUDGET EXCEL EXPORT (ÖRNEK BÜTÇE FORMATI) -----------------
-
-def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, company_id: int = 1) -> Response:
-    conn = get_db()
-    c = conn.cursor()
-    
-    # Safe company_id fallback
-    cid = company_id if company_id is not None else 1
-
-    if style_ids and len(style_ids) > 0:
-        placeholders = ",".join("?" for _ in style_ids)
-        order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
-        sql = f"""
-        SELECT s.*, 
-               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
-        FROM styles s
-        JOIN orders o ON s.order_id = o.id
-        WHERE (s.company_id = ? OR s.company_id IS NULL) AND s.id IN ({placeholders})
-        ORDER BY {order_by_clause}
-        """
-        params = [cid] + style_ids
-    else:
-        sql = """
-        SELECT s.*, 
-               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
-        FROM styles s
-        JOIN orders o ON s.order_id = o.id
-        WHERE (s.company_id = ? OR s.company_id IS NULL)
-        ORDER BY o.id DESC, s.id ASC
-        """
-        params = [cid]
-        
-    c.execute(sql, tuple(params))
-    styles = [dict(r) for r in c.fetchall()]
-
-    all_style_ids = [s["id"] for s in styles]
-    fl_by_style = {}
-    if all_style_ids:
-        pl_ids = ",".join("?" for _ in all_style_ids)
-        c.execute(f"SELECT * FROM fabric_links WHERE style_id IN ({pl_ids}) ORDER BY id ASC", tuple(all_style_ids))
-        for fl in c.fetchall():
-            sid = fl["style_id"]
-            if sid not in fl_by_style:
-                fl_by_style[sid] = dict(fl)
-    conn.close()
-
-    # FabricTag global cache
-    ft_map = {}
-    try:
-        ft_conn = FabricTagConnector.get_connection()
-        if ft_conn:
-            ft_c = ft_conn.cursor()
-            ft_c.execute("SELECT id, internal_code, company_name, quality_name, quality_code, design_code, color FROM fabrics")
-            for f_row in ft_c.fetchall():
-                f_d = dict(f_row)
-                if f_d.get("id"):
-                    ft_map[str(f_d["id"])] = f_d
-                if f_d.get("internal_code"):
-                    ft_map[f_d["internal_code"].upper()] = f_d
-                if f_d.get("quality_code"):
-                    ft_map[f_d["quality_code"].upper()] = f_d
-            ft_conn.close()
-    except Exception:
-        pass
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Bütçe Tablosu"
-    ws.views.sheetView[0].showGridLines = True
-    ws.freeze_panes = "K2"
-
-    first_cust = (styles[0].get("customer_name") or styles[0].get("brand") or "ÜRETİM") if styles else "ÜRETİM"
-    first_season = (styles[0].get("season") or "") if styles else ""
-    title_col_1 = f"{first_cust}  {first_season} SMS".strip() or "BÜTÇE LİSTESİ"
-
-    # Headers: Style removed, Kumaş expanded into Kumaşçı, Kalite Adı, Kalite Kodu, Varyant, Renk (49 columns total)
-    headers = [
-        "Görsel",
-        title_col_1,
-        "Model - Renk",
-        "Renk",
-        "Kumaşçı",
-        "Kalite Adı",
-        "Kalite Kodu",
-        "Varyant",
-        "Kumaş Rengi",
-        "QUANTITY",
-        "PRICE ",
-        "KUMAŞ 1  FİYAT",
-        "1 iç  CM",
-        "KUMAŞ 1 TOTAL",
-        "KUMAŞ 2 FİYAT",
-        "1 iç gramaj ",
-        "KUMAŞ 2 TOTAL ",
-        "kumaş toplam ",
-        "KUMAŞ 3 FİYAT",
-        "1 iç gramaj ",
-        "KUMAŞ 3 TOTAL ",
-        "FASON",
-        "KES.İŞT",
-        "AKS",
-        "ETKOL",
-        "LOGO",
-        "NAKIŞ",
-        "BRİT",
-        "LASTİK",
-        "Düğme",
-        "Çıtçıt",
-        "DIGER",
-        "KARGO",
-        "NAKLIYE",
-        "KUMAŞ ",
-        "ASTAR",
-        "DİKME",
-        "İlik-Düğme",
-        "Çıtçıt Çakım",
-        "",
-        "",
-        "",
-        "maliyet TL",
-        "maliyet  EURO ",
-        "Euro",
-        "PRICE",
-        "TOPLAM maliyet TL +   6%",
-        "TOPLAM maliyet EUR +   6%",
-        "Order Toplamı "
-    ]
-
-    header_font = Font(name="Segoe UI", size=9.5, bold=True, color="000000")
-    header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    header_border = Border(
-        left=Side(style="thin", color="CBD5E1"),
-        right=Side(style="thin", color="CBD5E1"),
-        top=Side(style="medium", color="475569"),
-        bottom=Side(style="medium", color="475569")
-    )
-
-    ws.row_dimensions[1].height = 34
-    for col_num, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_num, value=h)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_align
-        cell.border = header_border
-
-    cell_border = Border(
-        left=Side(style="thin", color="E2E8F0"),
-        right=Side(style="thin", color="E2E8F0"),
-        top=Side(style="thin", color="E2E8F0"),
-        bottom=Side(style="thin", color="E2E8F0")
-    )
-    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-
-    font_normal = Font(name="Segoe UI", size=9, color="1E293B")
-    font_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
-    font_muted = Font(name="Segoe UI", size=8.5, color="94A3B8")
-    align_center = Alignment(horizontal="center", vertical="center")
-    align_left = Alignment(horizontal="left", vertical="center")
-    align_right = Alignment(horizontal="right", vertical="center")
-
-    last_row = 1
-    total_qty = 0
-    total_maliyet_tl_sum = 0.0
-    total_maliyet_eur_sum = 0.0
-    total_order_sum = 0.0
-    img_buffers = []
-
-    for idx, s in enumerate(styles, start=2):
-        last_row = idx
-        ws.row_dimensions[idx].height = 75
-        current_fill = fill_white if (idx % 2 == 0) else fill_zebra
-
-        # 0. Görsel (A Sütunu / Column 1)
-        img_url = s.get("image_url") or s.get("image_url_2")
-        cell_a = ws.cell(row=idx, column=1)
-        cell_a.fill = current_fill
-        cell_a.border = cell_border
-        img_added = False
-        if img_url:
-            try:
-                pil_img = None
-                if img_url.startswith("data:image"):
-                    hdr, enc = img_url.split(",", 1)
-                    pil_img = PILImage.open(io.BytesIO(base64.b64decode(enc)))
-                elif img_url.startswith("/uploads/"):
-                    p = UPLOADS_DIR / img_url.replace("/uploads/", "").lstrip("/")
-                    if p.exists():
-                        pil_img = PILImage.open(p)
-                elif img_url.startswith("/data/uploads/") or img_url.startswith("data/uploads/"):
-                    rel_path = img_url.lstrip("/")
-                    p = Path(rel_path)
-                    if p.exists():
-                        pil_img = PILImage.open(p)
-                elif Path(img_url).exists():
-                    pil_img = PILImage.open(img_url)
-                    
-                if pil_img:
-                    pil_img = pil_img.convert("RGB")
-                    pil_img.thumbnail((105, 88), PILImage.Resampling.LANCZOS)
-                    buf = io.BytesIO()
-                    pil_img.save(buf, format="JPEG", quality=88)
-                    buf.seek(0)
-                    img_buffers.append(buf)
-                    xl_img = OpenpyxlImage(buf)
-                    img_w = pil_img.width
-                    img_h = pil_img.height
-
-                    # Hücrede En ve Boydan Ortalama (Horizontal & Vertical Center)
-                    col_w_px = 140
-                    row_h_px = 100
-                    x_off_px = max(0, (col_w_px - img_w) // 2)
-                    y_off_px = max(0, (row_h_px - img_h) // 2)
-
-                    marker = AnchorMarker(col=0, colOff=pixels_to_EMU(x_off_px), row=idx - 1, rowOff=pixels_to_EMU(y_off_px))
-                    size = XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h))
-                    xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
-                    ws.add_image(xl_img)
-                    img_added = True
-            except Exception:
-                pass
-                
-        if not img_added:
-            cell_a.value = "[Görsel Yok]"
-            cell_a.alignment = align_center
-            cell_a.font = font_muted
-
-        cost_data = {}
-        if s.get("cost_data_json"):
-            try:
-                cost_data = json.loads(s["cost_data_json"])
-            except Exception:
-                cost_data = {}
-
-        def safe_num(val, default=0.0):
-            if val is None or val == "":
-                return default
-            try:
-                if isinstance(val, (int, float)):
-                    return float(val)
-                s_clean = str(val).strip().replace(",", ".")
-                return float(s_clean)
-            except Exception:
-                return default
-
-        rates = cost_data.get("exchangeRates") or {"EUR": 55.75, "USD": 48.9, "TL": 1.0}
-        eur_rate = safe_num(rates.get("EUR"), 55.75)
-
-        fabrics = cost_data.get("fabrics") or []
-        items = cost_data.get("items") or []
-
-        def normalize_tr(text):
-            if not text:
-                return ""
-            s_val = str(text).replace("İ", "i").replace("I", "i").replace("ı", "i").replace("\u0307", "")
-            tr_map = {"ğ": "g", "ü": "u", "ş": "s", "ö": "o", "ç": "c"}
-            for c, r in tr_map.items():
-                s_val = s_val.replace(c, r).replace(c.upper(), r)
-            return s_val.lower().strip()
-
-        fb1 = fabrics[0] if len(fabrics) > 0 else {}
-        fb1_price = safe_num(fb1.get("price") or s.get("fabric_price_1"))
-        fb1_meters = safe_num(fb1.get("meters") or s.get("unit_meters"))
-        fb1_grams = safe_num(fb1.get("grams") or s.get("unit_grams"))
-        fb1_cm = round(fb1_meters * 100) if fb1.get("unit_type") != "KG" else fb1_grams
-        fb1_total = safe_num(fb1.get("total_tl"))
-
-        fb2 = fabrics[1] if len(fabrics) > 1 else {}
-        fb2_price = safe_num(fb2.get("price") or s.get("fabric_price_2"))
-        fb2_meters = safe_num(fb2.get("meters") or s.get("unit_meters_2"))
-        fb2_grams = safe_num(fb2.get("grams") or s.get("unit_grams_2"))
-        fb2_gramaj = fb2_grams if fb2_grams > 0 else (fb2_meters * 100)
-        fb2_total = safe_num(fb2.get("total_tl"))
-
-        fb3 = fabrics[2] if len(fabrics) > 2 else {}
-        fb3_price = safe_num(fb3.get("price"))
-        fb3_meters = safe_num(fb3.get("meters"))
-        fb3_grams = safe_num(fb3.get("grams"))
-        fb3_gramaj = fb3_grams if fb3_grams > 0 else (fb3_meters * 100)
-        fb3_total = safe_num(fb3.get("total_tl"))
-
-        kumas_toplam = safe_num(cost_data.get("totals", {}).get("toplam_kumas_tl") or (fb1_total + fb2_total + fb3_total))
-
-        v_fason = 0.0
-        v_kesim = 0.0
-        v_aks = 0.0
-        v_etkol = 0.0
-        v_logo = 0.0
-        v_nakis = 0.0
-        v_brit = 0.0
-        v_lastik = 0.0
-        v_dugme = 0.0
-        v_citcit = 0.0
-        v_diger = 0.0
-        v_kargo = 0.0
-        v_nakliye = 0.0
-        v_kumas_extra = 0.0
-        v_astar = 0.0
-        v_dikme = 0.0
-        v_ilik_dugme = 0.0
-        v_citcit_cakim = 0.0
-
-        for it in items:
-            n = normalize_tr(it.get("name"))
-            v = it.get("total_tl")
-            if v is None or v == "":
-                v = it.get("evaluated_price")
-            if v is None or v == "":
-                v = it.get("price")
-            val = safe_num(v, 0.0)
-            if val == 0.0:
-                continue
-
-            if "ilik" in n:
-                v_ilik_dugme += val
-            elif "cakim" in n:
-                v_citcit_cakim += val
-            elif "citcit" in n:
-                v_citcit += val
-            elif "dugme" in n or "fermuar" in n:
-                v_dugme += val
-            elif any(k in n for k in ["fason", "dikim"]):
-                v_fason += val
-            elif any(k in n for k in ["kesim", "pastal"]):
-                v_kesim += val
-            elif any(k in n for k in ["etiket", "etkol", "kol"]):
-                v_etkol += val
-            elif "logo" in n:
-                v_logo += val
-            elif any(k in n for k in ["nakis", "naki", "nakış", "baski", "baskı", "tas", "taş"]):
-                v_nakis += val
-            elif any(k in n for k in ["brit", "birit", "biye"]):
-                v_brit += val
-            elif "lastik" in n:
-                v_lastik += val
-            elif "kargo" in n:
-                v_kargo += val
-            elif any(k in n for k in ["nakliye", "sevkiyat"]):
-                v_nakliye += val
-            elif any(k in n for k in ["yikama", "apre", "terbiye"]):
-                v_kumas_extra += val
-            elif any(k in n for k in ["astar", "tela", "vatka"]):
-                v_astar += val
-            elif any(k in n for k in ["dikme", "el dikisi"]):
-                v_dikme += val
-            elif any(k in n for k in ["aksesuar", "aks", "kapsul"]):
-                v_aks += val
-            else:
-                # Maliyette girilen diger tum kalemler
-                v_diger += val
-
-        totals = cost_data.get("totals") or {}
-        maliyet_tl = safe_num(totals.get("maliyet_1_tl") or totals.get("maliyet_2_tl"))
-        if maliyet_tl == 0.0 and (kumas_toplam > 0 or v_fason > 0):
-            imalat_sum = v_fason + v_kesim + v_aks + v_etkol + v_logo + v_nakis + v_brit + v_lastik + v_dugme + v_citcit + v_diger + v_kargo + v_nakliye + v_kumas_extra + v_astar + v_dikme + v_ilik_dugme + v_citcit_cakim
-            maliyet_tl = round((kumas_toplam + imalat_sum) * 1.06, 2)
-            
-        maliyet_eur = safe_num(totals.get("maliyet_1_doviz") or (round(maliyet_tl / eur_rate, 2) if eur_rate > 0 else 0.0))
-        price = safe_num(totals.get("toplam_satis_doviz") or s.get("unit_price"))
-        qty = int(safe_num(s.get("total_quantity")))
-        total_qty += qty
-
-        tot_maliyet_tl = round(maliyet_tl * qty, 2)
-        tot_maliyet_eur = round(maliyet_eur * qty, 2)
-        order_toplam = round(price * qty, 2)
-
-        total_maliyet_tl_sum += tot_maliyet_tl
-        total_maliyet_eur_sum += tot_maliyet_eur
-        total_order_sum += order_toplam
-
-        style_no = str(s.get("style_no") or "")
-        color_code = str(s.get("color_code") or "").strip()
-        color_name = str(s.get("color_name") or "").strip()
-        model_color = f"{style_no}-{color_code or color_name}"
-        cust_season = f"{s.get('customer_name') or ''} {s.get('season') or ''}".strip()
-        display_color = (f"{color_code} {color_name}".strip()) if (color_code and color_name and not color_name.startswith(color_code)) else (color_name or color_code)
-
-        # Resolve Fabric Details (Kumaşçı, Kalite Adı, Kalite Kodu, Varyant, Kumaş Rengi)
-        fl = fl_by_style.get(s["id"], {})
-        f_meta = None
-        if fl.get("fabrictag_id") and str(fl["fabrictag_id"]) in ft_map:
-            f_meta = ft_map[str(fl["fabrictag_id"])]
-        if not f_meta:
-            raw_art = str(s.get("fabric_article") or s.get("fabric_type") or "")
-            m_elt = re.search(r'ELT\d+', raw_art, re.IGNORECASE)
-            if m_elt and m_elt.group(0).upper() in ft_map:
-                f_meta = ft_map[m_elt.group(0).upper()]
-
-        def clean_kumas_val(v):
-            if not v: return ""
-            sv = str(v).strip()
-            if re.match(r'^ELT\d+$', sv, re.IGNORECASE):
-                return ""
-            if sv.upper() in ["KODSUZ", "YOK", "NONE", "NULL", "-", "—", "İSİMSİZ", "ISIMSIZ", "TANIMSIZ", "BİLGİSİ YOK", "BILGISI YOK", "BİLGİ YOK", "BILGI YOK", "BELİRTİLMEDİ", "BELIRTILMEDI"]:
-                return ""
-            return sv
-
-        kumasci = ""
-        kalite_adi = ""
-        kalite_kodu = ""
-        varyant = ""
-        kumas_renk = ""
-
-        if f_meta:
-            kumasci = clean_kumas_val(f_meta.get("company_name"))
-            kalite_adi = clean_kumas_val(f_meta.get("quality_name"))
-            kalite_kodu = clean_kumas_val(f_meta.get("quality_code"))
-            varyant = clean_kumas_val(f_meta.get("design_code"))
-            kumas_renk = clean_kumas_val(f_meta.get("color") or display_color)
-        else:
-            raw = str(s.get("fabric_article") or s.get("fabric_type") or "")
-            raw = re.sub(r'\bELT\d+\b\s*[-–—:]*\s*', '', raw, flags=re.IGNORECASE).strip()
-            parts = [p.strip() for p in raw.split(" - ") if p.strip()]
-            if len(parts) >= 2:
-                kumasci = clean_kumas_val(parts[0])
-                rest = parts[1]
-                if "(" in rest and ")" in rest:
-                    kalite_adi = clean_kumas_val(rest.split("(")[0].strip())
-                    kalite_kodu = clean_kumas_val(rest.split("(")[1].split(")")[0].strip())
-                else:
-                    kalite_adi = clean_kumas_val(rest)
-            elif len(parts) == 1:
-                kumasci = clean_kumas_val(parts[0])
-            varyant = clean_kumas_val(s.get("fabric_variant_1"))
-            kumas_renk = clean_kumas_val(display_color)
-
-        row_data = [
-            cust_season,
-            model_color,
-            display_color,
-            kumasci,
-            kalite_adi,
-            kalite_kodu,
-            varyant,
-            kumas_renk,
-            qty if qty else None,
-            price if price else None,
-            fb1_price if fb1_price else 0,
-            fb1_cm if fb1_cm else 0,
-            fb1_total if fb1_total else 0,
-            fb2_price if fb2_price else 0,
-            fb2_gramaj if fb2_gramaj else 0,
-            fb2_total if fb2_total else 0,
-            kumas_toplam if kumas_toplam else 0,
-            fb3_price if fb3_price else None,
-            fb3_gramaj if fb3_gramaj else None,
-            fb3_total if fb3_total else None,
-            v_fason if v_fason else 0,
-            v_kesim if v_kesim else 0,
-            v_aks if v_aks else 0,
-            v_etkol if v_etkol else 0,
-            v_logo if v_logo else 0,
-            v_nakis if v_nakis else 0,
-            v_brit if v_brit else 0,
-            v_lastik if v_lastik else 0,
-            v_dugme if v_dugme else 0,
-            v_citcit if v_citcit else 0,
-            v_diger if v_diger else 0,
-            v_kargo if v_kargo else 0,
-            v_nakliye if v_nakliye else 0,
-            v_kumas_extra if v_kumas_extra else 0,
-            v_astar if v_astar else 0,
-            v_dikme if v_dikme else 0,
-            v_ilik_dugme if v_ilik_dugme else 0,
-            v_citcit_cakim if v_citcit_cakim else 0,
-            None,
-            None,
-            None,
-            maliyet_tl if maliyet_tl else 0,
-            maliyet_eur if maliyet_eur else 0,
-            eur_rate,
-            price if price else 0,
-            tot_maliyet_tl if tot_maliyet_tl else 0,
-            tot_maliyet_eur if tot_maliyet_eur else 0,
-            order_toplam if order_toplam else 0
-        ]
-
-        # Populate columns 2 to 49 (column 1 is Görsel)
-        for c_idx_offset, val in enumerate(row_data, start=2):
-            c_cell = ws.cell(row=idx, column=c_idx_offset, value=val)
-            c_cell.fill = current_fill
-            c_cell.border = cell_border
-            c_cell.font = font_normal
-
-            if c_idx_offset in [2, 3, 5, 6]:
-                c_cell.alignment = align_left
-            elif c_idx_offset in [4, 7, 8, 9]:
-                c_cell.alignment = align_center
-                c_cell.font = font_bold
-            elif c_idx_offset == 10:  # QUANTITY
-                c_cell.alignment = align_center
-                c_cell.font = font_bold
-                c_cell.number_format = "#,##0"
-            elif c_idx_offset in [11, 46]:  # PRICE
-                c_cell.alignment = align_right
-                c_cell.font = font_bold
-                _, b_prc_fmt = get_excel_currency_format(s.get("currency") or "EUR")
-                c_cell.number_format = b_prc_fmt
-            elif c_idx_offset in [45]:  # EUR RATE
-                c_cell.alignment = align_center
-                c_cell.number_format = "#,##0.00"
-            elif c_idx_offset in [43, 47]:  # Maliyet TL ve TOPLAM maliyet TL + 6%
-                c_cell.alignment = align_right
-                c_cell.font = font_bold
-                c_cell.number_format = '"₺" #,##0.00'
-            elif c_idx_offset in [44, 48, 49]:  # Maliyet EUR, TOPLAM EUR, Order Toplamı
-                c_cell.alignment = align_right
-                c_cell.font = font_bold
-                c_cell.number_format = '"€" #,##0.00'
-            elif isinstance(val, (int, float)):
-                c_cell.alignment = align_right
-                c_cell.number_format = "#,##0.00"
-
-    # Summary Total Row
-    tot_row = last_row + 1
-    ws.row_dimensions[tot_row].height = 28
-    tot_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
-    tot_font = Font(name="Segoe UI", size=10, bold=True, color="000000")
-    
-    ws.merge_cells(start_row=tot_row, start_column=1, end_row=tot_row, end_column=9)
-    cell_tot_lbl = ws.cell(row=tot_row, column=1, value="GENEL TOPLAM:")
-    cell_tot_lbl.font = tot_font
-    cell_tot_lbl.alignment = Alignment(horizontal="right", vertical="center")
-    
-    c_tot_qty = ws.cell(row=tot_row, column=10, value=total_qty)
-    c_tot_qty.font = tot_font
-    c_tot_qty.alignment = align_center
-    c_tot_qty.number_format = "#,##0"
-    
-    c_tot_tl = ws.cell(row=tot_row, column=47, value=total_maliyet_tl_sum)
-    c_tot_tl.font = tot_font
-    c_tot_tl.alignment = align_right
-    c_tot_tl.number_format = '"₺" #,##0.00'
-    
-    c_tot_eur = ws.cell(row=tot_row, column=48, value=total_maliyet_eur_sum)
-    c_tot_eur.font = tot_font
-    c_tot_eur.alignment = align_right
-    c_tot_eur.number_format = '"€" #,##0.00'
-    
-    c_tot_order = ws.cell(row=tot_row, column=49, value=total_order_sum)
-    c_tot_order.font = tot_font
-    c_tot_order.alignment = align_right
-    c_tot_order.number_format = '"€" #,##0.00'
-    
-    for c_i in range(1, 50):
-        c_tot = ws.cell(row=tot_row, column=c_i)
-        c_tot.fill = tot_fill
-        c_tot.border = Border(top=Side(style="medium", color="475569"), bottom=Side(style="double", color="475569"))
-
-    ws.column_dimensions["A"].width = 18  # Görsel
-    ws.column_dimensions["B"].width = 24  # Müşteri / Sezon
-    ws.column_dimensions["C"].width = 20  # Model - Renk
-    ws.column_dimensions["D"].width = 16  # Renk
-    ws.column_dimensions["E"].width = 22  # Kumaşçı
-    ws.column_dimensions["F"].width = 22  # Kalite Adı
-    ws.column_dimensions["G"].width = 16  # Kalite Kodu
-    ws.column_dimensions["H"].width = 16  # Varyant
-    ws.column_dimensions["I"].width = 18  # Kumaş Rengi
-    ws.column_dimensions["J"].width = 14  # Quantity
-    ws.column_dimensions["K"].width = 14  # Price
-    ws.column_dimensions["R"].width = 16  # Kumaş Toplam
-    ws.column_dimensions["AQ"].width = 16 # Maliyet TL
-    ws.column_dimensions["AR"].width = 16 # Maliyet EUR
-    ws.column_dimensions["AS"].width = 12 # Euro Kuru
-    ws.column_dimensions["AT"].width = 14 # Price
-    ws.column_dimensions["AU"].width = 20 # Toplam Maliyet TL +6%
-    ws.column_dimensions["AV"].width = 20 # Toplam Maliyet EUR +6%
-    ws.column_dimensions["AW"].width = 18 # Order Toplamı
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    
-    filename = f"Butce_Tablosu_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return Response(
-        content=buf.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
-    )
-
-@app.get("/api/styles/export-budget-excel")
-def api_export_budget_excel_get(ids: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
-    user = None
-    if authorization:
-        t = authorization.replace("Bearer ", "").strip()
-        user = get_current_user(t)
-    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
-    
-    style_ids = None
-    if ids:
-        try:
-            style_ids = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
-        except Exception:
-            pass
-            
-    return generate_budget_excel_workbook(style_ids, company_id)
-
-@app.post("/api/styles/export-budget-excel")
-def api_export_budget_excel_post(req: ExportExcelRequest, authorization: Optional[str] = Header(None)):
-    user = None
-    if authorization:
-        t = authorization.replace("Bearer ", "").strip()
-        user = get_current_user(t)
-    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
-    
-    return generate_budget_excel_workbook(req.style_ids, company_id)
-
-
-
-# ----------------- SINGLE SIZE INLINE UPDATE -----------------
-
-class UpdateSingleSizeRequest(BaseModel):
-    style_id: int
-    size_name: str
-    quantity: int
-    reason: Optional[str] = "Hızlı Beden Revizyonu"
-
-@app.post("/api/styles/update-single-size")
-def api_update_single_size(req: UpdateSingleSizeRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-
-    c.execute("SELECT total_quantity, order_id, style_no, color_name FROM styles WHERE id = ?", (req.style_id,))
-    st = c.fetchone()
-    if not st:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    
-    old_total = st[0] or 0
-    order_id = st[1]
-    style_no = st[2]
-    color_name = st[3]
-
-    c.execute("SELECT id, quantity FROM size_distributions WHERE style_id = ? AND size_name = ?", (req.style_id, req.size_name))
-    row = c.fetchone()
-    old_size_qty = row[1] if row else 0
-
-    if row:
-        c.execute("UPDATE size_distributions SET quantity = ? WHERE id = ?", (req.quantity, row[0]))
-    else:
-        c.execute("INSERT INTO size_distributions (style_id, size_name, quantity) VALUES (?, ?, ?)", (req.style_id, req.size_name, req.quantity))
-
-    c.execute("SELECT SUM(quantity) FROM size_distributions WHERE style_id = ?", (req.style_id,))
-    new_total = c.fetchone()[0] or 0
-
-    c.execute("UPDATE styles SET total_quantity = ?, total_amount = ? * unit_price, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_total, new_total, req.style_id))
-
-    c.execute("""
-    UPDATE orders 
-    SET total_quantity = (SELECT SUM(total_quantity) FROM styles WHERE order_id = ?),
-        total_amount = (SELECT SUM(total_quantity * unit_price) FROM styles WHERE order_id = ?)
-    WHERE id = ?
-    """, (order_id, order_id, order_id))
-
-    user_name = user.get("full_name") or user.get("username")
-    c.execute("""
-    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (req.style_id, order_id, user.get("user_id"), user_name, f"size_{req.size_name}", f"{req.size_name}: {old_size_qty}", f"{req.size_name}: {req.quantity}", f"{req.reason} (Toplam: {old_total} -> {new_total})"))
-
-    c.execute("""
-    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
-    VALUES (?, ?, 'Beden Revizyonu', ?, ?)
-    """, (req.style_id, user_name, f"Beden {req.size_name} Değiştirildi", f"{req.size_name}: {old_size_qty} -> {req.quantity} Adet (Yeni Toplam: {new_total})"))
-
-    conn.commit()
-    conn.close()
-    return {"status": "success", "new_total": new_total, "message": f"{req.size_name} bedeni güncellendi. Yeni toplam: {new_total}"}
-
-# ----------------- DUAL IMAGE UPLOAD (SLOT 1 & SLOT 2) -----------------
-
-@app.post("/api/styles/{style_id}/image")
-async def api_upload_style_image(
-    style_id: int, 
-    slot: int = Query(1),
-    file: UploadFile = File(...), 
-    user: Dict[str, Any] = Depends(require_user)
-):
-    raw_fname = file.filename or "image.png"
-    ext = Path(raw_fname).suffix.lower()
-    if not ext or ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
-        c_type = (getattr(file, "content_type", "") or "").lower()
-        if "jpeg" in c_type or "jpg" in c_type:
-            ext = ".jpg"
-        elif "webp" in c_type:
-            ext = ".webp"
-        elif "gif" in c_type:
-            ext = ".gif"
-        else:
-            ext = ".png" 
-    
-    filename = f"style_{style_id}_s{slot}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-    dest_path = STYLE_IMAGES_DIR / filename
-    
-    with open(dest_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    rel_url = f"/uploads/styles/{filename}"
-    
-    col_name = "image_url_2" if slot == 2 else "image_url"
-    
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(f"UPDATE styles SET {col_name} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (rel_url, style_id))
-    
-    user_name = user.get("full_name") or user.get("username")
-    c.execute("""
-    INSERT INTO audit_logs (style_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, 'Eski Görsel', ?, ?)
-    """, (style_id, user.get("user_id"), user_name, col_name, rel_url, f"Model Fotoğrafı Yüklendi (Görsel {slot})"))
-
-    conn.commit()
-    conn.close()
-    
-    return {"status": "success", "image_url": rel_url, "slot": slot}
-
-@app.delete("/api/styles/{style_id}/image/{slot}")
-def api_delete_style_image(style_id: int, slot: int, user: Dict[str, Any] = Depends(require_user)):
-    col_name = "image_url_2" if slot == 2 else "image_url"
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(f"UPDATE styles SET {col_name} = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (style_id,))
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": f"Görsel {slot} silindi."}
-
-@app.post("/api/styles/{style_id}/swap-images")
-def api_swap_style_images(style_id: int, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT image_url, image_url_2 FROM styles WHERE id = ?", (style_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    img1, img2 = row[0], row[1]
-    c.execute("UPDATE styles SET image_url = ?, image_url_2 = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (img2, img1, style_id))
-    user_name = user.get("full_name") or user.get("username")
-    c.execute("""
-    INSERT INTO audit_logs (style_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, 'image_url', ?, ?, 'Görsel 1 ve 2 Yer Değiştirildi')
-    """, (style_id, user.get("user_id"), user_name, str(img1), str(img2)))
-    conn.commit()
-    conn.close()
-    return {"status": "success", "image_url": img2, "image_url_2": img1, "message": "Görseller yer değiştirildi."}
-
-
-# ----------------- UPDATE CELL WITH AUDIT LOG & TIMESTAMPS -----------------
-
-class StyleUpdateFieldRequest(BaseModel):
-    style_id: int
-    field: str
-    value: Any
-    reason: Optional[str] = "Kullanıcı Düzenlemesi"
-
-@app.post("/api/styles/update-cell")
-def api_update_style_cell(req: StyleUpdateFieldRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-
-    if req.field in ["order_date", "delivery_date", "season", "po_number"]:
-        c.execute("SELECT order_id FROM styles WHERE id = ?", (req.style_id,))
-        s_row = c.fetchone()
-        if not s_row:
-            conn.close()
-            raise HTTPException(status_code=404, detail="Model bulunamadı.")
-        order_id = s_row[0]
-        c.execute(f"UPDATE orders SET {req.field} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (req.value, order_id))
-        user_name = user.get("full_name") or user.get("username")
-        c.execute("""
-        INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-        VALUES (?, ?, ?, ?, ?, '', ?, ?)
-        """, (req.style_id, order_id, user.get("user_id"), user_name, req.field, str(req.value), req.reason))
-        conn.commit()
-        conn.close()
-        return {"status": "success", "message": f"{req.field} güncellendi"}
-
-    c.execute(f"SELECT {req.field}, order_id FROM styles WHERE id = ?", (req.style_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    
-    old_val = str(row[0] or "")
-    order_id = row[1]
-    new_val = str(req.value or "")
-
-    user_name = user.get("full_name") or user.get("username")
-    now_date_str = datetime.now().strftime('%d.%m.%Y')
-    now_time_str = datetime.now().strftime('%d.%m.%Y %H:%M')
-
-    extra_sql = ""
-    extra_params = []
-
-    if req.field == "fabric_ordered":
-        val_int = int(req.value or 0)
-        date_val = now_date_str if val_int == 1 else None
-        extra_sql = ", fabric_ordered_date = ?"
-        extra_params.append(date_val)
-    elif req.field == "pps_sent":
-        str_val = str(req.value or "").strip()
-        date_val = now_date_str if str_val and str_val != "-" and str_val != "0" else None
-        extra_sql = ", pps_sent_date = ?"
-        extra_params.append(date_val)
-    elif req.field == "shipping_sample_sent":
-        val_int = int(req.value or 0)
-        date_val = now_date_str if val_int == 1 else None
-        extra_sql = ", shipping_sample_sent_date = ?"
-        extra_params.append(date_val)
-    elif req.field == "status":
-        extra_sql = ", last_status_updated_by = ?, last_status_updated_at = ?"
-        extra_params.extend([user_name, now_time_str])
-
-    sql = f"UPDATE styles SET {req.field} = ? {extra_sql}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-    c.execute(sql, [req.value] + extra_params + [req.style_id])
-
-    if req.field == "brand" and order_id:
-        c.execute("UPDATE orders SET brand = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (req.value, order_id))
-        c.execute("UPDATE styles SET brand = ?, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?", (req.value, order_id))
-    
-    c.execute("""
-    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (req.style_id, order_id, user.get("user_id"), user_name, req.field, old_val, new_val, req.reason))
-
-    if req.field == "unit_price":
-        c.execute("""
-        UPDATE orders 
-        SET total_amount = (SELECT SUM(total_quantity * unit_price) FROM styles WHERE order_id = ?)
-        WHERE id = ?
-        """, (order_id, order_id))
-    elif req.field == "fabric_received_meters":
-        rec_meters = float(req.value or 0)
-        if rec_meters > 0:
-            log_msg = f"{now_date_str} tarihinde {rec_meters} metre kumaş geldi."
-            c.execute("""
-            INSERT INTO production_status_logs (style_id, user_name, category, title, message)
-            VALUES (?, ?, 'Kumaş Girişi', 'Kumaş Depoya Geldi', ?)
-            """, (req.style_id, user_name, log_msg))
-
-    c.execute("""
-    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
-    VALUES (?, ?, 'İşlem Aşaması', ?, ?)
-    """, (req.style_id, user_name, f"'{req.field}' Değiştirildi", f"{old_val} ➜ {new_val} ({req.reason})"))
-
-
-    conn.commit()
-    conn.close()
-    return {
-        "status": "success", 
-        "message": f"{req.field} güncellendi",
-        "user_name": user_name,
-        "date_str": date_val if 'date_val' in locals() else now_date_str
-    }
-
-
-# ----------------- KESİMHANE & PASTAL GÜNCELLEME -----------------
-
-class CuttingSizeItem(BaseModel):
-    size_name: str
-    cut_quantity: int = 0
-
-class CuttingUpdateRequest(BaseModel):
-    style_id: int
-    cut_meters: Optional[float] = 0.0
-    sizes: List[CuttingSizeItem] = []
-
-@app.post("/api/cutting/update")
-def api_update_cutting(req: CuttingUpdateRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-
-    c.execute("SELECT id, order_id, style_no, total_quantity, cut_meters, actual_unit_meters, cutting_date FROM styles WHERE id = ?", (req.style_id,))
-    style_row = c.fetchone()
-    if not style_row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    
-    order_id = style_row["order_id"]
-    user_name = user.get("full_name") or user.get("username") or "Kesim Şefi"
-    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
-
-    total_cut_qty = 0
-    for sz in req.sizes:
-        c.execute("""
-        UPDATE size_distributions 
-        SET cut_quantity = ? 
-        WHERE style_id = ? AND size_name = ?
-        """, (int(sz.cut_quantity or 0), req.style_id, sz.size_name))
-        total_cut_qty += int(sz.cut_quantity or 0)
-
-    cut_m = float(req.cut_meters or 0.0)
-    actual_unit_m = round(cut_m / total_cut_qty, 3) if total_cut_qty > 0 and cut_m > 0 else 0.0
-
-    c.execute("""
-    UPDATE styles 
-    SET cut_meters = ?, actual_unit_meters = ?, cutting_date = ?, updated_at = CURRENT_TIMESTAMP 
-    WHERE id = ?
-    """, (cut_m, actual_unit_m, now_str, req.style_id))
-
-    c.execute("""
-    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, 'cutting_update', ?, ?, 'Kesimhane Beden & Metraj Güncellemesi')
-    """, (req.style_id, order_id, user.get("user_id"), user_name, 
-          f"M:{style_row['cut_meters']}", f"M:{cut_m}, Adet:{total_cut_qty}, Birim:{actual_unit_m}, Tarih:{now_str}"))
-
-    conn.commit()
-    conn.close()
-
-    return {
-        "status": "success",
-        "style_id": req.style_id,
-        "total_cut_quantity": total_cut_qty,
-        "cut_meters": cut_m,
-        "actual_unit_meters": actual_unit_m,
-        "cutting_date": now_str
-    }
-
-
-# ----------------- KESİM FİŞİ EXCEL DIŞA AKTARIM -----------------
-
-class CuttingSlipColorItem(BaseModel):
-    name: str
-    channel: Optional[str] = ""
-    quantities: List[Any] = []
-    total: Optional[int] = 0
-
-class CuttingSlipExportRequest(BaseModel):
-    customer_name: Optional[str] = ""
-    brand: Optional[str] = ""
-    style_no: Optional[str] = ""
-    channel: Optional[str] = ""
-    date: Optional[str] = ""
-    image_url: Optional[str] = ""
-    sizes: List[str] = []
-    has_channel_info: Optional[bool] = False
-    colors: List[CuttingSlipColorItem] = []
-
-@app.post("/api/cutting/export-slip-excel")
-def api_export_cutting_slip_excel(req: CuttingSlipExportRequest):
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Sayfa1"
-
-    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 1
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-
-    thin = Side(border_style="thin", color="000000")
-    medium = Side(border_style="medium", color="000000")
-    box_border = Border(top=thin, left=thin, right=thin, bottom=thin)
-
-    has_channel = bool(req.has_channel_info and any(bool(c.channel and str(c.channel).strip()) for c in req.colors))
-    num_sizes = len(req.sizes)
-
-    # Kolon yerleşimi:
-    # Boş / adetsiz sütunlar kaldırıldı.
-    # Kanal varsa: Col 1: RENK/VARYANT, Col 2: KANAL, Col 3..(2+num_sizes): Bedenler, Son Kolon: TOPLAM
-    # Kanal yoksa: Col 1: RENK/VARYANT, Col 2..(1+num_sizes): Bedenler, Son Kolon: TOPLAM
-    if has_channel:
-        total_cols = max(4, 1 + 1 + num_sizes + 1)
-        size_col_letters = [get_column_letter(3 + idx) for idx in range(num_sizes)]
-        ws.column_dimensions['A'].width = 22
-        ws.column_dimensions['B'].width = 16
-        for sc in size_col_letters:
-            ws.column_dimensions[sc].width = 12
-    else:
-        total_cols = max(4, 1 + num_sizes + 1)
-        size_col_letters = [get_column_letter(2 + idx) for idx in range(num_sizes)]
-        ws.column_dimensions['A'].width = 24
-        for sc in size_col_letters:
-            ws.column_dimensions[sc].width = 12
-
-    last_col_letter = get_column_letter(total_cols)
-    ws.column_dimensions[last_col_letter].width = 15
-
-    # Row 1: KESİM FİŞİ
-    ws.row_dimensions[1].height = 30
-    ws.merge_cells(f"A1:{last_col_letter}1")
-    cell_a1 = ws["A1"]
-    cell_a1.value = "KESİM FİŞİ"
-    cell_a1.font = Font(name="Arial", size=20, bold=True)
-    cell_a1.alignment = Alignment(horizontal="center", vertical="center")
-
-    # Row 2: MÜŞTERİ & TARİH
-    ws.row_dimensions[2].height = 25
-    ws["A2"].value = "MÜŞTERİ:"
-    ws["A2"].font = Font(name="Arial", size=14, bold=True)
-    ws["A2"].alignment = Alignment(horizontal="right", vertical="center")
-
-    second_last_col_letter = get_column_letter(max(2, total_cols - 1))
-    if total_cols > 4:
-        ws.merge_cells(f"B2:{get_column_letter(total_cols - 2)}2")
-    ws["B2"].value = req.customer_name or ""
-    ws["B2"].font = Font(name="Arial", size=14, bold=False)
-    ws["B2"].alignment = Alignment(horizontal="left", vertical="center")
-
-    for ci in range(1, total_cols + 1):
-        ws[f"{get_column_letter(ci)}2"].border = box_border
-
-    ws[f"{second_last_col_letter}2"].value = "TARİH"
-    ws[f"{second_last_col_letter}2"].font = Font(name="Arial", size=14, bold=True)
-    ws[f"{second_last_col_letter}2"].alignment = Alignment(horizontal="center", vertical="center")
-
-    ws[f"{last_col_letter}2"].value = req.date or datetime.now().strftime("%d.%m.%Y")
-    ws[f"{last_col_letter}2"].font = Font(name="Arial", size=14, bold=False)
-    ws[f"{last_col_letter}2"].alignment = Alignment(horizontal="center", vertical="center")
-
-    # Row 3: MARKA
-    ws.row_dimensions[3].height = 25
-    ws["A3"].value = "MARKA:"
-    ws["A3"].font = Font(name="Arial", size=14, bold=True)
-    ws["A3"].alignment = Alignment(horizontal="right", vertical="center")
-
-    brand_val = req.brand or ""
-    ch_clean = str(req.channel or "").strip()
-    if ch_clean and ch_clean != '__NONE__' and ch_clean.lower() != 'yok':
-        brand_val = f"{brand_val} (Kanal: {ch_clean})" if brand_val else f"Kanal: {ch_clean}"
-    if total_cols > 2:
-        ws.merge_cells(f"B3:{last_col_letter}3")
-    ws["B3"].value = brand_val
-    ws["B3"].font = Font(name="Arial", size=14, bold=False)
-    ws["B3"].alignment = Alignment(horizontal="left", vertical="center")
-
-    for ci in range(1, total_cols + 1):
-        ws[f"{get_column_letter(ci)}3"].border = box_border
-
-    # Rows 4 to 8: Image box
-    ws.merge_cells("A4:A8")
-    for r in range(4, 9):
-        ws.row_dimensions[r].height = 26
-        for ci in range(1, total_cols + 1):
-            ws[f"{get_column_letter(ci)}{r}"].border = box_border
-
-    img_added = False
-    if req.image_url:
-        clean_img_url = req.image_url.split("?")[0].lstrip("/")
-        possible_paths = [
-            BASE_DIR / clean_img_url,
-            BASE_DIR / "data" / clean_img_url,
-            BASE_DIR / "data" / "uploads" / clean_img_url.replace("uploads/", ""),
-            BASE_DIR / clean_img_url.replace("uploads/", "data/uploads/")
-        ]
-        for p in possible_paths:
-            if p.exists() and p.is_file():
-                try:
-                    openpyxl_img = OpenpyxlImage(str(p))
-                    with PILImage.open(str(p)) as pil_img:
-                        orig_w, orig_h = pil_img.size
-                        ratio = min(150.0 / max(1, orig_w), 125.0 / max(1, orig_h))
-                        openpyxl_img.width = int(orig_w * ratio)
-                        openpyxl_img.height = int(orig_h * ratio)
-                    ws.add_image(openpyxl_img, "A4")
-                    img_added = True
-                    break
-                except Exception as ex:
-                    print("Error adding image to excel:", ex)
-    if not img_added:
-        ws["A4"].value = "[ RESİM ]"
-        ws["A4"].font = Font(name="Arial", size=12, color="888888")
-        ws["A4"].alignment = Alignment(horizontal="center", vertical="center")
-
-    # Row 4: ARTICLE
-    ws["B4"].value = "ARTICLE     :"
-    ws["B4"].font = Font(name="Arial", size=14, bold=True)
-    ws["B4"].alignment = Alignment(horizontal="left", vertical="center")
-    
-    if total_cols > 2:
-        ws.merge_cells(f"C4:{last_col_letter}4")
-        ws["C4"].value = req.style_no or ""
-        ws["C4"].font = Font(name="Calibri", size=18, bold=True)
-        ws["C4"].alignment = Alignment(horizontal="left", vertical="center")
-    else:
-        ws["B4"].value = f"ARTICLE: {req.style_no or ''}"
-
-    # Row 5: KUMAŞ KG
-    ws["B5"].value = "KUMAŞ KG :"
-    ws["B5"].font = Font(name="Arial", size=14, bold=False)
-    ws["B5"].alignment = Alignment(horizontal="left", vertical="center")
-    if total_cols > 2:
-        ws.merge_cells(f"C5:{last_col_letter}5")
-
-    # Row 6: METRAJ
-    ws["B6"].value = "METRAJ      :"
-    ws["B6"].font = Font(name="Arial", size=14, bold=False)
-    ws["B6"].alignment = Alignment(horizontal="left", vertical="center")
-    if total_cols > 2:
-        ws.merge_cells(f"C6:{last_col_letter}6")
-
-    # Row 7: EN
-    ws["B7"].value = "EN :"
-    ws["B7"].font = Font(name="Arial", size=14, bold=False)
-    ws["B7"].alignment = Alignment(horizontal="left", vertical="center")
-    if total_cols > 2:
-        ws.merge_cells(f"C7:{last_col_letter}7")
-
-    # Row 8: GRAMAJ
-    ws["B8"].value = "GRAMAJ:"
-    ws["B8"].font = Font(name="Arial", size=14, bold=False)
-    ws["B8"].alignment = Alignment(horizontal="left", vertical="center")
-    if total_cols > 2:
-        ws.merge_cells(f"C8:{last_col_letter}8")
-
-    # Row 9: spacer
-    ws.row_dimensions[9].height = 12
-
-    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-
-    # Row 10: Size Headers (KOMPLE SARI ZEMİN #FFFF00)
-    ws.row_dimensions[10].height = 28
-    for ci in range(1, total_cols + 1):
-        c_letter = get_column_letter(ci)
-        ws[f"{c_letter}10"].fill = yellow_fill
-        ws[f"{c_letter}10"].border = Border(
-            top=medium,
-            bottom=thin,
-            left=medium if ci == 1 else thin,
-            right=medium if ci == total_cols else thin
-        )
-
-    ws["A10"].value = "RENK / VARYANT"
-    ws["A10"].font = Font(name="Arial", size=11, bold=True)
-    ws["A10"].alignment = Alignment(horizontal="center", vertical="center")
-
-    if has_channel:
-        ws["B10"].value = "KANAL"
-        ws["B10"].font = Font(name="Arial", size=12, bold=True)
-        ws["B10"].alignment = Alignment(horizontal="center", vertical="center")
-
-    for sc, sz in zip(size_col_letters, req.sizes):
-        ws[f"{sc}10"].value = sz
-        ws[f"{sc}10"].font = Font(name="Arial", size=16, bold=True)
-        ws[f"{sc}10"].alignment = Alignment(horizontal="center", vertical="center")
-
-    ws[f"{last_col_letter}10"].value = "TOPLAM"
-    ws[f"{last_col_letter}10"].font = Font(name="Arial", size=16, bold=True)
-    ws[f"{last_col_letter}10"].alignment = Alignment(horizontal="center", vertical="center")
-
-    # Dynamic row heights based on color count so 9 colors fit on 1 A4 page
-    num_colors = max(1, len(req.colors))
-    if num_colors >= 7:
-        row_h_qty = 22
-        row_h_empty = 20
-    elif num_colors >= 4:
-        row_h_qty = 26
-        row_h_empty = 24
-    else:
-        row_h_qty = 30
-        row_h_empty = 28
-
-    cur_row = 11
-    for c_idx, col_info in enumerate(req.colors):
-        # 1. SATIR: Adet satırı
-        ws.row_dimensions[cur_row].height = row_h_qty
-        top_border_style = thin if c_idx == 0 else medium
-        for ci in range(1, total_cols + 1):
-            c_letter = get_column_letter(ci)
-            ws[f"{c_letter}{cur_row}"].border = Border(
-                top=top_border_style,
-                bottom=thin,
-                left=medium if ci == 1 else thin,
-                right=medium if ci == total_cols else thin
-            )
-
-        ws[f"A{cur_row}"].value = col_info.name
-        ws[f"A{cur_row}"].font = Font(name="Arial", size=10 if num_colors >= 7 else 11, bold=True)
-        ws[f"A{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
-        
-        if has_channel:
-            ws[f"B{cur_row}"].value = col_info.channel or ""
-            ws[f"B{cur_row}"].font = Font(name="Arial", size=11, bold=True)
-            ws[f"B{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
-
-        for sc, q in zip(size_col_letters, col_info.quantities):
-            val = int(q) if (q is not None and str(q).isdigit()) else (q if q else "")
-            ws[f"{sc}{cur_row}"].value = val
-            ws[f"{sc}{cur_row}"].font = Font(name="Arial", size=13 if num_colors >= 7 else 16, bold=False)
-            ws[f"{sc}{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
-        
-        ws[f"{last_col_letter}{cur_row}"].value = col_info.total
-        ws[f"{last_col_letter}{cur_row}"].font = Font(name="Arial", size=13 if num_colors >= 7 else 16, bold=True)
-        ws[f"{last_col_letter}{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
-        
-        # 2. SATIR: 1. Extra Boş Kutucuk Satırı
-        cur_row += 1
-        ws.row_dimensions[cur_row].height = row_h_empty
-        for ci in range(1, total_cols + 1):
-            c_letter = get_column_letter(ci)
-            ws[f"{c_letter}{cur_row}"].border = Border(
-                top=thin,
-                bottom=thin,
-                left=medium if ci == 1 else thin,
-                right=medium if ci == total_cols else thin
-            )
-
-        # 3. SATIR: 2. Extra Boş Kutucuk Satırı (HER RENK BİTİMİNDE ALT ÇİZGİSİ BOLD / MEDIUM)
-        cur_row += 1
-        ws.row_dimensions[cur_row].height = row_h_empty
-        for ci in range(1, total_cols + 1):
-            c_letter = get_column_letter(ci)
-            ws[f"{c_letter}{cur_row}"].border = Border(
-                top=thin,
-                bottom=medium,
-                left=medium if ci == 1 else thin,
-                right=medium if ci == total_cols else thin
-            )
-        
-        # Renk bitiminden sonra doğrudan sonraki satıra geç (aradaki boşluk kaldırıldı)
-        cur_row += 1
-
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    
-    clean_style = re.sub(r'[^a-zA-Z0-9_-]', '_', req.style_no or 'Model')
-    filename = f"KESIM_FISI_{clean_style}.xlsx"
-    return Response(
-        content=output.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
-
-
-class ShippingSizeItem(BaseModel):
-    size_name: str
-    shipped_quantity: int = 0
-
-class ShippingUpdateRequest(BaseModel):
-    style_id: int
-    sizes: List[ShippingSizeItem] = []
-    shipping_date: Optional[str] = None
-
-@app.post("/api/shipping/update")
-def api_update_shipping(req: ShippingUpdateRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-
-    c.execute("SELECT id, order_id, style_no, total_quantity, shipping_date FROM styles WHERE id = ?", (req.style_id,))
-    style_row = c.fetchone()
-    if not style_row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    
-    order_id = style_row["order_id"]
-    user_name = user.get("full_name") or user.get("username") or "Sevkiyat Sorumlusu"
-    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
-
-    final_shipping_date = (req.shipping_date or "").strip()
-    if not final_shipping_date:
-        c.execute("SELECT o.delivery_date FROM styles s JOIN orders o ON s.order_id = o.id WHERE s.id = ?", (req.style_id,))
-        o_row = c.fetchone()
-        del_date = o_row[0] if o_row else None
-        final_shipping_date = style_row["shipping_date"] or del_date or now_str
-
-    total_shipped_qty = 0
-    for sz in req.sizes:
-        c.execute("""
-        UPDATE size_distributions 
-        SET shipped_quantity = ? 
-        WHERE style_id = ? AND size_name = ?
-        """, (int(sz.shipped_quantity or 0), req.style_id, sz.size_name))
-        total_shipped_qty += int(sz.shipped_quantity or 0)
-
-    c.execute("""
-    UPDATE styles 
-    SET shipping_date = ?, updated_at = CURRENT_TIMESTAMP 
-    WHERE id = ?
-    """, (final_shipping_date, req.style_id))
-
-    c.execute("""
-    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, 'shipping_update', ?, ?, 'Yükleme Adetleri Güncellendi')
-    """, (req.style_id, order_id, user.get("user_id"), user_name, 
-          f"Tarih:{style_row['shipping_date']}", f"Adet:{total_shipped_qty}, Tarih:{now_str}"))
-
-    conn.commit()
-    conn.close()
-
-    return {
-        "status": "success",
-        "style_id": req.style_id,
-        "total_shipped_quantity": total_shipped_qty,
-        "shipping_date": final_shipping_date
-    }
-
-
-# ----------------- PACKING LIST & CARTON LABELS (ÇEKİ LİSTESİ & KOLİ ÜSTÜ) -----------------
-
-class PackingProcessRequest(BaseModel):
-    style_id: int
-    sizes: Dict[str, int]
-    channel: Optional[str] = ""
-    notes: Optional[str] = ""
-
-def find_matching_styles_for_packing(customer: str, style_no: str, color_name: str, limit: int = 15):
-    conn = get_db()
-    c = conn.cursor()
-    norm_style = re.sub(r'[^a-zA-Z0-9]', '', style_no or '').lower()
-    style_prefix = norm_style[:5] if len(norm_style) >= 5 else norm_style
-
-    c.execute("""
-        SELECT s.id, s.order_id, s.style_no, s.color_code, s.color_name, s.total_quantity,
-               o.po_number, o.customer_name, o.brand, o.order_date, o.delivery_date
-        FROM styles s
-        JOIN orders o ON s.order_id = o.id
-        ORDER BY s.id DESC
-    """)
-    all_styles = [dict(r) for r in c.fetchall()]
-    conn.close()
-
-    scored = []
-    for s in all_styles:
-        score = 0
-        s_norm = re.sub(r'[^a-zA-Z0-9]', '', s.get('style_no') or '').lower()
-        c_norm = (s.get('customer_name') or '').lower()
-        b_norm = (s.get('brand') or '').lower()
-        col_norm = (s.get('color_name') or '').lower()
-
-        # Customer / Brand match
-        if customer:
-            cust_clean = customer.lower()
-            if cust_clean in c_norm or cust_clean in b_norm:
-                score += 35
-            if 'anna' in cust_clean and ('anna' in c_norm or 'anna' in b_norm):
-                score += 35
-
-        # Style match
-        if norm_style and norm_style == s_norm:
-            score += 100
-        elif style_prefix and style_prefix in s_norm:
-            score += 50
-        elif style_no and any(part in (s.get('style_no') or '').lower() for part in style_no.lower().split('-') if len(part) >= 3):
-            score += 30
-
-        # Color match
-        if color_name:
-            col_target = color_name.lower()
-            if col_norm and (col_target in col_norm or col_norm in col_target):
-                score += 40
-            c_code = color_name.split()[0] if ' ' in color_name else ''
-            if c_code and c_code.lower() in (s.get('color_code') or '').lower():
-                score += 30
-
-        if score > 0:
-            scored.append((score, s))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    best_match = scored[0][1] if (scored and scored[0][0] >= 30) else None
-    candidates = [item[1] for item in scored[:limit] if item[0] >= 30]
-    return best_match, candidates
-
-@app.post("/api/packing-list/upload")
-async def api_upload_packing_list(
-    file: UploadFile = File(...),
-    user: Dict[str, Any] = Depends(require_user)
-):
-    import shutil
-    from pathlib import Path
-
-    import unicodedata, re
-    orig_name = unicodedata.normalize('NFC', file.filename or "packing_list.xlsx")
-    ext = Path(orig_name).suffix.lower()
-    safe_stem = re.sub(r'[^\w\s\.-]', '_', Path(orig_name).stem).strip()
-    clean_name = f"packing_{int(datetime.now().timestamp())}_{safe_stem}{ext}"
-    save_path = UPLOADS_DIR / clean_name
-    file_name = orig_name
-
-    with open(save_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    try:
-        parsed_data = OrderParserEngine.parse_packing_list(str(save_path))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Çeki listesi okunamadı: {str(e)}")
-
-    best_match, candidates = find_matching_styles_for_packing(
-        parsed_data.get("customer", ""),
-        parsed_data.get("style_no", ""),
-        parsed_data.get("color", "")
-    )
-
-    return {
-        "status": "success",
-        "file_name": file_name,
-        "parsed_data": parsed_data,
-        "matched_style": best_match,
-        "candidate_styles": candidates
-    }
-
-@app.get("/api/packing-list/sample")
-def api_sample_packing_list(user: Dict[str, Any] = Depends(require_user)):
-    sample_file = BASE_DIR / "scratch" / "Anna_Van_Toor_koli_ustu_x2.xlsm"
-    if not sample_file.exists():
-        raise HTTPException(status_code=404, detail="Örnek dosya scratch/Anna_Van_Toor_koli_ustu_x2.xlsm bulunamadı.")
-
-    try:
-        parsed_data = OrderParserEngine.parse_packing_list(str(sample_file))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Örnek dosya okunamadı: {str(e)}")
-
-    best_match, candidates = find_matching_styles_for_packing(
-        parsed_data.get("customer", ""),
-        parsed_data.get("style_no", ""),
-        parsed_data.get("color", "")
-    )
-
-    return {
-        "status": "success",
-        "file_name": "Anna_Van_Toor_koli_ustu_x2.xlsm (Örnek Şablon)",
-        "parsed_data": parsed_data,
-        "matched_style": best_match,
-        "candidate_styles": candidates
-    }
-
-@app.post("/api/packing-list/process")
-def api_process_packing_list(
-    req: PackingProcessRequest,
-    user: Dict[str, Any] = Depends(require_user)
-):
-    conn = get_db()
-    c = conn.cursor()
-
-    c.execute("SELECT id, order_id, style_no, total_quantity, shipping_date FROM styles WHERE id = ?", (req.style_id,))
-    style_row = c.fetchone()
-    if not style_row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Eşleşen model bulunamadı.")
-
-    order_id = style_row["order_id"]
-    user_name = user.get("full_name") or user.get("username") or "Çeki Listesi Sorumlusu"
-    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
-
-    # Fetch existing size distributions for this style
-    c.execute("SELECT id, size_name, shipped_quantity, quantity FROM size_distributions WHERE style_id = ?", (req.style_id,))
-    existing_sizes = {r["size_name"]: dict(r) for r in c.fetchall()}
-
-    total_shipped_qty = 0
-    for sz_name, sz_qty in req.sizes.items():
-        qty_int = int(sz_qty or 0)
-        total_shipped_qty += qty_int
-        if sz_name in existing_sizes:
-            c.execute("""
-                UPDATE size_distributions
-                SET shipped_quantity = ?
-                WHERE style_id = ? AND size_name = ?
-            """, (qty_int, req.style_id, sz_name))
-        else:
-            c.execute("""
-                INSERT INTO size_distributions (style_id, size_name, quantity, shipped_quantity)
-                VALUES (?, ?, ?, ?)
-            """, (req.style_id, sz_name, qty_int, qty_int))
-
-    # Update style shipping_date and optional channel
-    if req.channel:
-        c.execute("""
-            UPDATE styles
-            SET shipping_date = ?, channel = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        """, (now_str, req.channel, req.style_id))
-    else:
-        c.execute("""
-            UPDATE styles
-            SET shipping_date = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        """, (now_str, req.style_id))
-
-    # Audit log
-    c.execute("""
-        INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-        VALUES (?, ?, ?, ?, 'packing_list_process', ?, ?, ?)
-    """, (req.style_id, order_id, user.get("user_id"), user_name,
-          f"Tarih:{style_row['shipping_date']}", f"Yüklenen Toplam:{total_shipped_qty}, Tarih:{now_str}",
-          req.notes or 'Çeki Listesinden Yükleme Adetleri Sisteme İşlendi'))
-
-    # Production status log (activity stream)
-    c.execute("""
-        INSERT INTO production_status_logs (style_id, user_id, user_name, category, title, message)
-        VALUES (?, ?, ?, 'Sevkiyat', 'Çeki Listesi İşlendi', ?)
-    """, (req.style_id, user.get("user_id"), user_name,
-          f"Çeki listesinden toplam {total_shipped_qty} adet sevkiyat işlendi. {req.notes or ''}"))
-
-    conn.commit()
-    conn.close()
-
-    return {
-        "status": "success",
-        "message": f"Çeki listesi başarıyla sisteme işlendi. Toplam {total_shipped_qty} adet kaydedildi.",
-        "style_id": req.style_id,
-        "total_shipped_quantity": total_shipped_qty,
-        "shipping_date": final_shipping_date
-    }
-
-
-# ----------------- CARTON LABEL TEMPLATES & DESIGNER -----------------
-
-class CartonTemplateSaveRequest(BaseModel):
-    id: Optional[int] = None
-    customer_name: str
-    template_name: str
-    paper_size: Optional[str] = "A4"
-    orientation: Optional[str] = "landscape"
-    width_mm: Optional[float] = 297.0
-    height_mm: Optional[float] = 210.0
-    items_per_page: Optional[int] = 2
-    border_style: Optional[str] = "solid"
-    border_width: Optional[int] = 1
-    show_grid_lines: Optional[bool] = True
-    margin_mm: Optional[int] = 6
-    font_scale: Optional[float] = 1.0
-    layout_json: Optional[Any] = {}
-    is_default: Optional[bool] = False
-
-@app.get("/api/carton-templates")
-def api_get_carton_templates(
-    customer: Optional[str] = None,
-    user: Dict[str, Any] = Depends(require_user)
-):
-    company_id = user.get("company_id") or 1
-    templates = get_carton_templates(company_id=company_id, customer_name=customer)
-    return {"status": "success", "templates": templates}
-
-@app.get("/api/carton-templates/{template_id}")
-def api_get_carton_template_by_id(
-    template_id: int,
-    user: Dict[str, Any] = Depends(require_user)
-):
-    tpl = get_carton_template_by_id(template_id)
-    if not tpl:
-        raise HTTPException(status_code=404, detail="Şablon bulunamadı.")
-    return {"status": "success", "template": tpl}
-
-@app.post("/api/carton-templates/upload-excel")
-async def api_upload_carton_template_excel(
-    file: UploadFile = File(...),
-    user: Dict[str, Any] = Depends(require_user)
-):
-    # Enforce Excel only (.xlsx, .xlsm, .xls)
-    valid_exts = {".xlsx", ".xlsm", ".xls"}
-    ext = Path(file.filename).suffix.lower()
-    if ext not in valid_exts:
-        raise HTTPException(
-            status_code=400,
-            detail="Sadece Excel formatları (.xlsx, .xlsm, .xls) kabul edilir. Koli üstü formülasyonu ve hücre yapısı analizi için lütfen Excel dosyası yükleyin."
-        )
-
-    temp_path = UPLOADS_DIR / f"template_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
-    content = await file.read()
-    with open(temp_path, "wb") as f:
-        f.write(content)
-
-    try:
-        analyzed = OrderParserEngine.analyze_carton_label_excel(str(temp_path))
-        analyzed["file_name"] = file.filename
-        return {
-            "status": "success",
-            "message": "Excel koli üstü şablonu ve formülasyonları başarıyla analiz edildi.",
-            "data": analyzed
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Excel şablonu çözümlenemedi: {str(e)}")
-    finally:
-        if temp_path.exists():
-            try:
-                temp_path.unlink()
-            except Exception:
-                pass
-
-@app.post("/api/carton-templates/save")
-def api_save_carton_template(
-    req: CartonTemplateSaveRequest,
-    user: Dict[str, Any] = Depends(require_user)
-):
-    data = req.dict()
-    data["company_id"] = user.get("company_id") or 1
-    t_id = save_or_update_carton_template(data)
-    return {
-        "status": "success",
-        "id": t_id,
-        "message": f"'{req.template_name}' şablonu ve sayfa yapısı başarıyla kaydedildi."
-    }
-
-@app.delete("/api/carton-templates/{template_id}")
-def api_delete_carton_template(
-    template_id: int,
-    user: Dict[str, Any] = Depends(require_user)
-):
-    success = delete_carton_template(template_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Silinecek şablon bulunamadı.")
-    return {"status": "success", "message": "Şablon başarıyla silindi."}
-
-
-# ----------------- FABRIC ASSIGNMENT -----------------
-
-class AssignFabricRequest(BaseModel):
-    style_id: int
-    fabrictag_id: Optional[int] = None
-    fabric_name: str
-    composition: str
-    supplier: Optional[str] = ""
-    fabric_slot: Optional[int] = 1
-
-@app.post("/api/styles/assign-fabric")
-def api_assign_fabric(req: AssignFabricRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    slot = req.fabric_slot or 1
-    
-    c.execute("SELECT fabric_article, fabric_composition, fabric_article_2, fabric_composition_2, order_id FROM styles WHERE id = ?", (req.style_id,))
-    row = c.fetchone()
-    order_id = row[4] if row else None
-    
-    if slot == 2:
-        old_article = (row[2] or "") if row else ""
-        old_comp = (row[3] or "") if row else ""
-        c.execute("""
-        UPDATE styles 
-        SET fabric_article_2 = ?, fabric_composition_2 = ?, updated_at = CURRENT_TIMESTAMP 
-        WHERE id = ?
-        """, (req.fabric_name, req.composition, req.style_id))
-    else:
-        old_article = (row[0] or "") if row else ""
-        old_comp = (row[1] or "") if row else ""
-        c.execute("""
-        UPDATE styles 
-        SET fabric_article = ?, fabric_composition = ?, updated_at = CURRENT_TIMESTAMP 
-        WHERE id = ?
-        """, (req.fabric_name, req.composition, req.style_id))
-
-    c.execute("DELETE FROM fabric_links WHERE style_id = ? AND (fabric_slot = ? OR (? = 1 AND fabric_slot IS NULL))", (req.style_id, slot, slot))
-    c.execute("""
-    INSERT INTO fabric_links (style_id, fabrictag_id, fabric_name, composition, supplier, fabric_slot, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'Atandı')
-    """, (req.style_id, req.fabrictag_id, req.fabric_name, req.composition, req.supplier, slot))
-
-    user_name = user.get("full_name") or user.get("username")
-    c.execute("""
-    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, 'fabric_assignment', ?, ?, ?)
-    """, (req.style_id, order_id, user.get("user_id"), user_name, f"{old_article} ({old_comp})", f"{req.fabric_name} ({req.composition})", f"FabricTag Kumaş {slot} Ataması Yapıldı"))
-
-
-    c.execute("""
-    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
-    VALUES (?, ?, 'Kumaş', 'Kumaş Değiştirildi / Atandı', ?)
-    """, (req.style_id, user_name, f"Yeni Kumaş: {req.fabric_name} | {req.composition} ({req.supplier})"))
-
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": "Kumaş başarıyla atandı"}
-
-class DetachFabricRequest(BaseModel):
-    style_id: int
-    fabric_slot: Optional[int] = 1
-
-@app.post("/api/styles/detach-fabric")
-def api_detach_fabric(req: DetachFabricRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    slot = req.fabric_slot or 1
-    
-    c.execute("SELECT fabric_article, fabric_composition, fabric_article_2, fabric_composition_2, order_id FROM styles WHERE id = ?", (req.style_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    
-    order_id = row[4]
-    if slot == 2:
-        old_article = row[2] or ""
-        old_comp = row[3] or ""
-        c.execute("""
-        UPDATE styles 
-        SET fabric_article_2 = '', fabric_composition_2 = '', fabric_type_2 = '', updated_at = CURRENT_TIMESTAMP 
-        WHERE id = ?
-        """, (req.style_id,))
-    else:
-        old_article = row[0] or ""
-        old_comp = row[1] or ""
-        c.execute("""
-        UPDATE styles 
-        SET fabric_article = '', fabric_composition = '', fabric_type = '', updated_at = CURRENT_TIMESTAMP 
-        WHERE id = ?
-        """, (req.style_id,))
-
-    c.execute("DELETE FROM fabric_links WHERE style_id = ? AND (fabric_slot = ? OR (? = 1 AND fabric_slot IS NULL))", (req.style_id, slot, slot))
-
-    user_name = user.get("full_name") or user.get("username")
-    c.execute("""
-    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, 'fabric_detachment', ?, '', ?)
-    """, (req.style_id, order_id, user.get("user_id"), user_name, f"{old_article} ({old_comp})", f"Kumaş {slot} Ataması İptal Edildi"))
-
-    c.execute("""
-    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
-    VALUES (?, ?, 'Kumaş', 'Kumaş İptal Edildi / Kaldırıldı', ?)
-    """, (req.style_id, user_name, f"Kumaş {slot} ataması kaldırıldı. Önceki: {old_article} ({old_comp})"))
-
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": f"Kumaş {slot} ataması kaldırıldı"}
-
-# ----------------- COST CALCULATION ENDPOINTS -----------------
-
-def check_can_view_costs(user: Dict[str, Any]):
-    role = user.get("role")
-    perms = user.get("permissions") or {}
-    if role in ["superadmin", "masterdeveloper", "admin"]:
-        return True
-    if perms.get("can_view_costs"):
-        return True
-    raise HTTPException(status_code=403, detail="Maliyet verilerini görüntüleme yetkiniz bulunmamaktadır.")
-
-def check_can_edit_costs(user: Dict[str, Any]):
-    role = user.get("role")
-    perms = user.get("permissions") or {}
-    if role in ["superadmin", "masterdeveloper", "admin"]:
-        return True
-    if perms.get("can_edit_costs"):
-        return True
-    raise HTTPException(status_code=403, detail="Maliyet verilerini düzenleme yetkiniz bulunmamaktadır.")
-
-class CostSaveRequest(BaseModel):
-    cost_data: Dict[str, Any]
-    apply_to_unit_price: bool = False
-    calculated_price: Optional[float] = None
-    currency: Optional[str] = None
-
-@app.get("/api/styles/{style_id}/cost")
-def api_get_style_cost(style_id: int, user: Dict[str, Any] = Depends(require_user)):
-    check_can_view_costs(user)
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT cost_data_json, unit_price, currency FROM styles WHERE id = ?", (style_id,))
-    row = c.fetchone()
-    conn.close()
-    if not row:
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    cost_json = row[0]
-    data = json.loads(cost_json) if cost_json else None
-    return {
-        "status": "success",
-        "cost_data": data,
-        "unit_price": row[1],
-        "currency": row[2] or "€"
-    }
-
-@app.post("/api/styles/{style_id}/cost")
-def api_save_style_cost(style_id: int, req: CostSaveRequest, user: Dict[str, Any] = Depends(require_user)):
-    check_can_edit_costs(user)
-    conn = get_db()
-    c = conn.cursor()
-    user_name = user.get("full_name") or user.get("username")
-
-    c.execute("SELECT order_id, unit_price, currency FROM styles WHERE id = ?", (style_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    order_id, old_price, cur_currency = row[0], row[1], row[2]
-
-    cost_str = json.dumps(req.cost_data)
-    
-    if req.apply_to_unit_price and req.calculated_price is not None:
-        c.execute("UPDATE styles SET cost_data_json = ?, unit_price = ?, currency = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                  (cost_str, req.calculated_price, req.currency or cur_currency, style_id))
-    else:
-        c.execute("UPDATE styles SET cost_data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (cost_str, style_id))
-
-    c.execute("""
-    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, 'cost_calculation', '', ?, 'Maliyet Hesaplama Verileri Güncellendi')
-    """, (style_id, order_id, user.get("user_id"), user_name, str(req.calculated_price or '')))
-
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": "Maliyet başarıyla kaydedildi"}
-
-class ActualCostSaveRequest(BaseModel):
-    actual_cost_data: Dict[str, Any]
-    calculated_total: Optional[float] = None
-    currency: Optional[str] = "TL"
-
-@app.post("/api/styles/{style_id}/actual-cost")
-def api_save_style_actual_cost(style_id: int, req: ActualCostSaveRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    user_name = user.get("full_name") or user.get("username")
-
-    c.execute("SELECT order_id FROM styles WHERE id = ?", (style_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Model bulunamadı.")
-    order_id = row[0]
-
-    cost_str = json.dumps(req.actual_cost_data)
-    c.execute("UPDATE styles SET actual_cost_data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (cost_str, style_id))
-
-    c.execute("""
-    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-    VALUES (?, ?, ?, ?, 'actual_cost', '', ?, 'Gerçekleşen Maliyet & Fatura Verileri Kaydedildi')
-    """, (style_id, order_id, user.get("user_id"), user_name, str(req.calculated_total or '')))
-
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": "Gerçekleşen maliyet ve fatura verileri başarıyla kaydedildi."}
-
-# ----------------- FREE COST STUDIES (SERBEST FİYAT ÇALIŞMALARI) -----------------
-
-class FreeCostStudySaveRequest(BaseModel):
-    season: Optional[str] = ""
-    customer_name: Optional[str] = ""
-    brand: Optional[str] = ""
-    model_no: Optional[str] = ""
-    color: Optional[str] = ""
-    fabric_supplier: Optional[str] = ""
-    fabric_name: Optional[str] = ""
-    fabric_code: Optional[str] = ""
-    fabric_color: Optional[str] = ""
-    fabric_width: Optional[str] = ""
-    cost_data: Dict[str, Any] = {}
-    kumas_total_tl: Optional[float] = 0.0
-    imalat_total_tl: Optional[float] = 0.0
-    unit_cost_tl: Optional[float] = 0.0
-    unit_price_target: Optional[float] = 0.0
-    target_currency: Optional[str] = "EUR"
-
-@app.get("/api/free-cost-studies")
-def api_get_free_cost_studies(q: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    
-    if q and q.strip():
-        term = f"%{q.strip().lower()}%"
-        c.execute("""
-        SELECT * FROM free_cost_studies
-        WHERE (company_id = ? OR company_id IS NULL)
-          AND (LOWER(season) LIKE ? OR LOWER(customer_name) LIKE ? OR LOWER(brand) LIKE ? OR LOWER(model_no) LIKE ? OR LOWER(color) LIKE ? OR LOWER(fabric_name) LIKE ? OR LOWER(fabric_supplier) LIKE ?)
-        ORDER BY id DESC
-        """, (company_id, term, term, term, term, term, term, term))
-    else:
-        c.execute("""
-        SELECT * FROM free_cost_studies
-        WHERE (company_id = ? OR company_id IS NULL)
-        ORDER BY id DESC
-        """, (company_id,))
-    
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    
-    for r in rows:
-        try:
-            r["cost_data"] = json.loads(r.get("cost_data_json") or "{}")
-        except:
-            r["cost_data"] = {}
-            
-    return {"status": "success", "studies": rows}
-
-@app.post("/api/free-cost-studies")
-def api_create_free_cost_study(req: FreeCostStudySaveRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    user_name = user.get("full_name") or user.get("username") or "Kullanıcı"
-    cost_str = json.dumps(req.cost_data)
-
-    c.execute("""
-    INSERT INTO free_cost_studies (
-        company_id, season, customer_name, brand, model_no, color,
-        fabric_supplier, fabric_name, fabric_code, fabric_color, fabric_width,
-        cost_data_json, kumas_total_tl, imalat_total_tl, unit_cost_tl, unit_price_target,
-        target_currency, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    """, (
-        company_id, req.season or "", req.customer_name or "", req.brand or "", req.model_no or "", req.color or "",
-        req.fabric_supplier or "", req.fabric_name or "", req.fabric_code or "", req.fabric_color or "", req.fabric_width or "",
-        cost_str, req.kumas_total_tl or 0.0, req.imalat_total_tl or 0.0, req.unit_cost_tl or 0.0, req.unit_price_target or 0.0,
-        req.target_currency or "EUR", user_name
-    ))
-    new_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": "Serbest maliyet çalışması başarıyla kaydedildi.", "id": new_id}
-
-@app.get("/api/free-cost-studies/export-list-excel")
-def api_export_free_cost_list_excel(q: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-
-    if q and q.strip():
-        term = f"%{q.strip().lower()}%"
-        c.execute("""
-        SELECT * FROM free_cost_studies
-        WHERE (company_id = ? OR company_id IS NULL)
-          AND (LOWER(season) LIKE ? OR LOWER(customer_name) LIKE ? OR LOWER(brand) LIKE ? OR LOWER(model_no) LIKE ? OR LOWER(color) LIKE ? OR LOWER(fabric_name) LIKE ? OR LOWER(fabric_supplier) LIKE ?)
-        ORDER BY id DESC
-        """, (company_id, term, term, term, term, term, term, term))
-    else:
-        c.execute("""
-        SELECT * FROM free_cost_studies
-        WHERE (company_id = ? OR company_id IS NULL)
-        ORDER BY id DESC
-        """, (company_id,))
-
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Serbest Maliyet Listesi"
-    ws.views.sheetView[0].showGridLines = True
-
-    # Stiller
-    f_title = Font(name="Segoe UI", size=13, bold=True, color="FFFFFF")
-    f_th = Font(name="Segoe UI", size=10, bold=True, color="000000")
-    f_td = Font(name="Segoe UI", size=9, color="1E293B")
-    f_td_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
-    f_theme = Font(name="Segoe UI", size=9, bold=True, color="0284C7")
-    f_green = Font(name="Segoe UI", size=10, bold=True, color="15803D")
-
-    fill_banner = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    fill_th = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-
-    bd_thin = Side(style="thin", color="CBD5E1")
-    cell_border = Border(left=bd_thin, right=bd_thin, top=bd_thin, bottom=bd_thin)
-
-    # Başlık Banner
-    ws.merge_cells("A1:Q1")
-    banner_cell = ws["A1"]
-    banner_cell.value = "TEXFLOW  |  SERBEST FİYAT ÇALIŞMALARI LİSTESİ"
-    banner_cell.font = f_title
-    banner_cell.fill = fill_banner
-    banner_cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 36
-
-    headers = [
-        ("No", 8),
-        ("Sezon", 12),
-        ("Müşteri", 20),
-        ("Marka", 16),
-        ("Model No", 16),
-        ("Renk", 14),
-        ("Kumaşçı", 18),
-        ("Kalite Adı", 20),
-        ("Kalite Kodu", 15),
-        ("Kumaş Rengi", 14),
-        ("Kumaş Eni", 12),
-        ("Kumaş Maliyeti (₺)", 18),
-        ("İmalat & Aks. (₺)", 18),
-        ("Birim Maliyet (₺)", 18),
-        ("Birim Satış Fiyatı", 18),
-        ("Para Birimi", 12),
-        ("Tarih", 14)
-    ]
-
-    ws.row_dimensions[2].height = 24
-    fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    f_th_yellow = Font(name="Segoe UI", size=10, bold=True, color="000000")
-    for col_idx, (h_text, width) in enumerate(headers, start=1):
-        cell = ws.cell(row=2, column=col_idx, value=h_text)
-        cell.font = f_th_yellow
-        cell.fill = fill_yellow
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-        cell.border = cell_border
-        col_letter = get_column_letter(col_idx)
-        ws.column_dimensions[col_letter].width = width
-
-    curr_row = 3
-    num_fmt_curr = "₺ #,##0.00"
-    num_fmt_2dec = "#,##0.00"
-
-    for idx, r in enumerate(rows):
-        r_fill = fill_zebra if idx % 2 == 1 else None
-        ws.row_dimensions[curr_row].height = 20
-
-        vals = [
-            (r.get("id"), "center", f_td),
-            (r.get("season") or "-", "center", f_td),
-            (r.get("customer_name") or "-", "left", f_theme),
-            (r.get("brand") or "-", "left", f_td),
-            (r.get("model_no") or "-", "left", f_td_bold),
-            (r.get("color") or "-", "left", f_td),
-            (r.get("fabric_supplier") or "-", "left", f_td),
-            (r.get("fabric_name") or "-", "left", f_td),
-            (r.get("fabric_code") or "-", "left", f_td),
-            (r.get("fabric_color") or "-", "left", f_td),
-            (r.get("fabric_width") or "-", "center", f_td),
-            (float(r.get("kumas_total_tl") or 0.0), "right", f_td, num_fmt_curr),
-            (float(r.get("imalat_total_tl") or 0.0), "right", f_td, num_fmt_curr),
-            (float(r.get("unit_cost_tl") or 0.0), "right", f_td_bold, num_fmt_curr),
-            (float(r.get("unit_price_target") or 0.0), "right", f_green, num_fmt_2dec),
-            (r.get("target_currency") or "EUR", "center", f_td_bold),
-            (str(r.get("created_at") or "")[:10], "center", f_td)
-        ]
-
-        for col_idx, item in enumerate(vals, start=1):
-            val = item[0]
-            align = item[1]
-            font = item[2]
-            c = ws.cell(row=curr_row, column=col_idx, value=val)
-            c.font = font
-            c.alignment = Alignment(horizontal=align, vertical="center")
-            c.border = cell_border
-            if len(item) > 3 and item[3]:
-                c.number_format = item[3]
-            if r_fill:
-                c.fill = r_fill
-
-        curr_row += 1
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    val = buf.getvalue()
-    dStr = datetime.now().strftime('%Y%m%d')
-    filename = f"Serbest_Maliyet_Listesi_{dStr}.xlsx"
-    headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "Content-Length": str(len(val))
-    }
-    return Response(
-        content=val,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers
-    )
-
-@app.post("/api/free-cost-studies/export-study-excel")
-def api_export_free_cost_study_excel(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
-    header = payload.get("header") or {}
-    form = payload.get("form") or {}
-    rates = form.get("rates") or {}
-    cur_rates = form.get("exchangeRates") or {"EUR": 56.0, "USD": 48.5, "GBP": 65.5, "TL": 1.0}
-    target_curr = form.get("targetCurrency") or "EUR"
-    totals = form.get("totals") or {}
-    fabrics = form.get("fabrics") or []
-    items = form.get("items") or []
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Maliyet Tablosu"
-    ws.views.sheetView[0].showGridLines = True
-
-    # Font ve Dolgu Stilleri
-    f_banner = Font(name="Segoe UI", size=13, bold=True, color="FFFFFF")
-    f_sec = Font(name="Segoe UI", size=10, bold=True, color="000000")
-    f_lbl = Font(name="Segoe UI", size=9, bold=True, color="475569")
-    f_val = Font(name="Segoe UI", size=9, bold=False, color="0F172A")
-    f_th = Font(name="Segoe UI", size=9, bold=True, color="000000")
-    f_td = Font(name="Segoe UI", size=9, color="1E293B")
-    f_td_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
-    f_total_lbl = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
-    f_grand = Font(name="Segoe UI", size=11, bold=True, color="15803D")
-
-    fill_banner = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    fill_sec = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid") # #FFFF00 Sarı Başlık
-    fill_subth = PatternFill(start_color="FEF9C3", end_color="FEF9C3", fill_type="solid") # #FEF9C3 Açık Sarı Tablo Başlığı
-    fill_meta = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-    fill_tot = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid") # Sarımsı Ara Toplam
-    fill_grand = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
-
-    bd_thin = Side(style="thin", color="CBD5E1")
-    bd_thick = Side(style="medium", color="475569")
-    bd_double = Side(style="double", color="1E293B")
-    cell_border = Border(left=bd_thin, right=bd_thin, top=bd_thin, bottom=bd_thin)
-    tot_border = Border(left=bd_thin, right=bd_thin, top=bd_thick, bottom=bd_double)
-
-    # 1. Başlık
-    ws.merge_cells("A1:G1")
-    b_cell = ws["A1"]
-    b_cell.value = "TEXFLOW  |  SERBEST FİYAT & BİRİM MALİYET HESAPLAMA FORMU"
-    b_cell.font = f_banner
-    b_cell.fill = fill_banner
-    b_cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 32
-
-    # 2. Model & Kumaş Künyesi
-    ws.merge_cells("A2:G2")
-    s1 = ws["A2"]
-    s1.value = "MODEL VE KUMAŞ KÜNYESİ"
-    s1.font = f_sec
-    s1.fill = fill_sec
-    s1.alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[2].height = 20
-
-    meta_pairs = [
-        [("Müşteri", header.get("customer_name") or "-"), ("Marka", header.get("brand") or "-"), ("Sezon", header.get("season") or "-")],
-        [("Model No", header.get("model_no") or "-"), ("Model Rengi", header.get("color") or "-"), ("Döviz Kurları", f"EUR: {cur_rates.get('EUR', 56.0)} | USD: {cur_rates.get('USD', 48.5)} | GBP: {cur_rates.get('GBP', 65.5)}")],
-        [("Kumaşçı", header.get("fabric_supplier") or "-"), ("Kalite Adı", header.get("fabric_name") or "-"), ("Kalite Kodu", header.get("fabric_code") or "-")],
-        [("Kumaş Rengi", header.get("fabric_color") or "-"), ("Kumaş Eni", header.get("fabric_width") or "-"), ("Tarih", form.get("rates_snapshot_date") or datetime.now().strftime('%d.%m.%Y'))]
-    ]
-
-    r_idx = 3
-    for pair_row in meta_pairs:
-        ws.row_dimensions[r_idx].height = 19
-        c_lbl1 = ws.cell(row=r_idx, column=1, value=pair_row[0][0])
-        c_lbl1.font = f_lbl
-        c_lbl1.fill = fill_meta
-        c_lbl1.border = cell_border
-        
-        c_val1 = ws.cell(row=r_idx, column=2, value=pair_row[0][1])
-        c_val1.font = f_val
-        c_val1.border = cell_border
-
-        c_lbl2 = ws.cell(row=r_idx, column=3, value=pair_row[1][0])
-        c_lbl2.font = f_lbl
-        c_lbl2.fill = fill_meta
-        c_lbl2.border = cell_border
-
-        c_val2 = ws.cell(row=r_idx, column=4, value=pair_row[1][1])
-        c_val2.font = f_val
-        c_val2.border = cell_border
-
-        c_lbl3 = ws.cell(row=r_idx, column=5, value=pair_row[2][0])
-        c_lbl3.font = f_lbl
-        c_lbl3.fill = fill_meta
-        c_lbl3.border = cell_border
-
-        ws.merge_cells(start_row=r_idx, start_column=6, end_row=r_idx, end_column=7)
-        c_val3 = ws.cell(row=r_idx, column=6, value=pair_row[2][1])
-        c_val3.font = f_val
-        c_val3.border = cell_border
-        ws.cell(row=r_idx, column=7).border = cell_border
-        r_idx += 1
-
-    r_idx += 1
-
-    # 3. Kumaş Maliyetleri Tablosu
-    ws.merge_cells(f"A{r_idx}:G{r_idx}")
-    s2 = ws[f"A{r_idx}"]
-    s2.value = f"1. KUMAŞ MALİYETLERİ ({len(fabrics)} Kumaş)"
-    s2.font = f_sec
-    s2.fill = fill_sec
-    s2.alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[r_idx].height = 20
-    r_idx += 1
-
-    fab_cols = [
-        ("Kumaş Tanımı", 26),
-        ("Kalite / Kod", 20),
-        ("Birim", 10),
-        ("Sarfiyat (M/Gr)", 15),
-        ("Birim Fiyat", 14),
-        ("Fire %", 10),
-        ("Tutar (₺)", 16)
-    ]
-    ws.row_dimensions[r_idx].height = 20
-    for col_i, (c_name, c_w) in enumerate(fab_cols, start=1):
-        c = ws.cell(row=r_idx, column=col_i, value=c_name)
-        c.font = f_th
-        c.fill = fill_subth
-        c.alignment = Alignment(horizontal="center" if col_i in (3,6) else ("right" if col_i in (4,5,7) else "left"), vertical="center")
-        c.border = cell_border
-    r_idx += 1
-
-    kumas_subtot = 0.0
-    for fb in fabrics:
-        ws.row_dimensions[r_idx].height = 19
-        title = fb.get("title") or "Kumaş"
-        desc = f"{fb.get('quality') or ''} {fb.get('code') or ''}".strip() or "-"
-        ut = fb.get("unit_type") or "M"
-        sarf = float(fb.get("grams") or 0.0) if ut == "KG" else float(fb.get("meters") or 0.0)
-        pr = float(fb.get("price") or 0.0)
-        curr = fb.get("currency") or "EUR"
-        wastage = float(fb.get("wastage_percent") or 0.0)
-        tot_tl = float(fb.get("total_tl") or 0.0)
-        kumas_subtot += tot_tl
-
-        ws.cell(row=r_idx, column=1, value=title).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=r_idx, column=2, value=desc).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=r_idx, column=3, value=ut).alignment = Alignment(horizontal="center", vertical="center")
-        
-        c4 = ws.cell(row=r_idx, column=4, value=sarf)
-        c4.number_format = "#,##0.00"
-        c4.alignment = Alignment(horizontal="right", vertical="center")
-
-        c5 = ws.cell(row=r_idx, column=5, value=f"{pr:.2f} {curr}")
-        c5.alignment = Alignment(horizontal="right", vertical="center")
-
-        c6 = ws.cell(row=r_idx, column=6, value=f"%{wastage:.0f}")
-        c6.alignment = Alignment(horizontal="center", vertical="center")
-
-        c7 = ws.cell(row=r_idx, column=7, value=tot_tl)
-        c7.number_format = "₺ #,##0.00"
-        c7.alignment = Alignment(horizontal="right", vertical="center")
-        c7.font = f_td_bold
-
-        for col_i in range(1, 8):
-            c_item = ws.cell(row=r_idx, column=col_i)
-            c_item.border = cell_border
-            if col_i != 7:
-                c_item.font = f_td
-        r_idx += 1
-
-    # Kumaş Ara Toplam
-    ws.row_dimensions[r_idx].height = 20
-    ws.merge_cells(start_row=r_idx, start_column=1, end_row=r_idx, end_column=6)
-    c_tot1 = ws.cell(row=r_idx, column=1, value="KUMAŞ ARA TOPLAMI (₺):")
-    c_tot1.font = f_total_lbl
-    c_tot1.alignment = Alignment(horizontal="right", vertical="center")
-    c_tot1.fill = fill_tot
-    c_tot1_v = ws.cell(row=r_idx, column=7, value=totals.get("toplam_kumas_tl") or kumas_subtot)
-    c_tot1_v.font = f_td_bold
-    c_tot1_v.number_format = "₺ #,##0.00"
-    c_tot1_v.alignment = Alignment(horizontal="right", vertical="center")
-    c_tot1_v.fill = fill_tot
-    for col_i in range(1, 8):
-        ws.cell(row=r_idx, column=col_i).border = tot_border
-    r_idx += 2
-
-    # 4. İmalat, Aksesuar ve Operasyon Kalemleri
-    ws.merge_cells(f"A{r_idx}:G{r_idx}")
-    s3 = ws[f"A{r_idx}"]
-    s3.value = f"2. İMALAT, AKSESUAR VE OPERASYON KALEMLERİ ({len(items)} Kalem)"
-    s3.font = f_sec
-    s3.fill = fill_sec
-    s3.alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[r_idx].height = 20
-    r_idx += 1
-
-    item_cols = [
-        ("Kalem Adı", 26),
-        ("Miktar", 12),
-        ("Birim Fiyat", 14),
-        ("Para Birimi", 12),
-        ("Açıklama / Formül", 24),
-        ("Kur", 10),
-        ("Tutar (₺)", 16)
-    ]
-    ws.row_dimensions[r_idx].height = 20
-    for col_i, (c_name, c_w) in enumerate(item_cols, start=1):
-        c = ws.cell(row=r_idx, column=col_i, value=c_name)
-        c.font = f_th
-        c.fill = fill_subth
-        c.alignment = Alignment(horizontal="center" if col_i in (2,4,6) else ("right" if col_i in (3,7) else "left"), vertical="center")
-        c.border = cell_border
-    r_idx += 1
-
-    imalat_subtot = 0.0
-    for it in items:
-        ws.row_dimensions[r_idx].height = 19
-        name = it.get("name") or "Kalem"
-        qty = float(it.get("qty") or 1.0)
-        pr = float(it.get("price") or 0.0)
-        curr = it.get("currency") or "TL"
-        note = it.get("note") or ""
-        tot_tl = float(it.get("total_tl") or 0.0)
-        imalat_subtot += tot_tl
-
-        ws.cell(row=r_idx, column=1, value=name).alignment = Alignment(horizontal="left", vertical="center")
-        c_q = ws.cell(row=r_idx, column=2, value=qty)
-        c_q.alignment = Alignment(horizontal="center", vertical="center")
-        c_q.number_format = "#,##0.00"
-
-        c_p = ws.cell(row=r_idx, column=3, value=pr)
-        c_p.alignment = Alignment(horizontal="right", vertical="center")
-        c_p.number_format = "#,##0.00"
-
-        ws.cell(row=r_idx, column=4, value=curr).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=r_idx, column=5, value=note).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=r_idx, column=6, value=cur_rates.get(curr, 1.0)).alignment = Alignment(horizontal="center", vertical="center")
-
-        c_tot = ws.cell(row=r_idx, column=7, value=tot_tl)
-        c_tot.number_format = "₺ #,##0.00"
-        c_tot.alignment = Alignment(horizontal="right", vertical="center")
-        c_tot.font = f_td_bold
-
-        for col_i in range(1, 8):
-            c_item = ws.cell(row=r_idx, column=col_i)
-            c_item.border = cell_border
-            if col_i != 7:
-                c_item.font = f_td
-        r_idx += 1
-
-    # İmalat Ara Toplam & Fire
-    ws.row_dimensions[r_idx].height = 20
-    ws.merge_cells(start_row=r_idx, start_column=1, end_row=r_idx, end_column=6)
-    c_tot2 = ws.cell(row=r_idx, column=1, value=f"İMALAT & AKSESUAR TOPLAMI (+%{rates.get('imalat_fire', 5)} Fire Dahil) (₺):")
-    c_tot2.font = f_total_lbl
-    c_tot2.alignment = Alignment(horizontal="right", vertical="center")
-    c_tot2.fill = fill_tot
-    c_tot2_v = ws.cell(row=r_idx, column=7, value=totals.get("toplam_imalat_tl") or imalat_subtot)
-    c_tot2_v.font = f_td_bold
-    c_tot2_v.number_format = "₺ #,##0.00"
-    c_tot2_v.alignment = Alignment(horizontal="right", vertical="center")
-    c_tot2_v.fill = fill_tot
-    for col_i in range(1, 8):
-        ws.cell(row=r_idx, column=col_i).border = tot_border
-    r_idx += 2
-
-    # 5. Maliyet, Kâr, Komisyon ve Nihai Satış Fiyatı Matrisi
-    ws.merge_cells(f"A{r_idx}:G{r_idx}")
-    s4 = ws[f"A{r_idx}"]
-    s4.value = "3. ORANLAR, KÂR MARJI, KOMİSYON VE SATIŞ FİYATI"
-    s4.font = f_sec
-    s4.fill = fill_sec
-    s4.alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[r_idx].height = 20
-    r_idx += 1
-
-    summary_rows = [
-        ("Maliyet 2 (Kumaş + Net İmalat)", totals.get("maliyet_2_tl") or 0.0, totals.get("maliyet_2_doviz") or 0.0),
-        (f"KDV (+%{rates.get('kdv', 10)})", totals.get("tkdv_tl") or 0.0, totals.get("tkdv_doviz") or 0.0),
-        ("Maliyet 1 (Maliyet 2 + KDV)", totals.get("maliyet_1_tl") or 0.0, totals.get("maliyet_1_doviz") or 0.0),
-        (f"Genel Gider (+%{rates.get('gg', 15)})", totals.get("gg_tl") or 0.0, totals.get("gg_doviz") or 0.0),
-        (f"Kâr Marjı / MUP (+%{rates.get('mup', 15)})", totals.get("mup_tl") or 0.0, totals.get("mup_doviz") or 0.0),
-        (f"Komisyon (+%{rates.get('komis', 0)})", totals.get("komis_tl") or 0.0, totals.get("komis_doviz") or 0.0),
-        ("BİRİM SATIŞ FİYATI", totals.get("toplam_satis_tl") or 0.0, totals.get("toplam_satis_doviz") or 0.0)
-    ]
-
-    for idx, (label, tl_val, doviz_val) in enumerate(summary_rows):
-        is_grand = idx == len(summary_rows) - 1
-        ws.row_dimensions[r_idx].height = 24 if is_grand else 20
-        ws.merge_cells(start_row=r_idx, start_column=1, end_row=r_idx, end_column=4)
-        c_l = ws.cell(row=r_idx, column=1, value=label)
-        c_l.font = f_grand if is_grand else f_total_lbl
-        c_l.alignment = Alignment(horizontal="right", vertical="center")
-        if is_grand:
-            c_l.fill = fill_grand
-
-        ws.cell(row=r_idx, column=5, value="TL:").alignment = Alignment(horizontal="right", vertical="center")
-        c_tl = ws.cell(row=r_idx, column=6, value=tl_val)
-        c_tl.number_format = "₺ #,##0.00"
-        c_tl.alignment = Alignment(horizontal="right", vertical="center")
-        c_tl.font = f_grand if is_grand else f_td_bold
-        if is_grand:
-            c_tl.fill = fill_grand
-
-        c_dov = ws.cell(row=r_idx, column=7, value=doviz_val)
-        c_dov.number_format = f"[{target_curr}] #,##0.00" if target_curr != "TL" else "₺ #,##0.00"
-        c_dov.alignment = Alignment(horizontal="right", vertical="center")
-        c_dov.font = f_grand if is_grand else f_td_bold
-        if is_grand:
-            c_dov.fill = fill_grand
-
-        for col_i in range(1, 8):
-            ws.cell(row=r_idx, column=col_i).border = tot_border if is_grand else cell_border
-
-        r_idx += 1
-
-    # Sütun Genişlikleri Ayarı
-    for col_i, (c_name, c_w) in enumerate(fab_cols, start=1):
-        col_letter = get_column_letter(col_i)
-        ws.column_dimensions[col_letter].width = max(c_w, 16)
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    val = buf.getvalue()
-    m_no = (header.get("model_no") or "Model").replace(" ", "_")
-    c_name = (header.get("customer_name") or "Musteri").replace(" ", "_")
-    dStr = datetime.now().strftime('%Y%m%d')
-    filename = f"Maliyet_Tablosu_{c_name}_{m_no}_{dStr}.xlsx"
-    headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "Content-Length": str(len(val))
-    }
-    return Response(
-        content=val,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers
-    )
-
-@app.get("/api/free-cost-studies/{study_id}")
-def api_get_free_cost_study(study_id: int, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM free_cost_studies WHERE id = ?", (study_id,))
-    row = c.fetchone()
-    conn.close()
-    if not row:
-        raise HTTPException(status_code=404, detail="Maliyet çalışması bulunamadı.")
-    res = dict(row)
-    try:
-        res["cost_data"] = json.loads(res.get("cost_data_json") or "{}")
-    except:
-        res["cost_data"] = {}
-    return {"status": "success", "study": res}
-
-@app.put("/api/free-cost-studies/{study_id}")
-def api_update_free_cost_study(study_id: int, req: FreeCostStudySaveRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT id FROM free_cost_studies WHERE id = ?", (study_id,))
-    if not c.fetchone():
-        conn.close()
-        raise HTTPException(status_code=404, detail="Maliyet çalışması bulunamadı.")
-    
-    cost_str = json.dumps(req.cost_data)
-    c.execute("""
-    UPDATE free_cost_studies SET
-        season = ?, customer_name = ?, brand = ?, model_no = ?, color = ?,
-        fabric_supplier = ?, fabric_name = ?, fabric_code = ?, fabric_color = ?, fabric_width = ?,
-        cost_data_json = ?, kumas_total_tl = ?, imalat_total_tl = ?, unit_cost_tl = ?, unit_price_target = ?,
-        target_currency = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-    """, (
-        req.season or "", req.customer_name or "", req.brand or "", req.model_no or "", req.color or "",
-        req.fabric_supplier or "", req.fabric_name or "", req.fabric_code or "", req.fabric_color or "", req.fabric_width or "",
-        cost_str, req.kumas_total_tl or 0.0, req.imalat_total_tl or 0.0, req.unit_cost_tl or 0.0, req.unit_price_target or 0.0,
-        req.target_currency or "EUR", study_id
-    ))
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": "Serbest maliyet çalışması başarıyla güncellendi."}
-
-@app.delete("/api/free-cost-studies/{study_id}")
-def api_delete_free_cost_study(study_id: int, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("DELETE FROM free_cost_studies WHERE id = ?", (study_id,))
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": "Maliyet çalışması silindi."}
-# ----------------- AUDIT LOGS -----------------
-
-
-
-@app.get("/api/audit-logs")
-def api_get_audit_logs(style_id: Optional[int] = Query(None), limit: int = 100, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-
-    if style_id:
-        c.execute("""
-        SELECT a.*, s.style_no, s.color_name, o.po_number, o.customer_name, o.brand
-        FROM audit_logs a
-        JOIN styles s ON a.style_id = s.id
-        JOIN orders o ON s.order_id = o.id
-        WHERE a.style_id = ?
-        ORDER BY a.id DESC LIMIT ?
-        """, (style_id, limit))
-    else:
-        c.execute("""
-        SELECT a.*, s.style_no, s.color_name, o.po_number, o.customer_name, o.brand
-        FROM audit_logs a
-        JOIN styles s ON a.style_id = s.id
-        JOIN orders o ON s.order_id = o.id
-        WHERE s.company_id = ?
-        ORDER BY a.id DESC LIMIT ?
-        """, (company_id, limit))
-
-    logs = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return logs
-
-# ----------------- STATUS & MESSAGE LOGS -----------------
-
-@app.get("/api/styles/{style_id}/logs")
-def api_get_style_logs(style_id: int, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM production_status_logs WHERE style_id = ? ORDER BY id DESC", (style_id,))
-    logs = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return logs
-
-class NewLogRequest(BaseModel):
-    category: str = "Genel"
-    title: Optional[str] = "Durum Notu"
-    message: str
-
-@app.post("/api/styles/{style_id}/logs")
-def api_add_style_log(style_id: int, req: NewLogRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("""
-    INSERT INTO production_status_logs (style_id, user_id, user_name, category, title, message)
-    VALUES (?, ?, ?, ?, ?, ?)
-    """, (style_id, user.get("user_id"), user.get("full_name") or user.get("username"), req.category, req.title, req.message))
-    conn.commit()
-    conn.close()
-    return {"status": "success", "message": "Not eklendi"}
-
-# ----------------- UPLOAD & PARSER -----------------
-
-@app.post("/api/upload/parse-preview")
-async def api_upload_and_parse(request: Request, user: Dict[str, Any] = Depends(require_user)):
-    form = await request.form()
-    upload_list = []
-    
-    # Check 'files' first, then 'file' without combining both for the same upload
-    files_list = form.getlist("files")
-    if files_list:
-        upload_list = files_list
-    else:
-        file_single = form.getlist("file")
-        if file_single:
-            upload_list = file_single
-        else:
-            for v in form.values():
-                if hasattr(v, "filename") and v.filename:
-                    upload_list.append(v)
-
-
-    if not upload_list:
-        raise HTTPException(status_code=400, detail="Lütfen en az bir sipariş dosyası seçin.")
-
-    combined_data = []
-    file_info = []
-    first_type = "MULTI_UPLOAD"
-
-    for f_obj in upload_list:
-        if not hasattr(f_obj, "filename") or not f_obj.filename:
-            continue
-        saved_path = UPLOADS_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{f_obj.filename}"
-        with open(saved_path, "wb") as buffer:
-            shutil.copyfileobj(f_obj.file, buffer)
-        
-        try:
-            parsed_result = OrderParserEngine.auto_detect_and_parse(str(saved_path))
-            first_type = parsed_result.get("type", "UPLOAD")
-            items = parsed_result.get("data", [])
-            for it in items:
-                it["source_file"] = f_obj.filename
-                combined_data.append(it)
-            file_info.append(f_obj.filename)
-        except Exception as e:
-            print(f"Parsing error for {f_obj.filename}: {e}")
-
-    if not combined_data and upload_list:
-        raise HTTPException(status_code=400, detail="Seçilen dosyalardan sipariş ayrıştırılamadı.")
-
-    return {
-        "type": "MULTI_UPLOAD" if len(file_info) > 1 else first_type,
-        "count": len(combined_data),
-        "data": combined_data,
-        "filename": ", ".join(file_info),
-        "files_count": len(file_info)
-    }
-
-
-
-class ConfirmImportRequest(BaseModel):
-    file_path: Optional[str] = ""
-    filename: Optional[str] = ""
-    source_type: Optional[str] = "MULTI_UPLOAD"
-    items: List[Dict[str, Any]]
-
-
-@app.post("/api/upload/confirm-import")
-def api_confirm_import(req: ConfirmImportRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    
-    inserted_orders = 0
-    inserted_styles = 0
-
-    try:
-        # Group items by PO Number to attach to unique order parents or create individual ones
-        po_groups: Dict[str, List[Any]] = {}
-        for item in req.items:
-            po_num = str(item.get("po_number") or f"PO-{datetime.now().strftime('%Y%m%d')}").strip()
-            po_groups.setdefault(po_num, []).append(item)
-
-        for po_num, items_list in reversed(list(po_groups.items())):
-            first_item = items_list[0]
-            cust_name = first_item.get("customer_name") or "Müşteri"
-            brand = first_item.get("brand") or "Marka"
-            season = first_item.get("season") or "2026/2027"
-            order_date = first_item.get("order_date") or datetime.now().strftime("%d.%m.%Y")
-            delivery_date = first_item.get("delivery_date") or ""
-            delivery_terms = first_item.get("delivery_terms") or ""
-            payment_terms = first_item.get("payment_terms") or ""
-            currency = first_item.get("currency") or "EUR"
-
-            total_q = sum(int(it.get("total_quantity") or 0) for it in items_list)
-            total_a = sum(float(it.get("total_quantity") or 0) * float(it.get("unit_price") or 0.0) for it in items_list)
-
-            c.execute("""
-            INSERT INTO orders (
-                company_id, po_number, customer_name, brand, season, order_date, delivery_date,
-                delivery_terms, payment_terms, total_quantity, total_amount, currency, raw_file_name
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                company_id, po_num, cust_name, brand, season, order_date, delivery_date,
-                delivery_terms, payment_terms, total_q, total_a, currency, req.filename
-            ))
-            order_id = c.lastrowid
-            inserted_orders += 1
-
-            for it in items_list:
-                style_no = str(it.get("style_no") or "STYLE-01").strip()
-                desc = it.get("description") or ""
-                comp = it.get("fabric_composition") or ""
-                article = it.get("fabric_article") or ""
-                ftype = it.get("fabric_type") or ""
-                color_code = str(it.get("color_code") or "").strip()
-                raw_color_name = str(it.get("color_name") or "").strip()
-                if color_code and not raw_color_name.startswith(color_code):
-                    color_name = f"{color_code} {raw_color_name}".strip()
-                else:
-                    color_name = raw_color_name or color_code
-                price = float(it.get("unit_price") or 0.0)
-                
-                sizes_dict = it.get("size_distribution") or {}
-                # Calculate real total from sizes if present
-                if sizes_dict and any(int(v or 0) > 0 for v in sizes_dict.values()):
-                    item_qty = sum(int(v or 0) for v in sizes_dict.values())
-                else:
-                    item_qty = int(it.get("total_quantity") or 0)
-                    
-                item_amt = item_qty * price
-
-                style_brand = str(it.get("brand") or brand or "").strip()
-                style_channel = str(it.get("channel") or "").strip()
-                if not style_channel:
-                    style_channel = OrderParserEngine.clean_channel_value(it.get("notes") or it.get("comments") or "")
-
-                c.execute("""
-                INSERT INTO styles (
-                    order_id, company_id, style_no, description, fabric_composition, fabric_article,
-                    fabric_type, color_code, color_name, unit_price, total_quantity, total_amount,
-                    currency, status, fabric_order_status, last_status_updated_by, last_status_updated_at,
-                    brand, channel
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planlamada', ?, 'Sipariş Yükleme', datetime('now'), ?, ?)
-                """, (
-                    order_id, company_id, style_no, desc, comp, article,
-                    ftype, color_code, color_name, price, item_qty, item_amt,
-                    currency, it.get("fabric_order_status") or "",
-                    style_brand, style_channel
-                ))
-                style_id = c.lastrowid
-                inserted_styles += 1
-
-                for idx, (sz_name, sz_qty) in enumerate(sizes_dict.items()):
-                    if str(sz_name).strip():
-                        c.execute("""
-                        INSERT INTO size_distributions (style_id, size_name, quantity, sort_order)
-                        VALUES (?, ?, ?, ?)
-                        """, (style_id, str(sz_name).strip(), int(sz_qty or 0), idx + 1))
-
-                for log in it.get("status_logs", []):
-                    c.execute("""
-                    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
-                    VALUES (?, ?, 'Sipariş Notu', ?, ?)
-                    """, (style_id, "Sipariş Yükleme", log.get("title") or "Not", log.get("message") or ""))
-
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(status_code=500, detail=f"Kayıt hatası: {str(e)}")
-
-    conn.close()
-    return {
-        "status": "success",
-        "message": f"{inserted_orders} Sipariş ve {inserted_styles} Model başarıyla sisteme aktarıldı."
-    }
-
-# ----------------- MANUEL SİPARİŞ / MODEL EKLEME -----------------
-
-class CreateManualStyleRequest(BaseModel):
-    customer_name: Optional[str] = ""
-    brand: Optional[str] = ""
-    channel: Optional[str] = ""
-    po_number: Optional[str] = ""
-    style_no: Optional[str] = ""
-    description: Optional[str] = ""
-    color_name: Optional[str] = ""
-    color_code: Optional[str] = ""
-    fabric_article: Optional[str] = ""
-    fabric_composition: Optional[str] = ""
-    unit_price: Optional[float] = 0.0
-    currency: Optional[str] = "EUR"
-    unit_meters: Optional[str] = ""
-    unit_grams: Optional[str] = ""
-    fabric_wastage_percent: Optional[float] = 5.0
-    fabric_ordered_meters: Optional[float] = 0.0
-    fabric_order_unit: Optional[str] = "M"
-    order_date: Optional[str] = ""
-    delivery_date: Optional[str] = ""
-    status: Optional[str] = "Planlamada"
-    size_map: Optional[Dict[str, int]] = None
-
-@app.post("/api/styles/manual-create")
-def api_create_manual_style(req: CreateManualStyleRequest, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    user_name = user.get("full_name") or user.get("username") or "Kullanıcı"
-
-    po = (req.po_number or "MANUEL-PO").strip()
-    cust = (req.customer_name or "").strip()
-    brand = (req.brand or "").strip()
-    channel = (req.channel or "").strip()
-    order_dt = req.order_date or datetime.now().strftime("%d.%m.%Y")
-    del_dt = req.delivery_date or ""
-    curr = req.currency or "EUR"
-
-    sizes_dict = req.size_map or {}
-    total_qty = sum(int(v or 0) for v in sizes_dict.values()) if sizes_dict else 0
-    unit_price = float(req.unit_price or 0.0)
-    total_amount = total_qty * unit_price
-
-    try:
-        c.execute("""
-        SELECT id FROM orders 
-        WHERE company_id = ? AND po_number = ? AND customer_name = ?
-        """, (company_id, po, cust))
-        row = c.fetchone()
-        if row:
-            order_id = row[0]
-            c.execute("""
-            UPDATE orders 
-            SET total_quantity = total_quantity + ?, total_amount = total_amount + ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """, (total_qty, total_amount, order_id))
-        else:
-            c.execute("""
-            INSERT INTO orders (
-                company_id, po_number, customer_name, brand, order_date, delivery_date,
-                total_quantity, total_amount, currency, status, raw_file_name
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Yeni', 'Manuel Giriş')
-            """, (company_id, po, cust, brand, order_dt, del_dt, total_qty, total_amount, curr))
-            order_id = c.lastrowid
-
-        style_no = (req.style_no or "STYLE-01").strip()
-        c.execute("""
-        INSERT INTO styles (
-            order_id, company_id, style_no, description, fabric_composition, fabric_article,
-            color_code, color_name, unit_price, currency, total_quantity, total_amount,
-            unit_meters, unit_grams, fabric_wastage_percent, fabric_ordered_meters, fabric_order_unit,
-            status, last_status_updated_by, last_status_updated_at, channel
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
-        """, (
-            order_id, company_id, style_no, req.description or "", req.fabric_composition or "",
-            req.fabric_article or "", req.color_code or "", req.color_name or "", unit_price, curr,
-            total_qty, total_amount, req.unit_meters or "", req.unit_grams or "",
-            req.fabric_wastage_percent if req.fabric_wastage_percent is not None else 5.0, req.fabric_ordered_meters or 0.0, req.fabric_order_unit or "M",
-            req.status or "Planlamada", user_name, channel
-        ))
-        style_id = c.lastrowid
-
-
-        for idx, (sz_name, sz_qty) in enumerate(sizes_dict.items()):
-            if str(sz_name).strip():
-                c.execute("""
-                INSERT INTO size_distributions (style_id, size_name, quantity, sort_order)
-                VALUES (?, ?, ?, ?)
-                """, (style_id, str(sz_name).strip(), int(sz_qty or 0), idx + 1))
-
-        c.execute("""
-        INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
-        VALUES (?, ?, ?, ?, 'manual_create', '', ?, 'Manuel Sipariş / Model Eklendi')
-        """, (style_id, order_id, user.get("user_id"), user_name, f"{style_no} - {req.color_name or ''} ({total_qty} Adet)"))
-
-        c.execute("""
-        INSERT INTO production_status_logs (style_id, user_name, category, title, message)
-        VALUES (?, ?, 'Sipariş Notu', 'Manuel Giriş Yapıldı', ?)
-        """, (style_id, user_name, f"Model {style_no} manuel olarak oluşturuldu."))
-
-        conn.commit()
-        conn.close()
-        return {"status": "success", "style_id": style_id, "order_id": order_id}
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(status_code=500, detail=f"Manuel sipariş kaydetme hatası: {str(e)}")
-
-
-
-# ----------------- FABRICTAG ENDPOINTS -----------------
-
-@app.get("/api/fabrictag/fabrics")
-def api_fabrictag_list(q: Optional[str] = Query(None), user: Dict[str, Any] = Depends(require_user)):
-    return FabricTagConnector.search_fabrics(q or "")
-
-class UpdateFabricReceivedRequest(BaseModel):
-    received_meters: Optional[str] = ""
-    received_date: Optional[str] = None
-
-@app.post("/api/fabrictag/fabrics/{fabric_id}/received")
-def api_fabrictag_update_received(fabric_id: int, req: UpdateFabricReceivedRequest, user: Dict[str, Any] = Depends(require_user)):
-    from datetime import datetime
-    date_str = req.received_date
-    if not date_str and req.received_meters and req.received_meters.strip():
-        date_str = datetime.now().strftime("%d.%m.%Y")
-    ok = FabricTagConnector.update_received_meters(fabric_id, req.received_meters or "", date_str)
-    if not ok:
-        raise HTTPException(status_code=500, detail="Kumaş gelen miktarı güncellenemedi.")
-    return {"status": "success", "received_meters": req.received_meters, "received_date": date_str}
-
-class AddFabricBatchRequest(BaseModel):
-    amount: str
-    date: Optional[str] = None
-    note: Optional[str] = ""
-    unit_price: Optional[str] = ""
-    currency: Optional[str] = "EUR"
-    exchange_rate: Optional[str] = ""
-    vat_rate: Optional[float] = 10.0
-
-@app.post("/api/fabrictag/fabrics/{fabric_id}/batches")
-def api_fabrictag_add_batch(fabric_id: int, req: AddFabricBatchRequest, user: Dict[str, Any] = Depends(require_user)):
-    res = FabricTagConnector.add_received_batch(
-        fabric_id, req.amount, req.date, req.note or "",
-        unit_price=req.unit_price or "",
-        currency=req.currency or "EUR",
-        exchange_rate=req.exchange_rate or "",
-        vat_rate=req.vat_rate if req.vat_rate is not None else 10.0
-    )
-    if not res:
-        raise HTTPException(status_code=500, detail="Parti eklenemedi.")
-    return {"status": "success", **res}
-
-class UpdateFabricBatchRequest(BaseModel):
-    amount: Optional[str] = None
-    date: Optional[str] = None
-    note: Optional[str] = None
-    unit_price: Optional[str] = None
-    currency: Optional[str] = None
-    exchange_rate: Optional[str] = None
-    vat_rate: Optional[float] = None
-
-@app.put("/api/fabrictag/fabrics/{fabric_id}/batches/{batch_id}")
-def api_fabrictag_update_batch(fabric_id: int, batch_id: int, req: UpdateFabricBatchRequest, user: Dict[str, Any] = Depends(require_user)):
-    res = FabricTagConnector.update_received_batch(fabric_id, batch_id, req.dict(exclude_unset=True))
-    if not res:
-        raise HTTPException(status_code=500, detail="Parti güncellenemedi.")
-    return {"status": "success", **res}
-
-@app.delete("/api/fabrictag/fabrics/{fabric_id}/batches/{batch_id}")
-def api_fabrictag_delete_batch(fabric_id: int, batch_id: int, user: Dict[str, Any] = Depends(require_user)):
-    res = FabricTagConnector.delete_received_batch(fabric_id, batch_id)
-    if not res:
-        raise HTTPException(status_code=500, detail="Parti silinemedi.")
-    return {"status": "success", **res}
-
-
-def parse_date_sort_key(dt_str: str):
-    """Robust date parsing for chronological sorting (earliest to latest)."""
-    if not dt_str:
-        return "0000-00-00 00:00"
-    s = str(dt_str).strip()
-    try:
-        # Check DD.MM.YYYY HH:MM or DD.MM.YYYY
-        if "." in s:
-            parts = s.split(" ")
-            dparts = parts[0].split(".")
-            if len(dparts) == 3:
-                day, month, year = dparts[0].zfill(2), dparts[1].zfill(2), dparts[2]
-                time_part = parts[1] if len(parts) > 1 else "00:00"
-                return f"{year}-{month}-{day} {time_part}"
-        # Check YYYY-MM-DD
-        if "-" in s:
-            return s
-    except Exception:
-        pass
-    return s
-
-
-def get_fabric_ledger_data(fabric_id: int, company_id: int = 1):
-    """Compiles chronological stock ledger with running balance, incoming purchases, and cutting consumption."""
-    ft_conn = FabricTagConnector.get_connection()
-    if not ft_conn:
-        return None
-    ft_c = ft_conn.cursor()
-    ft_c.execute("""
-        SELECT id, internal_code, company_name, quality_code, quality_name, 
-               design_code, color, width, weight, composition, received_meters, 
-               received_date, received_batches_json, barcode_or_qr
-        FROM fabrics WHERE id = ?
-    """, (fabric_id,))
-    frow = ft_c.fetchone()
-    ft_conn.close()
-    if not frow:
-        return None
-
-    fabric = dict(frow)
-    int_code = (fabric.get("internal_code") or "").strip().upper()
-    q_code = (fabric.get("quality_code") or "").strip().lower()
-
-    # 1. Gelen Kumaş Partileri
-    batches = []
-    b_json = fabric.get("received_batches_json")
-    if b_json:
-        try:
-            batches = json.loads(b_json)
-        except Exception:
-            batches = []
-    elif fabric.get("received_meters"):
-        batches = [{
-            "id": 1,
-            "amount": fabric.get("received_meters"),
-            "date": fabric.get("received_date") or "",
-            "note": "1. Giriş / Devir Stoku",
-            "unit_price": "",
-            "currency": "EUR",
-            "exchange_rate": "",
-            "vat_rate": 10.0
-        }]
-
-    movements = []
-    for b in batches:
-        try:
-            amt_raw = str(b.get("amount", 0)).replace(",", ".").replace("M", "").replace("m", "").replace("KG", "").replace("kg", "").strip()
-            amt = float(amt_raw)
-        except Exception:
-            amt = 0.0
-        if amt <= 0:
-            continue
-
-        b_id = b.get("id")
-        dt = b.get("date") or ""
-        note = b.get("note") or "Kumaş Girişi"
-        u_price_str = str(b.get("unit_price") or "").strip()
-        curr = str(b.get("currency") or "EUR").strip()
-        ex_rate_str = str(b.get("exchange_rate") or "").strip()
-        vat_r = float(b.get("vat_rate") if b.get("vat_rate") is not None else 10.0)
-
-        price_f = 0.0
-        try:
-            price_f = float(u_price_str.replace(",", ".")) if u_price_str else 0.0
-        except Exception:
-            price_f = 0.0
-
-        rate_f = 1.0
-        try:
-            if ex_rate_str:
-                rate_f = float(ex_rate_str.replace(",", "."))
-            elif curr in ["₺", "TL"]:
-                rate_f = 1.0
-        except Exception:
-            rate_f = 1.0
-
-        # Tutar formülü: Metraj * Birim Fiyat * Kur * (1 + KDV/100)
-        # Eğer kur veya fiyat girilmemişse tutar 0
-        base_amt = amt * price_f * rate_f
-        total_tl = base_amt * (1.0 + (vat_r / 100.0)) if price_f > 0 else 0.0
-
-        movements.append({
-            "type": "gelen",
-            "id": b_id,
-            "batch_id": b_id,
-            "date": dt,
-            "sort_key": parse_date_sort_key(dt),
-            "amount": amt,
-            "note": note,
-            "unit_price": u_price_str,
-            "currency": curr,
-            "exchange_rate": ex_rate_str,
-            "vat_rate": vat_r,
-            "total_amount": round(total_tl, 2)
-        })
-
-    # 2. Kesilen Kumaşlar (TexFlow styles tablosundan)
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("""
-        SELECT s.id, s.order_id, s.style_no, s.color_name, s.cut_meters, s.cutting_date,
-               s.created_at, s.fabric_article, s.fabric_article_2,
-               s.fabric_type, s.fabric_type_2,
-               o.po_number, o.customer_name, o.brand, o.order_date
-        FROM styles s
-        LEFT JOIN orders o ON s.order_id = o.id
-        WHERE s.cut_meters IS NOT NULL AND s.cut_meters != '' AND s.cut_meters != '0'
-    """)
-    all_cuts = [dict(r) for r in c.fetchall()]
-
-    # fabric_links tablosu
-    fl_map = {}
-    if all_cuts:
-        c.execute("SELECT style_id, fabrictag_id, fabric_code FROM fabric_links")
-        for fl in c.fetchall():
-            sid = fl["style_id"]
-            if sid not in fl_map:
-                fl_map[sid] = []
-            fl_map[sid].append(dict(fl))
-
-    for s in all_cuts:
-        try:
-            cut_val = float(str(s.get("cut_meters") or 0).replace(",", "."))
-        except Exception:
-            cut_val = 0.0
-        if cut_val <= 0:
-            continue
-
-        sid = s["id"]
-        links = fl_map.get(sid, [])
-        is_match = False
-
-        # 1. fabrictag_id match
-        for lk in links:
-            if lk.get("fabrictag_id") == fabric_id:
-                is_match = True
-                break
-            if int_code and str(lk.get("fabric_code") or "").strip().upper() == int_code:
-                is_match = True
-                break
-
-        # 2. internal_code in fabric fields
-        if not is_match and int_code:
-            fa1 = (s.get("fabric_article") or s.get("fabric_type") or "").upper()
-            fa2 = (s.get("fabric_article_2") or s.get("fabric_type_2") or "").upper()
-            if int_code in fa1 or int_code in fa2:
-                is_match = True
-
-        # 3. quality_code in fabric fields
-        if not is_match and q_code and len(q_code) >= 3 and q_code != "kodsuz":
-            fa1_low = (s.get("fabric_article") or s.get("fabric_type") or "").lower()
-            fa2_low = (s.get("fabric_article_2") or s.get("fabric_type_2") or "").lower()
-            if q_code in fa1_low or q_code in fa2_low:
-                is_match = True
-
-        if is_match:
-            c_date = s.get("cutting_date") or s.get("order_date") or (str(s.get("created_at") or "")[:10]) or ""
-            st_no = s.get("style_no") or ""
-            col_nm = s.get("color_name") or ""
-            po_num = s.get("po_number") or ""
-            cust_nm = s.get("customer_name") or s.get("brand") or ""
-            
-            note_parts = [f"Kesim: Model {st_no}"]
-            if col_nm:
-                note_parts.append(col_nm)
-            if po_num:
-                note_parts.append(f"PO: {po_num}")
-            if cust_nm:
-                note_parts.append(f"({cust_nm})")
-
-            movements.append({
-                "type": "kesilen",
-                "id": f"cut_{sid}",
-                "style_id": sid,
-                "date": c_date,
-                "sort_key": parse_date_sort_key(c_date),
-                "amount": cut_val,
-                "note": " - ".join(note_parts),
-                "unit_price": "",
-                "currency": "",
-                "exchange_rate": "",
-                "vat_rate": "",
-                "total_amount": 0.0
-            })
-
-    # 3. Kronolojik Sıralama: En eskiden en yeniye doğru
-    # Aynı tarihte gelenler önce, kesilenler sonra sıralansın
-    movements.sort(key=lambda m: (m["sort_key"], 0 if m["type"] == "gelen" else 1))
-
-    # 4. Yürüyen Bakiye Hesaplama
-    running_balance = 0.0
-    total_received = 0.0
-    total_cut = 0.0
-    total_spend_tl = 0.0
-
-    for m in movements:
-        if m["type"] == "gelen":
-            running_balance += m["amount"]
-            total_received += m["amount"]
-            total_spend_tl += m.get("total_amount", 0.0)
-            m["gelen"] = m["amount"]
-            m["kesilen"] = 0.0
-        else:
-            running_balance -= m["amount"]
-            total_cut += m["amount"]
-            m["gelen"] = 0.0
-            m["kesilen"] = m["amount"]
-        
-        m["balance"] = round(running_balance, 2)
-
-    return {
-        "fabric": fabric,
-        "movements": movements,
-        "summary": {
-            "total_received": round(total_received, 2),
-            "total_cut": round(total_cut, 2),
-            "remaining": round(running_balance, 2),
-            "total_spend_tl": round(total_spend_tl, 2)
-        }
-    }
-
-
-@app.get("/api/fabrictag/fabrics/{fabric_id}/ledger")
-def api_get_fabric_ledger(fabric_id: int, user: Dict[str, Any] = Depends(require_user)):
-    data = get_fabric_ledger_data(fabric_id, company_id=user.get("company_id", 1))
-    if not data:
-        raise HTTPException(status_code=404, detail="Kumaş kaydı bulunamadı.")
-    return {"status": "success", **data}
-
-
-@app.get("/api/reports/fabric-ledger-excel/{fabric_id}")
-def api_export_fabric_ledger_excel(fabric_id: int, user: Dict[str, Any] = Depends(require_user)):
-    data = get_fabric_ledger_data(fabric_id, company_id=user.get("company_id", 1))
-    if not data:
-        raise HTTPException(status_code=404, detail="Kumaş kaydı bulunamadı.")
-
-    fabric = data["fabric"]
-    movements = data["movements"]
-    summary = data["summary"]
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Stok Hareketleri"
-    ws.views.sheetView[0].showGridLines = True
-
-    # Font ve Stiller
-    f_title = Font(name="Segoe UI", size=14, bold=True, color="FFFFFF")
-    f_meta_label = Font(name="Segoe UI", size=9, bold=True, color="475569")
-    f_meta_val = Font(name="Segoe UI", size=9, bold=False, color="0F172A")
-    f_th = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
-    f_td = Font(name="Segoe UI", size=9, color="1E293B")
-    f_td_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
-    f_total = Font(name="Segoe UI", size=10, bold=True, color="0F172A")
-
-    fill_banner = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    fill_th = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
-    fill_meta = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-    fill_total = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
-
-    # KPI kutuları dolguları
-    fill_kpi_rec = PatternFill(start_color="E0F2FE", end_color="E0F2FE", fill_type="solid")   # Sky
-    fill_kpi_cut = PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid")   # Amber
-    fill_kpi_rem = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")   # Emerald
-    fill_kpi_ttr = PatternFill(start_color="EDE9FE", end_color="EDE9FE", fill_type="solid")   # Indigo
-
-    bd_thin = Side(style="thin", color="CBD5E1")
-    bd_thick = Side(style="medium", color="475569")
-    bd_double = Side(style="double", color="1E293B")
-    cell_border = Border(left=bd_thin, right=bd_thin, top=bd_thin, bottom=bd_thin)
-    total_border = Border(left=bd_thin, right=bd_thin, top=bd_thick, bottom=bd_double)
-
-    # 1. Başlık Banner (Row 2, A2:I2)
-    ws.merge_cells("A2:I2")
-    cell_b = ws["A2"]
-    cell_b.value = "TEXFLOW  |  KUMAŞ STOK HAREKETLERİ & DETAYLI EKSTRE"
-    cell_b.font = f_title
-    cell_b.fill = fill_banner
-    cell_b.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[2].height = 36
-
-    # 2. Kumaş Künyesi (Row 4-5)
-    f_code = fabric.get("internal_code") or "-"
-    f_comp_name = fabric.get("company_name") or "-"
-    f_qcode = fabric.get("quality_code") or "-"
-    f_qname = fabric.get("quality_name") or "-"
-    f_col = fabric.get("color") or "-"
-    f_des = fabric.get("design_code") or "-"
-    f_comp = fabric.get("composition") or "-"
-    f_w = fabric.get("width") or "-"
-    f_g = fabric.get("weight") or "-"
-
-    meta_line1 = f"İç Kod: {f_code}  |  Firma: {f_comp_name}  |  Kalite Kodu: {f_qcode}  |  Kalite Adı: {f_qname}"
-    meta_line2 = f"Desen: {f_des}  |  Renk: {f_col}  |  Kompozisyon: {f_comp}  |  En: {f_w}  |  Gramaj: {f_g}  |  Rapor: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-
-    ws.merge_cells("A4:I4")
-    ws["A4"].value = meta_line1
-    ws["A4"].font = f_meta_label
-    ws["A4"].fill = fill_meta
-    ws["A4"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
-
-    ws.merge_cells("A5:I5")
-    ws["A5"].value = meta_line2
-    ws["A5"].font = f_meta_val
-    ws["A5"].fill = fill_meta
-    ws["A5"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[4].height = 20
-    ws.row_dimensions[5].height = 20
-
-    # 3. KPI Özet Kutuları (Row 7)
-    # A7:B7 Toplam Gelen, C7:D7 Toplam Kesilen, E7:F7 Kalan Stok, G7:I7 Toplam Tutar
-    ws.merge_cells("A7:B7")
-    ws["A7"].value = f"Toplam Gelen: {summary['total_received']:,.2f} m".replace(",", "X").replace(".", ",").replace("X", ".")
-    ws["A7"].font = Font(name="Segoe UI", size=10, bold=True, color="0369A1")
-    ws["A7"].fill = fill_kpi_rec
-    ws["A7"].alignment = Alignment(horizontal="center", vertical="center")
-
-    ws.merge_cells("C7:D7")
-    ws["C7"].value = f"Toplam Kesilen: {summary['total_cut']:,.2f} m".replace(",", "X").replace(".", ",").replace("X", ".")
-    ws["C7"].font = Font(name="Segoe UI", size=10, bold=True, color="B45309")
-    ws["C7"].fill = fill_kpi_cut
-    ws["C7"].alignment = Alignment(horizontal="center", vertical="center")
-
-    ws.merge_cells("E7:F7")
-    ws["E7"].value = f"Kalan Stok: {summary['remaining']:,.2f} m".replace(",", "X").replace(".", ",").replace("X", ".")
-    ws["E7"].font = Font(name="Segoe UI", size=10, bold=True, color="15803D" if summary['remaining'] >= 0 else "B91C1C")
-    ws["E7"].fill = fill_kpi_rem
-    ws["E7"].alignment = Alignment(horizontal="center", vertical="center")
-
-    ws.merge_cells("G7:I7")
-    ws["G7"].value = f"Toplam Alış: ₺ {summary['total_spend_tl']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    ws["G7"].font = Font(name="Segoe UI", size=10, bold=True, color="4338CA")
-    ws["G7"].fill = fill_kpi_ttr
-    ws["G7"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[7].height = 26
-
-    # 4. Tablo Başlıkları (Row 9)
-    headers = [
-        "Tarih",
-        "Hareket Türü / Açıklama",
-        "Gelen Kumaş (m)",
-        "Kesilen Kumaş (m)",
-        "Kalan Kumaş (m)",
-        "Birim Fiyat",
-        "Döviz Kuru",
-        "KDV (%)",
-        "Tutar (₺)"
-    ]
-    for col_idx, h_text in enumerate(headers, start=1):
-        cell = ws.cell(row=9, column=col_idx, value=h_text)
-        cell.font = f_th
-        cell.fill = fill_th
-        cell.alignment = Alignment(
-            horizontal="center" if col_idx in [1, 7, 8] else ("right" if col_idx in [3, 4, 5, 6, 9] else "left"),
-            vertical="center"
-        )
-        cell.border = cell_border
-    ws.row_dimensions[9].height = 24
-
-    # 5. Hareket Satırları
-    current_row = 10
-    num_fmt_meters = "#,##0.00"
-    num_fmt_curr = "₺ #,##0.00"
-
-    for idx, m in enumerate(movements):
-        r_fill = fill_zebra if idx % 2 == 1 else None
-
-        c1 = ws.cell(row=current_row, column=1, value=m.get("date") or "-")
-        c1.alignment = Alignment(horizontal="center", vertical="center")
-
-        c2 = ws.cell(row=current_row, column=2, value=m.get("note") or "-")
-        c2.alignment = Alignment(horizontal="left", vertical="center")
-
-        # Gelen (m)
-        c3 = ws.cell(row=current_row, column=3, value=m.get("gelen", 0.0) if m.get("gelen", 0.0) > 0 else "")
-        c3.number_format = num_fmt_meters
-        c3.alignment = Alignment(horizontal="right", vertical="center")
-        if m.get("gelen", 0.0) > 0:
-            c3.font = Font(name="Segoe UI", size=9, bold=True, color="0369A1")
-
-        # Kesilen (m)
-        c4 = ws.cell(row=current_row, column=4, value=m.get("kesilen", 0.0) if m.get("kesilen", 0.0) > 0 else "")
-        c4.number_format = num_fmt_meters
-        c4.alignment = Alignment(horizontal="right", vertical="center")
-        if m.get("kesilen", 0.0) > 0:
-            c4.font = Font(name="Segoe UI", size=9, bold=True, color="B45309")
-
-        # Kalan (m)
-        c5 = ws.cell(row=current_row, column=5, value=m.get("balance", 0.0))
-        c5.number_format = num_fmt_meters
-        c5.alignment = Alignment(horizontal="right", vertical="center")
-        bal_color = "15803D" if m.get("balance", 0.0) >= 0 else "B91C1C"
-        c5.font = Font(name="Segoe UI", size=9, bold=True, color=bal_color)
-
-        # Birim Fiyat & Kur
-        p_val = m.get("unit_price")
-        p_curr = m.get("currency") or ""
-        if p_val:
-            try:
-                c6_num = float(str(p_val).replace(",", "."))
-                c6 = ws.cell(row=current_row, column=6, value=f"{p_curr} {c6_num:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-            except Exception:
-                c6 = ws.cell(row=current_row, column=6, value=f"{p_curr} {p_val}")
-        else:
-            c6 = ws.cell(row=current_row, column=6, value="-")
-        c6.alignment = Alignment(horizontal="right", vertical="center")
-
-        # Kur
-        ex_val = m.get("exchange_rate")
-        if ex_val:
-            try:
-                c7_num = float(str(ex_val).replace(",", "."))
-                c7 = ws.cell(row=current_row, column=7, value=c7_num)
-                c7.number_format = num_fmt_meters
-            except Exception:
-                c7 = ws.cell(row=current_row, column=7, value=ex_val)
-        else:
-            c7 = ws.cell(row=current_row, column=7, value="1,00" if p_curr in ["₺", "TL"] else "-")
-        c7.alignment = Alignment(horizontal="center", vertical="center")
-
-        # KDV (%)
-        vat_val = m.get("vat_rate")
-        if vat_val is not None and vat_val != "" and m.get("type") == "gelen":
-            c8 = ws.cell(row=current_row, column=8, value=f"%{int(vat_val) if float(vat_val).is_integer() else vat_val}")
-        else:
-            c8 = ws.cell(row=current_row, column=8, value="-")
-        c8.alignment = Alignment(horizontal="center", vertical="center")
-
-        # Tutar (₺)
-        tot_val = m.get("total_amount", 0.0)
-        c9 = ws.cell(row=current_row, column=9, value=tot_val if tot_val > 0 else "")
-        c9.number_format = num_fmt_curr
-        c9.alignment = Alignment(horizontal="right", vertical="center")
-        if tot_val > 0:
-            c9.font = Font(name="Segoe UI", size=9, bold=True, color="4338CA")
-
-        for col_i in range(1, 10):
-            c_item = ws.cell(row=current_row, column=col_i)
-            c_item.border = cell_border
-            if r_fill and not c_item.fill.start_color.rgb:
-                c_item.fill = r_fill
-
-        ws.row_dimensions[current_row].height = 20
-        current_row += 1
-
-    # 6. Alt Toplam Satırı (Total Row)
-    c_tot_label = ws.cell(row=current_row, column=1, value="GENEL TOPLAM")
-    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
-    c_tot_label.font = f_total
-    c_tot_label.alignment = Alignment(horizontal="center", vertical="center")
-
-    c_tot_rec = ws.cell(row=current_row, column=3, value=summary["total_received"])
-    c_tot_rec.font = Font(name="Segoe UI", size=10, bold=True, color="0369A1")
-    c_tot_rec.number_format = num_fmt_meters
-    c_tot_rec.alignment = Alignment(horizontal="right", vertical="center")
-
-    c_tot_cut = ws.cell(row=current_row, column=4, value=summary["total_cut"])
-    c_tot_cut.font = Font(name="Segoe UI", size=10, bold=True, color="B45309")
-    c_tot_cut.number_format = num_fmt_meters
-    c_tot_cut.alignment = Alignment(horizontal="right", vertical="center")
-
-    c_tot_rem = ws.cell(row=current_row, column=5, value=summary["remaining"])
-    c_tot_rem.font = Font(name="Segoe UI", size=10, bold=True, color="15803D" if summary["remaining"] >= 0 else "B91C1C")
-    c_tot_rem.number_format = num_fmt_meters
-    c_tot_rem.alignment = Alignment(horizontal="right", vertical="center")
-
-    ws.cell(row=current_row, column=6, value="")
-    ws.cell(row=current_row, column=7, value="")
-    ws.cell(row=current_row, column=8, value="")
-
-    c_tot_spend = ws.cell(row=current_row, column=9, value=summary["total_spend_tl"])
-    c_tot_spend.font = Font(name="Segoe UI", size=10, bold=True, color="4338CA")
-    c_tot_spend.number_format = num_fmt_curr
-    c_tot_spend.alignment = Alignment(horizontal="right", vertical="center")
-
-    for col_i in range(1, 10):
-        cell_t = ws.cell(row=current_row, column=col_i)
-        cell_t.fill = fill_total
-        cell_t.border = total_border
-
-    ws.row_dimensions[current_row].height = 24
-
-    # Kolon genişlikleri
-    col_widths = {
-        1: 14,  # Tarih
-        2: 36,  # Açıklama / Belge / Model
-        3: 17,  # Gelen Kumaş (m)
-        4: 17,  # Kesilen Kumaş (m)
-        5: 17,  # Kalan Kumaş (m)
-        6: 15,  # Birim Fiyat
-        7: 13,  # Döviz Kuru
-        8: 11,  # KDV (%)
-        9: 20   # Tutar (₺)
-    }
-    for c_idx, width in col_widths.items():
-        col_letter = get_column_letter(c_idx)
-        ws.column_dimensions[col_letter].width = width
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    val = buf.getvalue()
-    filename = f"Kumas_Stok_Ekstresi_{f_code or fabric_id}_{datetime.now().strftime('%Y%m%d')}.xlsx"
-    headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "Content-Length": str(len(val))
-    }
-    return Response(
-        content=val,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers
-    )
-
-
-
-# ----------------- SUPERADMIN ENDPOINTS -----------------
-
-@app.get("/api/superadmin/companies")
-def api_superadmin_get_companies(user: Dict[str, Any] = Depends(require_superadmin)):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("""
-    SELECT c.*, 
-           (SELECT COUNT(*) FROM users WHERE company_id = c.id) as user_count,
-           (SELECT COUNT(*) FROM orders WHERE company_id = c.id) as order_count
-    FROM companies c
-    ORDER BY c.id DESC
-    """)
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return rows
-
-class CreateCompanyRequest(BaseModel):
-    name: str
-    code: str
-    license_key: str
-    license_expires_at: str
-    max_users: int = 10
-
-@app.post("/api/superadmin/companies")
-def api_superadmin_create_company(req: CreateCompanyRequest, user: Dict[str, Any] = Depends(require_superadmin)):
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        c.execute("""
-        INSERT INTO companies (name, code, license_key, license_expires_at, is_active, max_users)
-        VALUES (?, ?, ?, ?, 1, ?)
-        """, (req.name, req.code, req.license_key, req.license_expires_at, req.max_users))
-        cid = c.lastrowid
-        
-        c.execute("SELECT menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json FROM dynamic_menus WHERE company_id = 1")
-        menus = c.fetchall()
-        for m in menus:
-            c.execute("""
-            INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (cid, m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7]))
-            
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"Firma oluşturulamadı: {str(e)}")
-# ----------------- HAFTALIK PROGRAM EXCEL ENDPOINT -----------------
-
-@app.get("/api/reports/haftalik-program-excel")
-def api_haftalik_program_excel(
-    start_key: Optional[str] = Query(None),
-    end_key: Optional[str] = Query(None),
-    only_with_orders: bool = Query(True),
-    hide_headers: bool = Query(False),
-    show_images: bool = Query(True)
-):
-    """
-    Patron Takip Çıktısı için A4 Yatay 7'şer model sütunlu Haftalık Program Excel üreticisi
-    """
-    from datetime import timedelta
-    from collections import defaultdict
-
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("""
-        SELECT 
-            s.id, s.style_no, s.brand, s.description,
-            o.customer_name, o.brand as order_brand,
-            s.color_code, s.color_name, s.total_quantity,
-            o.delivery_date, s.image_url, s.image_url_2
-        FROM styles s
-        LEFT JOIN orders o ON s.order_id = o.id
-        WHERE o.delivery_date IS NOT NULL AND o.delivery_date != ''
-        ORDER BY o.delivery_date ASC, s.id ASC
-    """)
-    rows = c.fetchall()
-    conn.close()
-
-    tr_months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
-    week_map = {}
-
-    for r in rows:
-        raw_date = str(r[9]).strip()
-        dt = None
-        for fmt in ('%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y'):
-            try:
-                dt = datetime.strptime(raw_date, fmt)
-                break
-            except Exception:
-                pass
-        if not dt:
-            continue
-
-        year, week, _ = dt.isocalendar()
-        key = f"{year}_{week:02d}"
-
-        if start_key and key < start_key:
-            continue
-        if end_key and key > end_key:
-            continue
-
-        if key not in week_map:
-            jan4 = datetime(year, 1, 4)
-            start_of_year = jan4 - timedelta(days=jan4.isoweekday() - 1)
-            monday = start_of_year + timedelta(weeks=week - 1)
-            sunday = monday + timedelta(days=6)
-            label = f"{monday.day} {tr_months[monday.month - 1]} - {sunday.day} {tr_months[sunday.month - 1]} {year}"
-
-            week_map[key] = {
-                'key': key,
-                'year': year,
-                'week': week,
-                'label': label,
-                'models': {}
-            }
-
-        style_no = (r[1] or 'Bilinmeyen').strip()
-        brand = (r[2] or r[5] or r[4] or '').strip()
-        color = (r[7] or r[6] or 'Standart').strip()
-        qty = int(r[8] or 0)
-        img = r[10] or r[11] or ''
-
-        w = week_map[key]
-        if style_no not in w['models']:
-            w['models'][style_no] = {
-                'style_no': style_no,
-                'brand': brand,
-                'image_url': img,
-                'colors': defaultdict(int),
-                'total_quantity': 0
-            }
-
-        m = w['models'][style_no]
-        if brand and not m['brand']:
-            m['brand'] = brand
-        if img and not m['image_url']:
-            m['image_url'] = img
-        m['colors'][color] += qty
-        m['total_quantity'] += qty
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = 'Haftalık Program'
-
-    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    try:
-        ws.sheet_properties.pageSetUpPr.fitToPage = True
-    except Exception:
-        pass
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.page_margins.left = 0.25
-    ws.page_margins.right = 0.25
-    ws.page_margins.top = 0.35
-    ws.page_margins.bottom = 0.35
-
-    # Sol tarafta 55px boşluk (Sütun A: ~55px)
-    ws.column_dimensions['A'].width = 7.0
-    for c_idx in range(2, 16):
-        ws.column_dimensions[get_column_letter(c_idx)].width = 14.0
-
-    thin_black = Side(style='thin', color='000000')
-    thick_black = Side(style='medium', color='000000')
-
-    current_row = 1
-    sorted_weeks = sorted(week_map.values(), key=lambda x: x['key'])
-
-    for w in sorted_weeks:
-        models_list = list(w['models'].values())
-        if not models_list and only_with_orders:
-            continue
-
-        week_total_qty = sum(m['total_quantity'] for m in models_list)
-        week_total_models = len(models_list)
-
-        for chunk_idx in range(0, max(1, len(models_list)), 7):
-            chunk = models_list[chunk_idx:chunk_idx + 7]
-
-            if chunk_idx == 0 and not hide_headers:
-                ws.merge_cells(start_row=current_row, start_column=2, end_row=current_row, end_column=15)
-                h_cell = ws.cell(current_row, 2)
-                h_cell.value = f"{w['week']}. HAFTA ({w['label']})   •   Toplam {week_total_models} Model   •   {week_total_qty:,} Adet"
-                h_cell.font = Font(name='Calibri', size=12, bold=True, color='FFFFFF')
-                h_cell.fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
-                h_cell.alignment = Alignment(horizontal='left', vertical='center', indent=1)
-                ws.row_dimensions[current_row].height = 26.0
-                current_row += 1
-
-            brand_row = current_row
-            model_row = current_row + 1
-            img_start_row = current_row + 2
-            img_end_row = current_row + 7
-            ws.row_dimensions[brand_row].height = 22.0
-            ws.row_dimensions[model_row].height = 22.0
-            for ir in range(img_start_row, img_end_row + 1):
-                ws.row_dimensions[ir].height = 20.0
-
-            max_colors = 2
-            for m in chunk:
-                max_colors = max(max_colors, len(m['colors']))
-
-            for slot_idx in range(7):
-                col_left = 2 + (slot_idx * 2)
-                col_right = col_left + 1
-                col_left_let = get_column_letter(col_left)
-
-                if slot_idx < len(chunk):
-                    model = chunk[slot_idx]
-                    # Brand row (12pt)
-                    ws.merge_cells(start_row=brand_row, start_column=col_left, end_row=brand_row, end_column=col_right)
-                    b_cell = ws.cell(brand_row, col_left)
-                    b_cell.value = (model['brand'] or '').upper()
-                    b_cell.font = Font(name='Calibri', size=12, bold=True, color='1E293B')
-                    b_cell.fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
-                    b_cell.alignment = Alignment(horizontal='center', vertical='center')
-
-                    # Model row (12pt)
-                    ws.merge_cells(start_row=model_row, start_column=col_left, end_row=model_row, end_column=col_right)
-                    m_cell = ws.cell(model_row, col_left)
-                    m_cell.value = model['style_no']
-                    m_cell.font = Font(name='Calibri', size=12, bold=True, color='0F172A')
-                    m_cell.fill = PatternFill(start_color='E2E8F0', end_color='E2E8F0', fill_type='solid')
-                    m_cell.alignment = Alignment(horizontal='center', vertical='center')
-
-                    # Image area
-                    ws.merge_cells(start_row=img_start_row, start_column=col_left, end_row=img_end_row, end_column=col_right)
-                    img_cell = ws.cell(img_start_row, col_left)
-                    img_cell.alignment = Alignment(horizontal='center', vertical='center')
-
-                    if show_images and model['image_url']:
-                        img_path = UPLOADS_DIR / 'styles' / Path(model['image_url']).name
-                        if img_path.exists():
-                            try:
-                                pil_img = PILImage.open(img_path)
-                                orig_w, orig_h = pil_img.size
-                                if orig_w > 0 and orig_h > 0:
-                                    # Hücre kutusu: ~204px genişlik, ~120pt = 160px yükseklik
-                                    # En ve boydan hangisi sınırlandırıyorsa o oranda büyüt / sığdır
-                                    scale = min(184.0 / orig_w, 144.0 / orig_h)
-                                    new_w = max(1, int(orig_w * scale))
-                                    new_h = max(1, int(orig_h * scale))
-
-                                    openpyxl_img = OpenpyxlImage(str(img_path))
-                                    openpyxl_img.width = new_w
-                                    openpyxl_img.height = new_h
-
-                                    # Hem enden hem boydan tam ortala
-                                    offset_x_px = max(0, int((204 - new_w) / 2))
-                                    offset_y_px = max(0, int((160 - new_h) / 2))
-
-                                    marker = AnchorMarker(
-                                        col=col_left - 1,
-                                        colOff=pixels_to_EMU(offset_x_px),
-                                        row=img_start_row - 1,
-                                        rowOff=pixels_to_EMU(offset_y_px)
-                                    )
-                                    size = XDRPositiveSize2D(pixels_to_EMU(new_w), pixels_to_EMU(new_h))
-                                    openpyxl_img.anchor = OneCellAnchor(_from=marker, ext=size)
-                                    ws.add_image(openpyxl_img)
-                            except Exception:
-                                pass
-
-                    # Colors and quantities (12pt, ince siyah iç çizgiler)
-                    colors_list = list(model['colors'].items())
-                    for c_idx in range(max_colors):
-                        c_row = img_end_row + 1 + c_idx
-                        ws.row_dimensions[c_row].height = 20.0
-                        c_col_cell = ws.cell(c_row, col_left)
-                        c_qty_cell = ws.cell(c_row, col_right)
-
-                        if c_idx < len(colors_list):
-                            c_name, c_qty = colors_list[c_idx]
-                            c_col_cell.value = c_name
-                            c_col_cell.font = Font(name='Calibri', size=12, color='000000')
-                            c_col_cell.alignment = Alignment(horizontal='left', vertical='center', indent=1)
-
-                            c_qty_cell.value = c_qty
-                            c_qty_cell.font = Font(name='Calibri', size=12, bold=True, color='000000')
-                            c_qty_cell.alignment = Alignment(horizontal='center', vertical='center')
-                        else:
-                            c_col_cell.value = ''
-                            c_qty_cell.value = ''
-
-                    # Total row (12pt)
-                    tot_row = img_end_row + 1 + max_colors
-                    ws.row_dimensions[tot_row].height = 22.0
-                    tot_label_cell = ws.cell(tot_row, col_left)
-                    tot_label_cell.value = 'TOPLAM'
-                    tot_label_cell.font = Font(name='Calibri', size=12, bold=True, color='047857')
-                    tot_label_cell.fill = PatternFill(start_color='ECFDF5', end_color='ECFDF5', fill_type='solid')
-                    tot_label_cell.alignment = Alignment(horizontal='left', vertical='center', indent=1)
-
-                    tot_val_cell = ws.cell(tot_row, col_right)
-                    tot_val_cell.value = model['total_quantity']
-                    tot_val_cell.font = Font(name='Calibri', size=12, bold=True, color='047857')
-                    tot_val_cell.fill = PatternFill(start_color='ECFDF5', end_color='ECFDF5', fill_type='solid')
-                    tot_val_cell.alignment = Alignment(horizontal='center', vertical='center')
-
-                else:
-                    for r_i in range(brand_row, img_end_row + 1 + max_colors + 1):
-                        ws.cell(r_i, col_left).value = None
-                        ws.cell(r_i, col_right).value = None
-
-                slot_end_row = img_end_row + 1 + max_colors
-                tot_row = slot_end_row
-                for r_idx in range(brand_row, slot_end_row + 1):
-                    for cl in (col_left, col_right):
-                        top_s = thick_black if (r_idx == brand_row or r_idx == tot_row) else thin_black
-                        bot_s = thick_black if r_idx == slot_end_row else thin_black
-                        left_s = thick_black if cl == col_left else thin_black
-                        right_s = thick_black if cl == col_right else thin_black
-                        ws.cell(r_idx, cl).border = Border(top=top_s, bottom=bot_s, left=left_s, right=right_s)
-
-            current_row = img_end_row + 1 + max_colors + 2
-
-    output_stream = io.BytesIO()
-    wb.save(output_stream)
-    output_stream.seek(0)
-    filename = f"Haftalik_Program_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-    return Response(
-        content=output_stream.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
-
-
-@app.get("/api/samples/{sample_id}/export-talep-excel")
-def api_export_single_sample_talep_excel(sample_id: int, user: Dict[str, Any] = Depends(require_user)):
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-    import re
-    import html
-    from urllib.parse import quote
-    from fabrictag_connector import FabricTagConnector
-
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id", 1)
-
-    c.execute("""
-        SELECT id, sample_type, season, customer_name, style_name, style_no, color_variant,
-               request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes, critique, image_url, fabrictag_id, company_id
-        FROM sample_items
-        WHERE id = ?
-    """, (sample_id,))
-    row = c.fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Numune kaydı bulunamadı")
-
-    cols = [d[0] for d in c.description]
-    s = dict(zip(cols, row))
-
-    sample_cid = s.get("company_id")
-    if user.get("role") not in ["superadmin", "masterdeveloper"] and sample_cid and company_id and sample_cid != company_id:
-        raise HTTPException(status_code=403, detail="Bu numuneye erişim yetkiniz yok.")
-
-    # Fabric detail from FabricTag if linked
-    fabric_detail = {}
-    if s.get("fabrictag_id"):
-        try:
-            ft_conn = FabricTagConnector.get_connection()
-            if ft_conn:
-                ft_c = ft_conn.cursor()
-                ft_c.execute("SELECT id, company_name, quality_code, quality_name, design_code, color, width, weight, composition FROM fabrics WHERE id = ?", (s["fabrictag_id"],))
-                frow = ft_c.fetchone()
-                if frow:
-                    fabric_detail = dict(frow)
-                ft_conn.close()
-        except Exception:
-            pass
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Talep Formu"
-
-    # Sayfa ve Baskı Ayarları (A4 Dikey)
-    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.page_margins.left = 0.4
-    ws.page_margins.right = 0.4
-    ws.page_margins.top = 0.4
-    ws.page_margins.bottom = 0.4
-
-    # Başlık hesaplama (Örn: "1.Proto" -> "PROTO TALEBİ", "2.PPS" -> "PPS TALEBİ")
-    raw_type = (s.get("sample_type") or "").strip()
-    clean_type = re.sub(r"^[\d.\-\s]+", "", raw_type).strip()
-    if not clean_type:
-        clean_type = "NUMUNE"
-    header_title = f"{clean_type.upper()} TALEBİ"
-
-    # Renkler ve Stiller
-    title_font = Font(name="Calibri", size=18, bold=True, color="FFFFFF")
-    title_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    
-    sub_title_font = Font(name="Calibri", size=10, italic=True, color="475569")
-    
-    section_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-    section_fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
-    
-    label_font = Font(name="Calibri", size=10, bold=True, color="334155")
-    label_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-    
-    val_bold_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
-    val_norm_font = Font(name="Calibri", size=10, bold=False, color="0F172A")
-    
-    thin_border = Border(
-        left=Side(style="thin", color="CBD5E1"),
-        right=Side(style="thin", color="CBD5E1"),
-        top=Side(style="thin", color="CBD5E1"),
-        bottom=Side(style="thin", color="CBD5E1")
-    )
-
-    # 6 Sütunlu Sayfa Düzeni (A, B, C, D, E, F)
-    col_widths = {"A": 16, "B": 22, "C": 16, "D": 22, "E": 16, "F": 22}
-    for col_letter, width in col_widths.items():
-        ws.column_dimensions[col_letter].width = width
-
-    # Satır 1: Şirket / Sistem Üst Bilgisi (ORTALI)
-    ws.merge_cells("A1:F1")
-    ws["A1"] = "TEXFLOW PRODUCTION & QUALITY SYSTEMS"
-    ws["A1"].font = Font(name="Calibri", size=9, bold=True, color="64748B")
-    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 18
-
-    # Satır 2: Büyük Dinamik Başlık (EN ÜSTTE VE TAM ORTALI)
-    ws.merge_cells("A2:F2")
-    ws["A2"] = header_title
-    ws["A2"].font = title_font
-    ws["A2"].fill = title_fill
-    ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[2].height = 36
-
-    # Satır 3: Alt Başlık (ORTALI)
-    ws.merge_cells("A3:F3")
-    ws["A3"] = "Modelhane ve Numune Üretim Talep Formu"
-    ws["A3"].font = sub_title_font
-    ws["A3"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[3].height = 18
-
-    # Satır 4: Talep Kimlik / Meta Bilgileri Şeridi
-    ws.merge_cells("A4:B4")
-    ws["A4"] = f"Talep / Form No: SMP-{s.get('id')}"
-    ws["A4"].font = Font(name="Calibri", size=10, bold=True, color="475569")
-    ws["A4"].alignment = Alignment(horizontal="left", vertical="center")
-
-    ws.merge_cells("C4:D4")
-    ws["C4"] = f"Tarih: {s.get('request_date') or datetime.now().strftime('%d.%m.%Y')}   |   Hedef Teslim: {s.get('delivery_date') or '-'}"
-    ws["C4"].font = Font(name="Calibri", size=10, bold=True, color="D97706" if s.get('delivery_date') else "475569")
-    ws["C4"].alignment = Alignment(horizontal="center", vertical="center")
-
-    ws.merge_cells("E4:F4")
-    ws["E4"] = f"Aşama: {s.get('stage') or 'Talep Oluşturuldu'}"
-    ws["E4"].font = Font(name="Calibri", size=10, bold=True, color="059669")
-    ws["E4"].alignment = Alignment(horizontal="right", vertical="center")
-    ws.row_dimensions[4].height = 22
-
-    # Satır 5: Model ve Talep Detayları Başlığı
-    ws.merge_cells("A5:F5")
-    ws["A5"] = "MODEL VE SİPARİŞ BİLGİLERİ"
-    ws["A5"].font = section_font
-    ws["A5"].fill = section_fill
-    ws["A5"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[5].height = 22
-
-    # Bilgi Satırları (Tablo formatında)
-    info_rows = [
-        ("Müşteri", s.get("customer_name") or "-", "Numune Türü", s.get("sample_type") or "-", "Talep Tarihi", s.get("request_date") or "-"),
-        ("Model Kodu", s.get("style_no") or "-", "Model Adı", s.get("style_name") or "-", "Sezon", s.get("season") or "-"),
-    ]
-
-    curr_row = 6
-    for r_data in info_rows:
-        ws.row_dimensions[curr_row].height = 22
-        # Col A-B
-        ws.cell(row=curr_row, column=1, value=r_data[0]).font = label_font
-        ws.cell(row=curr_row, column=1).fill = label_fill
-        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=1).border = thin_border
-
-        ws.cell(row=curr_row, column=2, value=r_data[1]).font = val_bold_font
-        ws.cell(row=curr_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=2).border = thin_border
-
-        # Col C-D
-        ws.cell(row=curr_row, column=3, value=r_data[2]).font = label_font
-        ws.cell(row=curr_row, column=3).fill = label_fill
-        ws.cell(row=curr_row, column=3).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=3).border = thin_border
-
-        ws.cell(row=curr_row, column=4, value=r_data[3]).font = val_bold_font
-        ws.cell(row=curr_row, column=4).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=4).border = thin_border
-
-        # Col E-F
-        ws.cell(row=curr_row, column=5, value=r_data[4]).font = label_font
-        ws.cell(row=curr_row, column=5).fill = label_fill
-        ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=5).border = thin_border
-
-        ws.cell(row=curr_row, column=6, value=r_data[5]).font = val_bold_font
-        ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=6).border = thin_border
-
-        curr_row += 1
-
-    # Kumaş Bilgileri Satırı (Yan yana, aralarında boşluklar bırakarak)
-    fabric_parts = []
-    if fabric_detail:
-        q_name = (fabric_detail.get("quality_name") or "").strip()
-        q_code = (fabric_detail.get("quality_code") or "").strip()
-        comp = (fabric_detail.get("company_name") or "").strip()
-        var = (fabric_detail.get("design_code") or "").strip()
-        color = (fabric_detail.get("color") or "").strip()
-        qual_parts = []
-        if comp: qual_parts.append(comp)
-        qual_str = f"{q_name} ({q_code})".strip() if (q_name and q_code) else (q_name or q_code)
-        if qual_str: qual_parts.append(qual_str)
-        if var: qual_parts.append(var)
-        if color: qual_parts.append(color)
-        line1 = " - ".join(qual_parts)
-        if line1: fabric_parts.append(line1)
-        if fabric_detail.get("composition"):
-            fabric_parts.append(fabric_detail["composition"].strip())
-        dim_parts = []
-        if fabric_detail.get("width"): dim_parts.append(f"{fabric_detail['width']} CM")
-        if fabric_detail.get("weight"): dim_parts.append(f"{fabric_detail['weight']} GRM2")
-        if dim_parts: fabric_parts.append(" • ".join(dim_parts))
-    
-    fabric_text = "   •   ".join(fabric_parts) if fabric_parts else (s.get("fabric_info") or "-")
-
-    ws.row_dimensions[curr_row].height = 24
-    ws.cell(row=curr_row, column=1, value="Kumaş Bilgisi").font = label_font
-    ws.cell(row=curr_row, column=1).fill = label_fill
-    ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
-    ws.cell(row=curr_row, column=1).border = thin_border
-
-    ws.merge_cells(f"B{curr_row}:D{curr_row}")
-    ws[f"B{curr_row}"] = fabric_text
-    ws[f"B{curr_row}"].font = val_bold_font
-    ws[f"B{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
-    for cl in range(2, 5):
-        ws.cell(row=curr_row, column=cl).border = thin_border
-
-    ws.cell(row=curr_row, column=5, value="Birim Metraj").font = label_font
-    ws.cell(row=curr_row, column=5).fill = label_fill
-    ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
-    ws.cell(row=curr_row, column=5).border = thin_border
-
-    ws.cell(row=curr_row, column=6, value=f"{s.get('unit_meters') or '-'} m").font = val_bold_font
-    ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
-    ws.cell(row=curr_row, column=6).border = thin_border
-
-    curr_row += 1
-
-    # Satır Boşluk
-    curr_row += 1
-
-    # Beden & Adet Dağılımı Bölümü
-    ws.merge_cells(f"A{curr_row}:F{curr_row}")
-    ws[f"A{curr_row}"] = "ADET VE BEDEN DAĞILIMI"
-    ws[f"A{curr_row}"].font = section_font
-    ws[f"A{curr_row}"].fill = section_fill
-    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[curr_row].height = 22
-    curr_row += 1
-
-    # Parse sizes
-    qty_str = str(s.get("quantity_sizes") or "").strip()
-    size_pairs = []
-    total_qty = 0
-    if qty_str:
-        tokens = [t.strip() for t in re.split(r"[,;\n/]+", qty_str) if t.strip()]
-        for tok in tokens:
-            m1 = re.match(r"^([A-Za-z0-9\-_.]+)\s*[:=\-]\s*(\d+)$", tok)
-            m2 = re.match(r"^(\d+)\s*(?:x|adet|pcs)?\s*([A-Za-z0-9\-_.]+)$", tok, re.IGNORECASE)
-            if m1:
-                cnt = int(m1.group(2))
-                size_pairs.append((m1.group(1).upper(), cnt))
-                total_qty += cnt
-            elif m2:
-                cnt = int(m2.group(1))
-                size_pairs.append((m2.group(2).upper(), cnt))
-                total_qty += cnt
-            else:
-                num = re.match(r"^(\d+)$", tok)
-                if num:
-                    cnt = int(num.group(1))
-                    size_pairs.append(("Adet", cnt))
-                    total_qty += cnt
-
-    if size_pairs and len(size_pairs) <= 5:
-        # Header row (Bedenler)
-        ws.cell(row=curr_row, column=1, value="Beden").font = label_font
-        ws.cell(row=curr_row, column=1).fill = label_fill
-        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=curr_row, column=1).border = thin_border
-
-        for s_idx, (sz, cnt) in enumerate(size_pairs):
-            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=sz)
-            c_cell.font = label_font
-            c_cell.fill = label_fill
-            c_cell.alignment = Alignment(horizontal="center", vertical="center")
-            c_cell.border = thin_border
-
-        ws.cell(row=curr_row, column=len(size_pairs) + 2, value="TOPLAM").font = label_font
-        ws.cell(row=curr_row, column=len(size_pairs) + 2).fill = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
-        ws.cell(row=curr_row, column=len(size_pairs) + 2).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=curr_row, column=len(size_pairs) + 2).border = thin_border
-        ws.row_dimensions[curr_row].height = 20
-        curr_row += 1
-
-        # Value row (Adetler)
-        ws.cell(row=curr_row, column=1, value="Miktar").font = label_font
-        ws.cell(row=curr_row, column=1).fill = label_fill
-        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=curr_row, column=1).border = thin_border
-
-        for s_idx, (sz, cnt) in enumerate(size_pairs):
-            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=cnt)
-            c_cell.font = val_bold_font
-            c_cell.alignment = Alignment(horizontal="center", vertical="center")
-            c_cell.border = thin_border
-
-        tot_cell = ws.cell(row=curr_row, column=len(size_pairs) + 2, value=f"{total_qty} Adet")
-        tot_cell.font = Font(name="Calibri", size=10, bold=True, color="059669")
-        tot_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
-        tot_cell.alignment = Alignment(horizontal="center", vertical="center")
-        tot_cell.border = thin_border
-        ws.row_dimensions[curr_row].height = 22
-        curr_row += 1
-
-        if qty_str and (len(size_pairs) < len(tokens) or not str(total_qty) in qty_str):
-            ws.merge_cells(f"A{curr_row}:F{curr_row}")
-            ws[f"A{curr_row}"] = f"Not / Orijinal Giriş: {qty_str}"
-            ws[f"A{curr_row}"].font = Font(name="Calibri", size=9, italic=True, color="64748B")
-            ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
-            curr_row += 1
-    else:
-        # Tek satır serbest metin gösterimi
-        ws.merge_cells(f"A{curr_row}:B{curr_row}")
-        ws[f"A{curr_row}"] = "Adet & Beden Bilgisi"
-        ws[f"A{curr_row}"].font = label_font
-        ws[f"A{curr_row}"].fill = label_fill
-        ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
-        ws[f"A{curr_row}"].border = thin_border
-
-        ws.merge_cells(f"C{curr_row}:F{curr_row}")
-        ws[f"C{curr_row}"] = qty_str or "Adet ve beden belirtilmedi"
-        ws[f"C{curr_row}"].font = val_bold_font
-        ws[f"C{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
-        ws[f"C{curr_row}"].border = thin_border
-        ws.row_dimensions[curr_row].height = 24
-        curr_row += 1
-
-    # Satır Boşluk
-    curr_row += 1
-
-    # Numune Kritiği ve Notlar Bölümü
-    ws.merge_cells(f"A{curr_row}:F{curr_row}")
-    ws[f"A{curr_row}"] = "NUMUNE KRİTİĞİ VE REVİZYON NOTLARI"
-    ws[f"A{curr_row}"].font = section_font
-    ws[f"A{curr_row}"].fill = section_fill
-    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[curr_row].height = 22
-    curr_row += 1
-
-    # HTML temizleme & metne dönüştürme
-    raw_critique = s.get("critique") or s.get("notes") or ""
-    clean_critique = html.unescape(raw_critique)
-    clean_critique = re.sub(r"<li>", "• ", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"</li>", "\n", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"<br\s*/?>", "\n", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"</p>", "\n\n", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"</div>", "\n", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"<[^>]+>", "", clean_critique)
-    clean_critique = re.sub(r"\n{3,}", "\n\n", clean_critique).strip()
-
-    critique_box_start = curr_row
-    critique_box_end = curr_row + 4
-    ws.merge_cells(f"A{critique_box_start}:F{critique_box_end}")
-    critique_cell = ws[f"A{critique_box_start}"]
-    critique_cell.value = clean_critique or "Herhangi bir numune kritiği veya revizyon notu girilmemiştir."
-    critique_cell.font = Font(name="Calibri", size=10, italic=(not clean_critique), color="0F172A" if clean_critique else "94A3B8")
-    critique_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-    critique_cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-
-    for r in range(critique_box_start, critique_box_end + 1):
-        ws.row_dimensions[r].height = 20
-        for col_i in range(1, 7):
-            c_cell = ws.cell(row=r, column=col_i)
-            c_cell.border = thin_border
-            c_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-
-    curr_row = critique_box_end + 2
-
-    # İmza ve Onay Alanları
-    ws.merge_cells(f"A{curr_row}:B{curr_row}")
-    ws[f"A{curr_row}"] = "TALEBİ HAZIRLAYAN"
-    ws[f"A{curr_row}"].font = label_font
-    ws[f"A{curr_row}"].fill = label_fill
-    ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
-    ws[f"A{curr_row}"].border = thin_border
-
-    ws.merge_cells(f"C{curr_row}:D{curr_row}")
-    ws[f"C{curr_row}"] = "MODELHANE / ATÖLYE ŞEFİ"
-    ws[f"C{curr_row}"].font = label_font
-    ws[f"C{curr_row}"].fill = label_fill
-    ws[f"C{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
-    ws[f"C{curr_row}"].border = thin_border
-
-    ws.merge_cells(f"E{curr_row}:F{curr_row}")
-    ws[f"E{curr_row}"] = "MÜŞTERİ / SATIŞ ONAY"
-    ws[f"E{curr_row}"].font = label_font
-    ws[f"E{curr_row}"].fill = label_fill
-    ws[f"E{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
-    ws[f"E{curr_row}"].border = thin_border
-    ws.row_dimensions[curr_row].height = 20
-    curr_row += 1
-
-    # İmza Kutuları
-    sig_start = curr_row
-    sig_end = curr_row + 2
-    for r in range(sig_start, sig_end + 1):
-        ws.row_dimensions[r].height = 22
-        for col_i in range(1, 7):
-            c_cell = ws.cell(row=r, column=col_i)
-            c_cell.border = thin_border
-
-    ws[f"A{sig_end}"] = "Ad Soyad / İmza / Tarih"
-    ws[f"A{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
-    ws[f"A{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
-
-    ws[f"C{sig_end}"] = "Ad Soyad / İmza / Tarih"
-    ws[f"C{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
-    ws[f"C{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
-
-    ws[f"E{sig_end}"] = "Ad Soyad / İmza / Tarih"
-    ws[f"E{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
-    ws[f"E{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
-
-    output_stream = io.BytesIO()
-    wb.save(output_stream)
-    output_stream.seek(0)
-
-    clean_file_type = re.sub(r"[^A-Za-z0-9]", "_", clean_type)
-    clean_style_no = re.sub(r"[^A-Za-z0-9]", "_", str(s.get("style_no") or "Talep"))
-    filename = f"Numune_Talebi_{clean_file_type}_{clean_style_no}.xlsx"
-    encoded_filename = quote(filename)
-
-    return Response(
-        content=output_stream.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}; filename=\"{filename.encode('ascii', 'ignore').decode()}\""
-        }
-    )
-# ----------------- NUMUNE & PPS TAKİBİ (SAMPLE & PPS TRACKING) -----------------
-SAMPLE_OPTIONS_FILE = Path("data") / "sample_options.json"
-
-DEFAULT_SAMPLE_OPTIONS = {
-    "sample_types": [
-        "1.Proto",
-        "2.Proto",
-        "Fit Sample",
-        "1.PPS",
-        "2.PPS",
-        "SMS",
-        "Size Set",
-        "Shipment Sample"
-    ],
-    "stages": [
-        "Talep Oluşturuldu",
-        "Kumaş Bekliyor",
-        "Dikim Sırada",
-        "Yıkama/Boya",
-        "Taş/Baskı",
-        "Çakım",
-        "Ütü/Paket"
-    ]
-}
-
-def get_saved_sample_options() -> Dict[str, Any]:
-    if SAMPLE_OPTIONS_FILE.exists():
-        try:
-            with open(SAMPLE_OPTIONS_FILE, "r", encoding="utf-8") as f:
-                saved = json.load(f)
-                return {
-                    "sample_types": saved.get("sample_types", DEFAULT_SAMPLE_OPTIONS["sample_types"]),
-                    "stages": saved.get("stages", DEFAULT_SAMPLE_OPTIONS["stages"])
-                }
-        except Exception as e:
-            print(f"[WARN] sample_options.json okunamadi: {e}")
-    return DEFAULT_SAMPLE_OPTIONS
-
-@app.get("/api/samples/options")
-def api_get_sample_options():
-    return get_saved_sample_options()
-
-@app.post("/api/samples/options")
-def api_save_sample_options(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
-    try:
-        SAMPLE_OPTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        current = get_saved_sample_options()
-        if "sample_types" in payload and isinstance(payload["sample_types"], list):
-            current["sample_types"] = [str(x).strip() for x in payload["sample_types"] if str(x).strip()]
-        if "stages" in payload and isinstance(payload["stages"], list):
-            current["stages"] = [str(x).strip() for x in payload["stages"] if str(x).strip()]
-        with open(SAMPLE_OPTIONS_FILE, "w", encoding="utf-8") as f:
-            json.dump(current, f, ensure_ascii=False, indent=2)
-        return {"status": "success", "options": current}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/samples")
-def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    role = user.get("role")
-    
-    cols = [
-        "id", "company_id", "image_url", "image_url_2", "image_fit", "sample_type", "season", "customer_name",
-        "style_name", "style_no", "color_variant", "request_date", "delivery_date", "quantity_sizes",
-        "fabric_info", "fabric_info_2", "fabric_info_3", "unit_meters", "unit_meters_2", "unit_meters_3", "stage", "notes", "critique",
-        "fabrictag_id", "fabrictag_id_2", "fabrictag_id_3", "display_order", "created_by", "created_at", "updated_at"
-    ]
-    cols_sql = ", ".join(cols)
-
-    if role in ["superadmin", "masterdeveloper"]:
-        query = f"SELECT {cols_sql} FROM sample_items WHERE 1=1"
-        params = []
-    else:
-        query = f"SELECT {cols_sql} FROM sample_items WHERE (company_id = ? OR company_id IS NULL)"
-        params = [company_id]
-    
-    if search and search.strip():
-        q = f"%{search.strip().lower()}%"
-        query += """ AND (
-            LOWER(customer_name) LIKE ? OR
-            LOWER(style_no) LIKE ? OR
-            LOWER(style_name) LIKE ? OR
-            LOWER(COALESCE(color_variant, '')) LIKE ? OR
-            LOWER(sample_type) LIKE ? OR
-            LOWER(season) LIKE ? OR
-            LOWER(fabric_info) LIKE ? OR
-            LOWER(COALESCE(fabric_info_2, '')) LIKE ? OR
-            LOWER(COALESCE(fabric_info_3, '')) LIKE ? OR
-            LOWER(stage) LIKE ?
-        )"""
-        params.extend([q, q, q, q, q, q, q, q, q, q])
-        
-    query += " ORDER BY display_order ASC, id DESC"
-    c.execute(query, params)
-    rows = c.fetchall()
-    
-    samples = [dict(zip(cols, row)) for row in rows]
-    try:
-        from fabrictag_connector import FabricTagConnector
-        ft_conn = FabricTagConnector.get_connection()
-        if ft_conn:
-            ft_c = ft_conn.cursor()
-            for s in samples:
-                for slot_idx, slot_col in [(1, "fabrictag_id"), (2, "fabrictag_id_2"), (3, "fabrictag_id_3")]:
-                    fid = s.get(slot_col)
-                    if fid:
-                        ft_c.execute("SELECT id, company_name, quality_code, quality_name, design_code, color, width, weight, composition FROM fabrics WHERE id = ?", (fid,))
-                        frow = ft_c.fetchone()
-                        if frow:
-                            target_key = "fabric_detail" if slot_idx == 1 else f"fabric_detail_{slot_idx}"
-                            s[target_key] = dict(frow)
-            ft_conn.close()
-    except Exception:
-        pass
-    return samples
-
-@app.post("/api/samples")
-def api_create_sample(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    created_by = user.get("full_name") or user.get("username") or "Kullanıcı"
-    
-    sample_type = str(payload.get("sample_type") or "1.Proto").strip()
-    season = str(payload.get("season") or "").strip()
-    customer_name = str(payload.get("customer_name") or "").strip()
-    style_name = str(payload.get("style_name") or "").strip()
-    style_no = str(payload.get("style_no") or "").strip()
-    color_variant = str(payload.get("color_variant") or "").strip()
-    request_date = str(payload.get("request_date") or "").strip()
-    delivery_date = str(payload.get("delivery_date") or "").strip()
-    quantity_sizes = str(payload.get("quantity_sizes") or "").strip()
-    fabric_info = str(payload.get("fabric_info") or "").strip()
-    fabric_info_2 = str(payload.get("fabric_info_2") or "").strip()
-    fabric_info_3 = str(payload.get("fabric_info_3") or "").strip()
-    unit_meters = str(payload.get("unit_meters") or "").strip()
-    unit_meters_2 = str(payload.get("unit_meters_2") or "").strip()
-    unit_meters_3 = str(payload.get("unit_meters_3") or "").strip()
-    stage = str(payload.get("stage") or "Talep Oluşturuldu").strip()
-    notes = str(payload.get("notes") or "").strip()
-    critique = str(payload.get("critique") or "").strip()
-    image_fit = str(payload.get("image_fit") or "contain").strip()
-    display_order = int(payload.get("display_order") or 0)
-    
-    def parse_fid(val):
-        try:
-            return int(val) if val is not None and str(val).strip() != "" else None
-        except Exception:
-            return None
-
-    fabrictag_id = parse_fid(payload.get("fabrictag_id"))
-    fabrictag_id_2 = parse_fid(payload.get("fabrictag_id_2"))
-    fabrictag_id_3 = parse_fid(payload.get("fabrictag_id_3"))
-    
-    c.execute("""
-        INSERT INTO sample_items (
-            company_id, sample_type, season, customer_name, style_name, style_no, color_variant,
-            request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3,
-            fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters, unit_meters_2, unit_meters_3,
-            stage, notes, critique, image_fit, display_order, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        company_id, sample_type, season, customer_name, style_name, style_no, color_variant,
-        request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3,
-        fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters, unit_meters_2, unit_meters_3,
-        stage, notes, critique, image_fit, display_order, created_by
-    ))
-    conn.commit()
-    new_id = c.lastrowid
-    
-    c.execute("SELECT * FROM sample_items WHERE id = ?", (new_id,))
-    row = c.fetchone()
-    col_names = [d[0] for d in c.description]
-    return dict(zip(col_names, row))
-
-@app.post("/api/samples/{sample_id}/update-cell")
-def api_update_sample_cell(sample_id: int, payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
-    field = payload.get("field")
-    value = payload.get("value")
-    
-    allowed_fields = {
-        "sample_type", "season", "customer_name", "style_name", "style_no", "color_variant",
-        "request_date", "delivery_date", "quantity_sizes", "fabric_info",
-        "fabric_info_2", "fabric_info_3", "fabrictag_id", "fabrictag_id_2", "fabrictag_id_3",
-        "unit_meters", "unit_meters_2", "unit_meters_3", "stage", "notes", "critique", "image_fit", "display_order"
-    }
-    if field not in allowed_fields:
-        raise HTTPException(status_code=400, detail=f"Geçersiz alan: {field}")
-        
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(f"UPDATE sample_items SET {field} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (value, sample_id))
-    conn.commit()
-    return {"status": "success", "field": field, "value": value}
-
-@app.post("/api/samples/reorder")
-def api_reorder_samples(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
-    sample_ids = payload.get("sample_ids") or []
-    if not isinstance(sample_ids, list):
-        raise HTTPException(status_code=400, detail="sample_ids listesi gereklidir.")
-    conn = get_db()
-    c = conn.cursor()
-    for idx, sid in enumerate(sample_ids):
-        c.execute("UPDATE sample_items SET display_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (idx, int(sid)))
-    conn.commit()
-    return {"status": "success", "reordered_count": len(sample_ids)}
-
-@app.delete("/api/samples/{sample_id}")
-def api_delete_sample(sample_id: int, user: Dict[str, Any] = Depends(require_user)):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("DELETE FROM sample_items WHERE id = ?", (sample_id,))
-    conn.commit()
-    return {"status": "success", "message": "Numune kaydı silindi."}
-
-@app.post("/api/samples/{sample_id}/image")
-async def api_upload_sample_image(
-    sample_id: int, 
-    slot: int = Query(1),
-    file: UploadFile = File(...), 
-    user: Dict[str, Any] = Depends(require_user)
-):
-    raw_fname = file.filename or "image.png"
-    ext = Path(raw_fname).suffix.lower()
-    if not ext or ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
-        c_type = (getattr(file, "content_type", "") or "").lower()
-        if "jpeg" in c_type or "jpg" in c_type:
-            ext = ".jpg"
-        elif "webp" in c_type:
-            ext = ".webp"
-        elif "gif" in c_type:
-            ext = ".gif"
-        else:
-            ext = ".png" 
-    
-    filename = f"sample_{sample_id}_s{slot}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-    dest_path = STYLE_IMAGES_DIR / filename
-    
-    with open(dest_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    rel_url = f"/uploads/styles/{filename}"
-    col_name = "image_url_2" if slot == 2 else "image_url"
-    
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(f"UPDATE sample_items SET {col_name} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (rel_url, sample_id))
-    conn.commit()
-    return {"status": "success", "image_url": rel_url, "slot": slot}
-
-@app.delete("/api/samples/{sample_id}/image/{slot}")
-def api_delete_sample_image(sample_id: int, slot: int, user: Dict[str, Any] = Depends(require_user)):
-    col_name = "image_url_2" if slot == 2 else "image_url"
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(f"UPDATE sample_items SET {col_name} = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (sample_id,))
-    conn.commit()
-    return {"status": "success", "slot": slot}
-
-@app.get("/api/samples/export-excel")
-def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.drawing.image import Image as OpenpyxlImage
-    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
-    from openpyxl.drawing.xdr import XDRPositiveSize2D
-    from openpyxl.utils.units import pixels_to_EMU
-    from openpyxl.utils import get_column_letter
-    from PIL import Image as PILImage
-
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id") or 1
-    role = user.get("role")
-
-    sql_cols = "id, image_url, sample_type, season, customer_name, style_name, style_no, color_variant, request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3, unit_meters, unit_meters_2, unit_meters_3, stage, notes, critique, fabrictag_id, fabrictag_id_2, fabrictag_id_3, display_order"
-
-    if role in ["superadmin", "masterdeveloper"]:
-        query = f"SELECT {sql_cols} FROM sample_items WHERE 1=1"
-        params = []
-    else:
-        query = f"SELECT {sql_cols} FROM sample_items WHERE (company_id = ? OR company_id IS NULL)"
-        params = [company_id]
-    if ids and ids.strip():
-        id_list = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
-        if id_list:
-            placeholders = ",".join(["?"] * len(id_list))
-            query += f" AND id IN ({placeholders})"
-            params.extend(id_list)
-
-    query += " ORDER BY display_order ASC, id DESC"
-    c.execute(query, params)
-    rows = c.fetchall()
-
-    # FabricTag'den kumaş detaylarını çek
-    fabric_details_map = {}
-    fab_ids = set()
-    for r in rows:
-        for fid_idx in [20, 21, 22]:
-            if len(r) > fid_idx and r[fid_idx]:
-                fab_ids.add(r[fid_idx])
-    fab_ids = list(fab_ids)
-    if fab_ids:
-        try:
-            from fabrictag_connector import FabricTagConnector
-            ft_conn = FabricTagConnector.get_connection()
-            if ft_conn:
-                ft_c = ft_conn.cursor()
-                ft_placeholders = ",".join(["?"] * len(fab_ids))
-                ft_c.execute(f"SELECT id, company_name, quality_code, quality_name, design_code, color FROM fabrics WHERE id IN ({ft_placeholders})", fab_ids)
-                for frow in ft_c.fetchall():
-                    fabric_details_map[frow[0]] = dict(frow)
-                ft_conn.close()
-        except Exception:
-            pass
-
-    def clean_fabric_text_excel(raw_text: str, fd: dict = None) -> str:
-        if fd:
-            comp = (fd.get("company_name") or "").strip()
-            q_name = (fd.get("quality_name") or "").strip()
-            q_code = (fd.get("quality_code") or "").strip()
-            var = (fd.get("design_code") or "").strip()
-            color = (fd.get("color") or "").strip()
-            qual = f"{q_name} ({q_code})".strip() if (q_name and q_code) else (q_name or q_code)
-            parts = []
-            if comp: parts.append(comp)
-            if qual: parts.append(qual)
-            if var and var not in qual: parts.append(var)
-            elif color and color not in qual: parts.append(color)
-            return " - ".join(parts) or comp or qual or "-"
-        
-        raw = (raw_text or "").strip()
-        if not raw:
-            return "-"
-        if "•" in raw:
-            return raw.split("•")[0].strip()
-
-        label_pattern = re.compile(r'(?:Kumaşçı|Kumaş|Kumasci|Kumas|Kalite\s*Adı|Kalite\s*Adi|Kalite|Varyant|Renk|En|Karışım|Karisim|Gramaj|Ağırlık|Agirlik)\s*:\s*', re.I)
-        matches = list(label_pattern.finditer(raw))
-        if matches:
-            dict_parts = {}
-            for i, m in enumerate(matches):
-                lbl = m.group(0).split(":")[0].strip().lower()
-                val_start = m.end()
-                val_end = matches[i+1].start() if i + 1 < len(matches) else len(raw)
-                dict_parts[lbl] = raw[val_start:val_end].strip()
-
-            supplier = dict_parts.get("kumaşçı") or dict_parts.get("kumaş") or dict_parts.get("kumasci") or dict_parts.get("kumas") or ""
-            quality = dict_parts.get("kalite adı") or dict_parts.get("kalite adi") or dict_parts.get("kalite") or ""
-            variant = dict_parts.get("varyant") or ""
-            color = dict_parts.get("renk") or ""
-
-            parts = []
-            if supplier: parts.append(supplier)
-            if quality: parts.append(quality)
-            if variant: parts.append(variant)
-            elif color: parts.append(color)
-
-            if parts:
-                return " - ".join(parts)
-
-        cleaned = re.sub(r'(?:Karışım|Karisim)\s*:\s*\S+', '', raw, flags=re.I)
-
-        cleaned = re.sub(r'(?:En|Ağırlık|Gramaj|Agirlik)\s*:\s*\S+', '', cleaned, flags=re.I)
-
-        cleaned = re.sub(r'(?:Kumaşçı|Kumasci|Kalite\s*Adı|Kalite\s*Adi|Kalite|Varyant|Renk|Kumaş|Kumas)\s*:\s*', '', cleaned, flags=re.I)
-        cleaned = re.sub(r'\d+\s*%\s*[A-ZÇĞİÖŞÜ]+', '', cleaned, flags=re.I)
-        cleaned = re.sub(r'\d+%\s*[A-Z]+', '', cleaned, flags=re.I)
-        cleaned = re.sub(r'\d+\s*CM', '', cleaned, flags=re.I)
-        cleaned = re.sub(r'\d+\s*GR(?:M2)?', '', cleaned, flags=re.I)
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-        return cleaned or "-"
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Numune Takip Listesi"
-
-    headers = [
-        "Sıra", "Görsel", "Numune Türü", "Sezon", "Müşteri", "Model Adı", "Model Kodu", "Renk / Varyant",
-        "Talep Tarihi", "Teslim Tarihi", "Adet ve Beden", "Kumaş 1", "Birim Kullanım 1", "Kumaş 2", "Birim Kullanım 2", "Kumaş 3", "Birim Kullanım 3", "İşlem Aşaması", "Kritik", "Notlar"
-    ]
-
-    last_col_letter = get_column_letter(len(headers))
-    ws.merge_cells(f"A1:{last_col_letter}1")
-    title_cell = ws["A1"]
-    title_cell.value = f"NUMUNE TAKİP LİSTESİ ({datetime.now().strftime('%d.%m.%Y %H:%M')})"
-    title_cell.font = Font(name="Calibri", size=13, bold=True, color="FFFFFF")
-    title_cell.fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    title_cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 32
-
-    ws.row_dimensions[2].height = 8
-    ws.append([])
-    ws.append(headers)
-    ws.row_dimensions[3].height = 26
-
-    header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
-    header_fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
-    thin_border = Border(
-        left=Side(style="thin", color="CBD5E1"),
-        right=Side(style="thin", color="CBD5E1"),
-        top=Side(style="thin", color="CBD5E1"),
-        bottom=Side(style="thin", color="CBD5E1")
-    )
-
-    for col_idx in range(1, len(headers) + 1):
-        cell = ws.cell(row=3, column=col_idx)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        cell.border = thin_border
-
-    import html as py_html
-    img_buffers = []
-    row_num = 4
-    for idx, r in enumerate(rows, 1):
-        def strip_html_clean(raw):
-            raw_s = str(raw or "").strip()
-            c = re.sub(r'<br\s*[\/]?>', ' ', raw_s, flags=re.I)
-            c = re.sub(r'<\/li>', ' • ', c, flags=re.I)
-            c = re.sub(r'<[^>]+>', ' ', c)
-            c = py_html.unescape(c)
-            c = re.sub(r'\s+', ' ', c).strip()
-            if c.startswith('• '): c = c[2:].strip()
-            return c
-
-        clean_critique = strip_html_clean(r[19]) # critique
-        clean_notes = strip_html_clean(r[18]) # notes
-
-        clean_fab_1 = clean_fabric_text_excel(r[11], fabric_details_map.get(r[20]))
-        clean_fab_2 = clean_fabric_text_excel(r[12], fabric_details_map.get(r[21]))
-        clean_fab_3 = clean_fabric_text_excel(r[13], fabric_details_map.get(r[22]))
-
-        row_data = [
-            idx,
-            "",  # Görsel sütunu (resim anchor ile hücreye ortalanacak)
-            r[2] or "",
-            r[3] or "",
-            r[4] or "",
-            r[5] or "",
-            r[6] or "",
-            r[7] or "",  # Renk / Varyant
-            r[8] or "",  # Talep Tarihi
-            r[9] or "",  # Teslim Tarihi
-            r[10] or "", # Adet ve Beden
-            clean_fab_1,
-            r[14] or "", # Birim Kullanım 1
-            clean_fab_2,
-            r[15] or "", # Birim Kullanım 2
-            clean_fab_3,
-            r[16] or "", # Birim Kullanım 3
-            r[17] or "", # İşlem Aşaması
-            clean_critique,
-            clean_notes
-        ]
-        ws.append(row_data)
-        ws.row_dimensions[row_num].height = 54
-        fill_color = "F8FAFC" if idx % 2 == 0 else "FFFFFF"
-        row_fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-
-        data_font = Font(name="Calibri", size=10, color="0F172A")
-        bold_data_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
-
-        for c_idx in range(1, len(row_data) + 1):
-            cell = ws.cell(row=row_num, column=c_idx)
-            cell.fill = row_fill
-            cell.border = thin_border
-            cell.font = bold_data_font if c_idx in [5, 7] else data_font
-            if c_idx in [1, 2, 3, 4, 7, 8, 9, 12, 13]:
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-            else:
-                cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=(c_idx in [10, 11, 14]))
-
-        # Fotoğrafı hücreye ortalayarak ekleme
-        img_url = r[1]
-        img_added = False
-        if img_url:
-            p = None
-            if img_url.startswith("/uploads/"):
-                rel = img_url[len("/uploads/"):]
-                cand = Path(UPLOADS_DIR) / rel
-                if cand.exists(): p = cand
-            elif img_url.startswith("uploads/"):
-                cand = Path(UPLOADS_DIR) / img_url[len("uploads/"):]
-                if cand.exists(): p = cand
-            else:
-                cand = Path(img_url)
-                if cand.exists(): p = cand
-
-            if p and p.exists():
-                try:
-                    with PILImage.open(str(p)) as pil_img:
-                        ow, oh = pil_img.size
-                        if ow > 0 and oh > 0:
-                            ratio = min(88.0 / ow, 54.0 / oh)
-                            nw = max(1, int(ow * ratio))
-                            nh = max(1, int(oh * ratio))
-                            buf = io.BytesIO()
-                            if pil_img.mode in ("RGBA", "LA") or (pil_img.mode == "P" and "transparency" in pil_img.info):
-                                pil_img.resize((nw, nh), PILImage.Resampling.LANCZOS).save(buf, format="PNG")
-                            else:
-                                pil_img.convert("RGB").resize((nw, nh), PILImage.Resampling.LANCZOS).save(buf, format="JPEG", quality=90)
-                            buf.seek(0)
-                            img_buffers.append(buf)
-
-                            xl_img = OpenpyxlImage(buf)
-                            xl_img.width = nw
-                            xl_img.height = nh
-
-                            col_w_px = 112  # Sütun B (Görsel) genişliği piksel karşılığı
-                            row_h_px = 72   # Satır yüksekliği (54pt) piksel karşılığı
-                            x_off = max(0, (col_w_px - nw) // 2)
-                            y_off = max(0, (row_h_px - nh) // 2)
-
-                            marker = AnchorMarker(col=1, colOff=pixels_to_EMU(x_off), row=row_num - 1, rowOff=pixels_to_EMU(y_off))
-                            size = XDRPositiveSize2D(pixels_to_EMU(nw), pixels_to_EMU(nh))
-                            xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
-                            ws.add_image(xl_img)
-                            img_added = True
-                except Exception:
-                    pass
-
-        if not img_added:
-            c_cell = ws.cell(row=row_num, column=2)
-            c_cell.value = "-"
-            c_cell.alignment = Alignment(horizontal="center", vertical="center")
-            c_cell.font = Font(name="Calibri", size=9, color="94A3B8")
-
-        row_num += 1
-
-    col_widths = {
-        "A": 6,   # Sıra
-        "B": 15,  # Görsel
-        "C": 13,  # Numune Türü
-        "D": 10,  # Sezon
-        "E": 14,  # Müşteri
-        "F": 16,  # Model Adı
-        "G": 13,  # Model Kodu
-        "H": 14,  # Renk / Varyant
-        "I": 13,  # Talep Tarihi
-        "J": 13,  # Teslim Tarihi
-        "K": 14,  # Adet ve Beden
-        "L": 30,  # Kumaş 1
-        "M": 14,  # Birim Kullanım 1
-        "N": 30,  # Kumaş 2
-        "O": 14,  # Birim Kullanım 2
-        "P": 30,  # Kumaş 3
-        "Q": 14,  # Birim Kullanım 3
-        "R": 16,  # İşlem Aşaması
-        "S": 26,  # Kritik
-        "T": 26   # Notlar
-    }
-    for col_let, w in col_widths.items():
-        ws.column_dimensions[col_let].width = w
-
-    output_stream = io.BytesIO()
-    wb.save(output_stream)
-    output_stream.seek(0)
-    filename = f"Numune_PPS_Takip_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-    return Response(
-        content=output_stream.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
-
-
-@app.get("/api/samples/{sample_id}/export-talep-excel")
-def api_export_single_sample_talep_excel(sample_id: int, user: Dict[str, Any] = Depends(require_user)):
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-    import re
-    import html
-    from urllib.parse import quote
-    from fabrictag_connector import FabricTagConnector
-
-    conn = get_db()
-    c = conn.cursor()
-    company_id = user.get("company_id", 1)
-
-    c.execute("""
-        SELECT id, sample_type, season, customer_name, style_name, style_no, color_variant,
-               request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes, critique, image_url, fabrictag_id, company_id
-        FROM sample_items
-        WHERE id = ?
-    """, (sample_id,))
-    row = c.fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Numune kaydı bulunamadı")
-
-    cols = [d[0] for d in c.description]
-    s = dict(zip(cols, row))
-
-    sample_cid = s.get("company_id")
-    if user.get("role") not in ["superadmin", "masterdeveloper"] and sample_cid and company_id and sample_cid != company_id:
-        raise HTTPException(status_code=403, detail="Bu numuneye erişim yetkiniz yok.")
-
-    # Fabric detail from FabricTag if linked
-    fabric_detail = {}
-    if s.get("fabrictag_id"):
-        try:
-            ft_conn = FabricTagConnector.get_connection()
-            if ft_conn:
-                ft_c = ft_conn.cursor()
-                ft_c.execute("SELECT id, company_name, quality_code, quality_name, design_code, color, width, weight, composition FROM fabrics WHERE id = ?", (s["fabrictag_id"],))
-                frow = ft_c.fetchone()
-                if frow:
-                    fabric_detail = dict(frow)
-                ft_conn.close()
-        except Exception:
-            pass
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Talep Formu"
-
-    # Sayfa ve Baskı Ayarları (A4 Dikey)
-    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.page_margins.left = 0.4
-    ws.page_margins.right = 0.4
-    ws.page_margins.top = 0.4
-    ws.page_margins.bottom = 0.4
-
-    # Başlık hesaplama (Örn: "1.Proto" -> "PROTO TALEBİ", "2.PPS" -> "PPS TALEBİ")
-    raw_type = (s.get("sample_type") or "").strip()
-    clean_type = re.sub(r"^[\d.\-\s]+", "", raw_type).strip()
-    if not clean_type:
-        clean_type = "NUMUNE"
-    header_title = f"{clean_type.upper()} TALEBİ"
-
-    # Renkler ve Stiller
-    title_font = Font(name="Calibri", size=18, bold=True, color="FFFFFF")
-    title_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    
-    sub_title_font = Font(name="Calibri", size=10, italic=True, color="475569")
-    
-    section_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-    section_fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
-    
-    label_font = Font(name="Calibri", size=10, bold=True, color="334155")
-    label_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-    
-    val_bold_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
-    val_norm_font = Font(name="Calibri", size=10, bold=False, color="0F172A")
-    
-    thin_border = Border(
-        left=Side(style="thin", color="CBD5E1"),
-        right=Side(style="thin", color="CBD5E1"),
-        top=Side(style="thin", color="CBD5E1"),
-        bottom=Side(style="thin", color="CBD5E1")
-    )
-
-    # 6 Sütunlu Sayfa Düzeni (A, B, C, D, E, F)
-    col_widths = {"A": 16, "B": 22, "C": 16, "D": 22, "E": 16, "F": 22}
-    for col_letter, width in col_widths.items():
-        ws.column_dimensions[col_letter].width = width
-
-    # Satır 1: Şirket / Sistem Üst Bilgisi (ORTALI)
-    ws.merge_cells("A1:F1")
-    ws["A1"] = "TEXFLOW PRODUCTION & QUALITY SYSTEMS"
-    ws["A1"].font = Font(name="Calibri", size=9, bold=True, color="64748B")
-    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 18
-
-    # Satır 2: Büyük Dinamik Başlık (EN ÜSTTE VE TAM ORTALI)
-    ws.merge_cells("A2:F2")
-    ws["A2"] = header_title
-    ws["A2"].font = title_font
-    ws["A2"].fill = title_fill
-    ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[2].height = 36
-
-    # Satır 3: Alt Başlık (ORTALI)
-    ws.merge_cells("A3:F3")
-    ws["A3"] = "Modelhane ve Numune Üretim Talep Formu"
-    ws["A3"].font = sub_title_font
-    ws["A3"].alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[3].height = 18
-
-    # Satır 4: Talep Kimlik / Meta Bilgileri Şeridi
-    ws.merge_cells("A4:B4")
-    ws["A4"] = f"Talep / Form No: SMP-{s.get('id')}"
-    ws["A4"].font = Font(name="Calibri", size=10, bold=True, color="475569")
-    ws["A4"].alignment = Alignment(horizontal="left", vertical="center")
-
-    ws.merge_cells("C4:D4")
-    ws["C4"] = f"Tarih: {s.get('request_date') or datetime.now().strftime('%d.%m.%Y')}   |   Hedef Teslim: {s.get('delivery_date') or '-'}"
-    ws["C4"].font = Font(name="Calibri", size=10, bold=True, color="D97706" if s.get('delivery_date') else "475569")
-    ws["C4"].alignment = Alignment(horizontal="center", vertical="center")
-
-    ws.merge_cells("E4:F4")
-    ws["E4"] = f"Aşama: {s.get('stage') or 'Talep Oluşturuldu'}"
-    ws["E4"].font = Font(name="Calibri", size=10, bold=True, color="059669")
-    ws["E4"].alignment = Alignment(horizontal="right", vertical="center")
-    ws.row_dimensions[4].height = 22
-
-    # Satır 5: Model ve Talep Detayları Başlığı
-    ws.merge_cells("A5:F5")
-    ws["A5"] = "MODEL VE SİPARİŞ BİLGİLERİ"
-    ws["A5"].font = section_font
-    ws["A5"].fill = section_fill
-    ws["A5"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[5].height = 22
-
-    # Bilgi Satırları (Tablo formatında)
-    info_rows = [
-        ("Müşteri", s.get("customer_name") or "-", "Numune Türü", s.get("sample_type") or "-", "Talep Tarihi", s.get("request_date") or "-"),
-        ("Model Kodu", s.get("style_no") or "-", "Model Adı", s.get("style_name") or "-", "Sezon", s.get("season") or "-"),
-    ]
-
-    curr_row = 6
-    for r_data in info_rows:
-        ws.row_dimensions[curr_row].height = 22
-        # Col A-B
-        ws.cell(row=curr_row, column=1, value=r_data[0]).font = label_font
-        ws.cell(row=curr_row, column=1).fill = label_fill
-        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=1).border = thin_border
-
-        ws.cell(row=curr_row, column=2, value=r_data[1]).font = val_bold_font
-        ws.cell(row=curr_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=2).border = thin_border
-
-        # Col C-D
-        ws.cell(row=curr_row, column=3, value=r_data[2]).font = label_font
-        ws.cell(row=curr_row, column=3).fill = label_fill
-        ws.cell(row=curr_row, column=3).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=3).border = thin_border
-
-        ws.cell(row=curr_row, column=4, value=r_data[3]).font = val_bold_font
-        ws.cell(row=curr_row, column=4).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=4).border = thin_border
-
-        # Col E-F
-        ws.cell(row=curr_row, column=5, value=r_data[4]).font = label_font
-        ws.cell(row=curr_row, column=5).fill = label_fill
-        ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=5).border = thin_border
-
-        ws.cell(row=curr_row, column=6, value=r_data[5]).font = val_bold_font
-        ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
-        ws.cell(row=curr_row, column=6).border = thin_border
-
-        curr_row += 1
-
-    # Kumaş Bilgileri Satırı (Yan yana, aralarında boşluklar bırakarak)
-    fabric_parts = []
-    if fabric_detail:
-        q_name = (fabric_detail.get("quality_name") or "").strip()
-        q_code = (fabric_detail.get("quality_code") or "").strip()
-        comp = (fabric_detail.get("company_name") or "").strip()
-        var = (fabric_detail.get("design_code") or "").strip()
-        color = (fabric_detail.get("color") or "").strip()
-        qual_parts = []
-        if comp: qual_parts.append(comp)
-        qual_str = f"{q_name} ({q_code})".strip() if (q_name and q_code) else (q_name or q_code)
-        if qual_str: qual_parts.append(qual_str)
-        if var: qual_parts.append(var)
-        if color: qual_parts.append(color)
-        line1 = " - ".join(qual_parts)
-        if line1: fabric_parts.append(line1)
-        if fabric_detail.get("composition"):
-            fabric_parts.append(fabric_detail["composition"].strip())
-        dim_parts = []
-        if fabric_detail.get("width"): dim_parts.append(f"{fabric_detail['width']} CM")
-        if fabric_detail.get("weight"): dim_parts.append(f"{fabric_detail['weight']} GRM2")
-        if dim_parts: fabric_parts.append(" • ".join(dim_parts))
-    
-    fabric_text = "   •   ".join(fabric_parts) if fabric_parts else (s.get("fabric_info") or "-")
-
-    ws.row_dimensions[curr_row].height = 24
-    ws.cell(row=curr_row, column=1, value="Kumaş Bilgisi").font = label_font
-    ws.cell(row=curr_row, column=1).fill = label_fill
-    ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
-    ws.cell(row=curr_row, column=1).border = thin_border
-
-    ws.merge_cells(f"B{curr_row}:D{curr_row}")
-    ws[f"B{curr_row}"] = fabric_text
-    ws[f"B{curr_row}"].font = val_bold_font
-    ws[f"B{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
-    for cl in range(2, 5):
-        ws.cell(row=curr_row, column=cl).border = thin_border
-
-    ws.cell(row=curr_row, column=5, value="Birim Metraj").font = label_font
-    ws.cell(row=curr_row, column=5).fill = label_fill
-    ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
-    ws.cell(row=curr_row, column=5).border = thin_border
-
-    ws.cell(row=curr_row, column=6, value=f"{s.get('unit_meters') or '-'} m").font = val_bold_font
-    ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
-    ws.cell(row=curr_row, column=6).border = thin_border
-
-    curr_row += 1
-
-    # Satır Boşluk
-    curr_row += 1
-
-    # Beden & Adet Dağılımı Bölümü
-    ws.merge_cells(f"A{curr_row}:F{curr_row}")
-    ws[f"A{curr_row}"] = "ADET VE BEDEN DAĞILIMI"
-    ws[f"A{curr_row}"].font = section_font
-    ws[f"A{curr_row}"].fill = section_fill
-    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[curr_row].height = 22
-    curr_row += 1
-
-    # Parse sizes
-    qty_str = str(s.get("quantity_sizes") or "").strip()
-    size_pairs = []
-    total_qty = 0
-    if qty_str:
-        tokens = [t.strip() for t in re.split(r"[,;\n/]+", qty_str) if t.strip()]
-        for tok in tokens:
-            m1 = re.match(r"^([A-Za-z0-9\-_.]+)\s*[:=\-]\s*(\d+)$", tok)
-            m2 = re.match(r"^(\d+)\s*(?:x|adet|pcs)?\s*([A-Za-z0-9\-_.]+)$", tok, re.IGNORECASE)
-            if m1:
-                cnt = int(m1.group(2))
-                size_pairs.append((m1.group(1).upper(), cnt))
-                total_qty += cnt
-            elif m2:
-                cnt = int(m2.group(1))
-                size_pairs.append((m2.group(2).upper(), cnt))
-                total_qty += cnt
-            else:
-                num = re.match(r"^(\d+)$", tok)
-                if num:
-                    cnt = int(num.group(1))
-                    size_pairs.append(("Adet", cnt))
-                    total_qty += cnt
-
-    if size_pairs and len(size_pairs) <= 5:
-        # Header row (Bedenler)
-        ws.cell(row=curr_row, column=1, value="Beden").font = label_font
-        ws.cell(row=curr_row, column=1).fill = label_fill
-        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=curr_row, column=1).border = thin_border
-
-        for s_idx, (sz, cnt) in enumerate(size_pairs):
-            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=sz)
-            c_cell.font = label_font
-            c_cell.fill = label_fill
-            c_cell.alignment = Alignment(horizontal="center", vertical="center")
-            c_cell.border = thin_border
-
-        ws.cell(row=curr_row, column=len(size_pairs) + 2, value="TOPLAM").font = label_font
-        ws.cell(row=curr_row, column=len(size_pairs) + 2).fill = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
-        ws.cell(row=curr_row, column=len(size_pairs) + 2).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=curr_row, column=len(size_pairs) + 2).border = thin_border
-        ws.row_dimensions[curr_row].height = 20
-        curr_row += 1
-
-        # Value row (Adetler)
-        ws.cell(row=curr_row, column=1, value="Miktar").font = label_font
-        ws.cell(row=curr_row, column=1).fill = label_fill
-        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=curr_row, column=1).border = thin_border
-
-        for s_idx, (sz, cnt) in enumerate(size_pairs):
-            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=cnt)
-            c_cell.font = val_bold_font
-            c_cell.alignment = Alignment(horizontal="center", vertical="center")
-            c_cell.border = thin_border
-
-        tot_cell = ws.cell(row=curr_row, column=len(size_pairs) + 2, value=f"{total_qty} Adet")
-        tot_cell.font = Font(name="Calibri", size=10, bold=True, color="059669")
-        tot_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
-        tot_cell.alignment = Alignment(horizontal="center", vertical="center")
-        tot_cell.border = thin_border
-        ws.row_dimensions[curr_row].height = 22
-        curr_row += 1
-
-        if qty_str and (len(size_pairs) < len(tokens) or not str(total_qty) in qty_str):
-            ws.merge_cells(f"A{curr_row}:F{curr_row}")
-            ws[f"A{curr_row}"] = f"Not / Orijinal Giriş: {qty_str}"
-            ws[f"A{curr_row}"].font = Font(name="Calibri", size=9, italic=True, color="64748B")
-            ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
-            curr_row += 1
-    else:
-        # Tek satır serbest metin gösterimi
-        ws.merge_cells(f"A{curr_row}:B{curr_row}")
-        ws[f"A{curr_row}"] = "Adet & Beden Bilgisi"
-        ws[f"A{curr_row}"].font = label_font
-        ws[f"A{curr_row}"].fill = label_fill
-        ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
-        ws[f"A{curr_row}"].border = thin_border
-
-        ws.merge_cells(f"C{curr_row}:F{curr_row}")
-        ws[f"C{curr_row}"] = qty_str or "Adet ve beden belirtilmedi"
-        ws[f"C{curr_row}"].font = val_bold_font
-        ws[f"C{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
-        ws[f"C{curr_row}"].border = thin_border
-        ws.row_dimensions[curr_row].height = 24
-        curr_row += 1
-
-    # Satır Boşluk
-    curr_row += 1
-
-    # Numune Kritiği ve Notlar Bölümü
-    ws.merge_cells(f"A{curr_row}:F{curr_row}")
-    ws[f"A{curr_row}"] = "NUMUNE KRİTİĞİ VE REVİZYON NOTLARI"
-    ws[f"A{curr_row}"].font = section_font
-    ws[f"A{curr_row}"].fill = section_fill
-    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[curr_row].height = 22
-    curr_row += 1
-
-    # HTML temizleme & metne dönüştürme
-    raw_critique = s.get("critique") or s.get("notes") or ""
-    clean_critique = html.unescape(raw_critique)
-    clean_critique = re.sub(r"<li>", "• ", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"</li>", "\n", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"<br\s*/?>", "\n", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"</p>", "\n\n", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"</div>", "\n", clean_critique, flags=re.IGNORECASE)
-    clean_critique = re.sub(r"<[^>]+>", "", clean_critique)
-    clean_critique = re.sub(r"\n{3,}", "\n\n", clean_critique).strip()
-
-    critique_box_start = curr_row
-    critique_box_end = curr_row + 4
-    ws.merge_cells(f"A{critique_box_start}:F{critique_box_end}")
-    critique_cell = ws[f"A{critique_box_start}"]
-    critique_cell.value = clean_critique or "Herhangi bir numune kritiği veya revizyon notu girilmemiştir."
-    critique_cell.font = Font(name="Calibri", size=10, italic=(not clean_critique), color="0F172A" if clean_critique else "94A3B8")
-    critique_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-    critique_cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-
-    for r in range(critique_box_start, critique_box_end + 1):
-        ws.row_dimensions[r].height = 20
-        for col_i in range(1, 7):
-            c_cell = ws.cell(row=r, column=col_i)
-            c_cell.border = thin_border
-            c_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-
-    curr_row = critique_box_end + 2
-
-    # İmza ve Onay Alanları
-    ws.merge_cells(f"A{curr_row}:B{curr_row}")
-    ws[f"A{curr_row}"] = "TALEBİ HAZIRLAYAN"
-    ws[f"A{curr_row}"].font = label_font
-    ws[f"A{curr_row}"].fill = label_fill
-    ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
-    ws[f"A{curr_row}"].border = thin_border
-
-    ws.merge_cells(f"C{curr_row}:D{curr_row}")
-    ws[f"C{curr_row}"] = "MODELHANE / ATÖLYE ŞEFİ"
-    ws[f"C{curr_row}"].font = label_font
-    ws[f"C{curr_row}"].fill = label_fill
-    ws[f"C{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
-    ws[f"C{curr_row}"].border = thin_border
-
-    ws.merge_cells(f"E{curr_row}:F{curr_row}")
-    ws[f"E{curr_row}"] = "MÜŞTERİ / SATIŞ ONAY"
-    ws[f"E{curr_row}"].font = label_font
-    ws[f"E{curr_row}"].fill = label_fill
-    ws[f"E{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
-    ws[f"E{curr_row}"].border = thin_border
-    ws.row_dimensions[curr_row].height = 20
-    curr_row += 1
-
-    # İmza Kutuları
-    sig_start = curr_row
-    sig_end = curr_row + 2
-    for r in range(sig_start, sig_end + 1):
-        ws.row_dimensions[r].height = 22
-        for col_i in range(1, 7):
-            c_cell = ws.cell(row=r, column=col_i)
-            c_cell.border = thin_border
-
-    ws[f"A{sig_end}"] = "Ad Soyad / İmza / Tarih"
-    ws[f"A{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
-    ws[f"A{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
-
-    ws[f"C{sig_end}"] = "Ad Soyad / İmza / Tarih"
-    ws[f"C{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
-    ws[f"C{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
-
-    ws[f"E{sig_end}"] = "Ad Soyad / İmza / Tarih"
-    ws[f"E{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
-    ws[f"E{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
-
-    output_stream = io.BytesIO()
-    wb.save(output_stream)
-    output_stream.seek(0)
-
-    clean_file_type = re.sub(r"[^A-Za-z0-9]", "_", clean_type)
-    clean_style_no = re.sub(r"[^A-Za-z0-9]", "_", str(s.get("style_no") or "Talep"))
-    filename = f"Numune_Talebi_{clean_file_type}_{clean_style_no}.xlsx"
-    encoded_filename = quote(filename)
-
-    return Response(
-        content=output_stream.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}; filename=\"{filename.encode('ascii', 'ignore').decode()}\""
-        }
-    )
-# ----------------- VARSAYILAN SİSTEM AYARLARI (CUSTOM DEFAULTS) -----------------
-CUSTOM_DEFAULTS_FILE = Path("data") / "custom_defaults.json"
-
-DEFAULT_CUSTOM_SETTINGS = {
-    # Maliyet Çalışması Varsayılan Oranları
-    "default_fabric_wastage": 5.0,
-    "default_manufacturing_wastage": 5.0,
-    "default_overhead_rate": 15.0,
-    "default_mup_rate": 15.0,
-    "default_commission_rate": 0.0,
-    # Çarşaf Listesi Termin ve Kumaş Uyarı Renkleri
-    "alerts_enabled": True,
-    # Sipariş Termin Uyarısı
-    "order_alert_days_1": 10,
-    "order_alert_color_1": "#fed7aa",
-    "order_alert_days_2": 3,
-    "order_alert_color_2": "#f87171",
-    # Kumaş Termin Uyarısı
-    "fabric_alert_days_1": 7,
-    "fabric_alert_color_1": "#fef08a",
-    "fabric_alert_days_2": 3,
-    "fabric_alert_color_2": "#f87171",
-    # Gelen Kumaş Metrajı Sapma (%) Uyarı Renkleri
-    "fabric_received_threshold_1": 1.0,
-    "fabric_received_color_1": "",
-    "fabric_received_threshold_2": 5.0,
-    "fabric_received_color_2": "#fef08a",
-    "fabric_received_color_3": "#f87171"
-}
-
-@app.get("/api/custom-defaults")
-def api_get_custom_defaults():
-    if CUSTOM_DEFAULTS_FILE.exists():
-        try:
-            with open(CUSTOM_DEFAULTS_FILE, "r", encoding="utf-8") as f:
-                saved = json.load(f)
-                merged = {**DEFAULT_CUSTOM_SETTINGS, **saved}
-                return merged
-        except Exception as e:
-            print(f"[WARN] custom_defaults.json okunamadi: {e}")
-    return DEFAULT_CUSTOM_SETTINGS
-
-@app.post("/api/custom-defaults")
-def api_save_custom_defaults(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
-    try:
-        CUSTOM_DEFAULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        current = api_get_custom_defaults()
-        for k, v in payload.items():
-            if k in DEFAULT_CUSTOM_SETTINGS:
-                current[k] = v
-        with open(CUSTOM_DEFAULTS_FILE, "w", encoding="utf-8") as f:
-            json.dump(current, f, ensure_ascii=False, indent=2)
-        return {"status": "success", "message": "Varsayılan ayarlar başarıyla kaydedildi.", "defaults": current}
-    except Exception as e:
-        print(f"[ERROR] custom_defaults kaydetme hatasi: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ----------------- TAM SİSTEM YEDEKLEME & RESTORE (BACKUP) -----------------
-import backup_manager
-
-@app.get("/api/backup/config")
-def api_get_backup_config(user: Dict[str, Any] = Depends(require_user)):
-    return backup_manager.get_backup_config()
-
-@app.post("/api/backup/config")
-def api_save_backup_config(cfg: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
-    clean_times = []
-    for t in cfg.get("times", []):
-        t_str = str(t).strip()
-        if re.match(r"^([01]?\d|2[0-3]):[0-5]\d$", t_str):
-            clean_times.append(t_str)
-    
-    clean_cfg = {
-        "enabled": bool(cfg.get("enabled", True)),
-        "times": sorted(list(set(clean_times))),
-        "retention_count": max(1, min(100, int(cfg.get("retention_count", 30)))),
-        "include_uploads": bool(cfg.get("include_uploads", True)),
-        "last_backup_time": backup_manager.get_backup_config().get("last_backup_time"),
-        "destination_type": str(cfg.get("destination_type", "default")),
-        "custom_destination_path": str(cfg.get("custom_destination_path", "")).strip()
-    }
-    backup_manager.save_backup_config(clean_cfg)
-    return {"status": "success", "message": "Yedekleme ayarları kaydedildi.", "config": clean_cfg}
-
-@app.get("/api/backup/list")
-def api_list_backups(user: Dict[str, Any] = Depends(require_user)):
-    return {
-        "status": "success",
-        "backups": backup_manager.list_backups(),
-        "config": backup_manager.get_backup_config()
-    }
-
-@app.post("/api/backup/create")
-def api_create_backup(user: Dict[str, Any] = Depends(require_user)):
-    try:
-        username = user.get("username", "Kullanıcı")
-        res = backup_manager.create_full_backup(backup_type="manual", note=f"{username} tarafından manuel yedek alındı.")
-        return res
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Yedekleme oluşturulamadı: {str(e)}")
-
-@app.get("/api/backup/download/{filename}")
-def api_download_backup(filename: str, user: Dict[str, Any] = Depends(require_user)):
-    safe_name = Path(filename).name
-    target = backup_manager.BACKUPS_DIR / safe_name
-    if not target.exists() or not target.is_file():
-        raise HTTPException(status_code=404, detail="Yedek dosyası bulunamadı.")
-    return FileResponse(
-        str(target),
-        media_type="application/zip",
-        filename=safe_name,
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'}
-    )
-
-@app.post("/api/backup/restore/{filename}")
-def api_restore_backup(filename: str, user: Dict[str, Any] = Depends(require_user)):
-    role = user.get("role", "")
-    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
-        raise HTTPException(status_code=403, detail="Yedekten geri yükleme yetkiniz bulunmamaktadır.")
-    
-    safe_name = Path(filename).name
-    try:
-        res = backup_manager.restore_backup(safe_name)
-        return res
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Geri yükleme hatası: {str(e)}")
-
-@app.delete("/api/backup/{filename}")
-def api_delete_backup(filename: str, user: Dict[str, Any] = Depends(require_user)):
-    safe_name = Path(filename).name
-    target = backup_manager.BACKUPS_DIR / safe_name
-    if target.exists() and target.is_file():
-        try:
-            target.unlink()
-            return {"status": "success", "message": f"{safe_name} yedeği silindi."}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Dosya silinemedi: {e}")
-    raise HTTPException(status_code=404, detail="Yedek dosyası bulunamadı.")
-
-@app.post("/api/backup/upload-restore")
-async def api_upload_and_restore(request: Request, user: Dict[str, Any] = Depends(require_user)):
-    role = user.get("role", "")
-    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
-        raise HTTPException(status_code=403, detail="Yedek yükleme yetkiniz bulunmamaktadır.")
-
-    form = await request.form()
-    f_obj = form.get("file")
-    if not f_obj or not hasattr(f_obj, "filename") or not f_obj.filename:
-        raise HTTPException(status_code=400, detail="Lütfen bir yedek ZIP dosyası seçin.")
-
-    safe_name = f"Uploaded_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{Path(f_obj.filename).name}"
-    save_dest = backup_manager.BACKUPS_DIR / safe_name
-    with open(save_dest, "wb") as buffer:
-        shutil.copyfileobj(f_obj.file, buffer)
-
-    try:
-        res = backup_manager.restore_backup(safe_name)
-        return res
-    except Exception as e:
-        if save_dest.exists():
-            save_dest.unlink()
-        raise HTTPException(status_code=500, detail=f"Yüklenen yedek açılamadı: {e}")
-
-# Start background backup scheduler
-try:
-    backup_manager.start_backup_scheduler()
-except Exception as e:
-    print(f"Failed to start backup scheduler: {e}")
-
-# ----------------- OTOMATİK SİSTEM GÜNCELLEME (UPDATE MANAGER) -----------------
-import update_manager
-
-@app.get("/api/system/version")
-def api_get_system_version(user: Dict[str, Any] = Depends(require_user)):
-    cfg = update_manager.get_system_config()
-    git_info = update_manager.get_git_info()
-    return {
-        "status": "success",
-        "version": cfg.get("version", "v2.9.2"),
-        "channel": cfg.get("channel", "stable"),
-        "restart_required": cfg.get("restart_required", False),
-        "last_check_time": cfg.get("last_check_time"),
-        "last_update_time": cfg.get("last_update_time"),
-        "git": git_info
-    }
-
-@app.get("/api/system/check-updates")
-def api_check_system_updates(user: Dict[str, Any] = Depends(require_user)):
-    try:
-        res = update_manager.check_for_updates()
-        return res
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Güncelleme denetleme hatası: {str(e)}")
-
-@app.post("/api/system/apply-updates")
-def api_apply_system_updates(user: Dict[str, Any] = Depends(require_user)):
-    role = user.get("role", "")
-    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
-        raise HTTPException(status_code=403, detail="Sistemi güncelleme yetkiniz bulunmamaktadır.")
-    try:
-        res = update_manager.apply_update()
-        return res
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Güncelleme hatası: {str(e)}")
-
-@app.post("/api/system/restart")
-def api_restart_system(user: Dict[str, Any] = Depends(require_user)):
-    role = user.get("role", "")
-    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
-        raise HTTPException(status_code=403, detail="Sistemi yeniden başlatma yetkiniz bulunmamaktadır.")
-    try:
-        res = update_manager.trigger_server_restart()
-        return res
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Yeniden başlatma tetiklenemedi: {str(e)}")
-
-@app.post("/api/system/set-channel")
-def api_set_system_channel(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
-    role = user.get("role", "")
-    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
-        raise HTTPException(status_code=403, detail="Kanal değiştirme yetkiniz bulunmamaktadır.")
-    new_channel = payload.get("channel", "stable")
-    if new_channel not in ["stable", "dev"]:
-        raise HTTPException(status_code=400, detail="Geçersiz kanal. Yalnızca 'stable' veya 'dev' seçilebilir.")
-    cfg = update_manager.get_system_config()
-    cfg["channel"] = new_channel
-    update_manager.save_system_config(cfg)
-    return {"status": "success", "channel": new_channel, "message": f"Güncelleme kanalı '{new_channel}' olarak ayarlandı."}
-
-# ----------------- SPA ROOT -----------------
-
-@app.get("/")
-def serve_index():
-    index_path = STATIC_DIR / "index.html"
-    if index_path.exists():
-        return FileResponse(
-            str(index_path),
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-                "Pragma": "no-cache",
-                "Expires": "0"
-            }
-        )
-    return HTMLResponse("<h1>TexFlow API is running.</h1>")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8050)
+"""
+
+TexFlow - Main FastAPI Web Application
+
+Column Resizing, Sorting, Dual Image Upload, Drag-Drop Images, Month-Year Grouping,
+
+Custom Dynamic Columns (+ Sütun Ekle), Save Changes & Discard Buttons
+
+"""
+
+import os
+
+import sys
+
+import json
+
+import shutil
+
+import re
+
+from pathlib import Path
+
+from typing import Optional, List, Dict, Any
+
+from datetime import datetime
+
+import time
+
+import urllib.request
+
+import xml.etree.ElementTree as ET
+
+from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPException, Header, Query
+
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
+
+from fastapi.staticfiles import StaticFiles
+
+import io
+
+import base64
+
+import openpyxl
+
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+from openpyxl.drawing.image import Image as OpenpyxlImage
+
+from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+
+from openpyxl.drawing.xdr import XDRPositiveSize2D
+
+from openpyxl.utils.units import pixels_to_EMU
+
+from openpyxl.utils import get_column_letter
+
+from PIL import Image as PILImage
+
+from fastapi.middleware.cors import CORSMiddleware
+
+from fastapi.middleware.gzip import GZipMiddleware
+
+from collections import defaultdict
+
+from pydantic import BaseModel
+
+from database import (
+
+    get_db, init_db, DB_PATH, UPLOADS_DIR, hash_password, FABRICTAG_DB_PATH,
+
+    get_carton_templates, get_carton_template_by_id, save_or_update_carton_template, delete_carton_template
+
+)
+
+from auth import authenticate_user, get_current_user, logout_user, ROLE_PERMISSIONS
+
+from parser_engine import OrderParserEngine
+
+from fabrictag_connector import FabricTagConnector
+
+init_db()
+
+app = FastAPI(title="TexFlow - Smart Textile Production Suite", version="2.8.0")
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+app.add_middleware(
+
+    CORSMiddleware,
+
+    allow_origins=["*"],
+
+    allow_credentials=True,
+
+    allow_methods=["*"],
+
+    allow_headers=["*"],
+
+)
+
+import license_manager
+
+license_manager.start_background_license_checker()
+
+@app.middleware("http")
+
+async def license_security_middleware(request: Request, call_next):
+
+    path = request.url.path
+
+    # Statik dosyalar, favicon ve login/lisans endpoint'leri her zaman serbest
+
+    if path.startswith("/static") or path == "/favicon.ico":
+
+        res = await call_next(request)
+
+        if request.method == "GET" and res.status_code == 200:
+
+            res.headers["Cache-Control"] = "public, max-age=3600"
+
+        return res
+
+    exempt_prefixes = [
+
+        "/api/auth/login",
+
+        "/api/auth/logout",
+
+        "/api/system/license-status",
+
+        "/api/system/activate-license",
+
+        "/api/system/version",
+
+        "/api/system/check-updates",
+
+        "/api/system/apply-updates",
+
+        "/api/system/restart"
+
+    ]
+
+    for p in exempt_prefixes:
+
+        if path.startswith(p):
+
+            return await call_next(request)
+
+    # HTML sayfalari her zaman yuklensin (kullanici arayuzu gorunsun ve lisans paneline gidebilsin)
+
+    if not path.startswith("/api/"):
+
+        return await call_next(request)
+
+    # GET / HEAD / OPTIONS istekleri verileri her zaman okutur (Salt Okunur Mod Ozelligi)
+
+    if request.method in ["GET", "HEAD", "OPTIONS"]:
+
+        return await call_next(request)
+
+    # POST, PUT, DELETE (Veri Girisi & Degisiklik) islemleri icin lisans kontrolu
+
+    lic = license_manager.check_license()
+
+    if not lic.get("can_write", True):
+
+        # Developer backdoor kontrolu
+
+        auth_header = request.headers.get("Authorization", "")
+
+        token = auth_header.replace("Bearer ", "").strip() if "Bearer " in auth_header else ""
+
+        if not token:
+
+            token = request.cookies.get("session_token", "")
+
+        curr_user = auth.get_current_user(token)
+
+        if curr_user and (curr_user.get("role") in ["superadmin", "masterdeveloper"] or curr_user.get("is_superadmin")):
+
+            return await call_next(request)
+
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+
+            status_code=403,
+
+            content={
+
+                "error": "LICENSE_READ_ONLY",
+
+                "status": lic.get("status", "EXPIRED_READ_ONLY"),
+
+                "message": lic.get("message", "Lisans sureniz sona erdigi icin sistem salt okunur moddadir. Yeni kayit veya duzenleme yapilamaz. Lutfen lisansinizi aktiflestirin."),
+
+                "hardware_code": lic.get("hardware_code", ""),
+
+                "device_id": lic.get("device_id", "")
+
+            }
+
+        )
+
+    return await call_next(request)
+
+@app.get("/api/system/license-status")
+
+def get_license_status():
+
+    return license_manager.check_license(force_remote=False)
+
+
+
+if getattr(sys, 'frozen', False):
+
+    BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent))
+
+    STATIC_DIR = BASE_DIR / "static"
+
+    if not STATIC_DIR.exists():
+
+        STATIC_DIR = Path(sys.executable).resolve().parent / "static"
+
+else:
+
+    BASE_DIR = Path(__file__).resolve().parent
+
+    STATIC_DIR = BASE_DIR / "static"
+
+STATIC_DIR.mkdir(exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+STYLE_IMAGES_DIR = UPLOADS_DIR / "styles"
+
+STYLE_IMAGES_DIR.mkdir(exist_ok=True)
+
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+
+def require_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+
+    token = None
+
+    if authorization:
+
+        if authorization.startswith("Bearer "):
+
+            token = authorization.split(" ")[1]
+
+        else:
+
+            token = authorization
+
+    user = get_current_user(token)
+
+    if not user:
+
+        conn = get_db()
+
+        c = conn.cursor()
+
+        c.execute("SELECT id, username, full_name, role, company_id FROM users WHERE username = 'firma_yoneticisi'")
+
+        row = c.fetchone()
+
+        conn.close()
+
+        if row:
+
+            return {
+
+                "token": "default",
+
+                "user_id": row[0],
+
+                "username": row[1],
+
+                "full_name": row[2] or "Firma Yöneticisi",
+
+                "role": row[3],
+
+                "company_id": row[4] or 1,
+
+                "company_name": "Sarto Fashion / TexFlow"
+
+            }
+
+        raise HTTPException(status_code=401, detail="Oturum süresi dolmuş veya geçersiz token.")
+
+    return user
+
+def require_superadmin(user: Dict[str, Any] = Depends(require_user)) -> Dict[str, Any]:
+
+    if user.get("role") != "superadmin":
+
+        raise HTTPException(status_code=403, detail="Bu işlem için Süper Admin yetkisi gereklidir.")
+
+    return user
+
+# ----------------- AUTH -----------------
+
+class LoginRequest(BaseModel):
+
+    username: str
+
+    password: str
+
+@app.post("/api/auth/login")
+
+def api_login(req: LoginRequest):
+
+    session = authenticate_user(req.username, req.password)
+
+    if not session:
+
+        raise HTTPException(status_code=400, detail="Hatalı kullanıcı adı veya şifre.")
+
+    return session
+
+@app.get("/api/auth/me")
+
+def api_me(user: Dict[str, Any] = Depends(require_user)):
+
+    return user
+
+@app.post("/api/auth/logout")
+
+def api_logout(authorization: Optional[str] = Header(None)):
+
+    if authorization:
+
+        token = authorization.replace("Bearer ", "")
+
+        logout_user(token)
+
+# ----------------- KULLANICI & YETKİ YÖNETİMİ (USER MANAGEMENT REST API) -----------------
+
+class CreateUserRequest(BaseModel):
+
+    username: str
+
+    password: str
+
+    full_name: str
+
+    email: Optional[str] = ""
+
+    role: str = "user"  # masterdeveloper, admin, merchandiser, cutting, fabric_warehouse, user
+
+    company_id: Optional[int] = None
+
+    permissions: Optional[Dict[str, Any]] = None
+
+class UpdateUserRequest(BaseModel):
+
+    full_name: Optional[str] = None
+
+    email: Optional[str] = None
+
+    password: Optional[str] = None
+
+    role: Optional[str] = None
+
+    is_active: Optional[int] = None
+
+    permissions: Optional[Dict[str, Any]] = None
+
+class ActivateLicenseRequest(BaseModel):
+    license_key: str
+
+@app.post("/api/system/activate-license")
+def api_activate_license(req: ActivateLicenseRequest):
+    result = license_manager.verify_and_apply_license_key(req.license_key)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message", "Gecersiz lisans anahtari."))
+    return result
+
+class GenerateLicenseRequest(BaseModel):
+    hardware_code: str
+    days: int = 365
+
+@app.post("/api/system/generate-license")
+def api_generate_license(req: GenerateLicenseRequest, user: Dict[str, Any] = Depends(require_user)):
+    if user.get("role") not in ["superadmin", "masterdeveloper"] and not user.get("is_superadmin"):
+        raise HTTPException(status_code=403, detail="Lisans anahtari uretme yetkisi sadece Master Developer'a aittir.")
+    return license_manager.generate_license_key(req.hardware_code, req.days)
+
+def check_can_manage_users(user: Dict[str, Any]):
+
+    role = user.get("role")
+
+    perms = user.get("permissions") or {}
+
+    if role in ["superadmin", "masterdeveloper", "admin"]:
+
+        return True
+
+    if perms.get("can_manage_users"):
+
+        return True
+
+    raise HTTPException(status_code=403, detail="Kullanıcıları görüntüleme ve yönetme yetkiniz bulunmamaktadır.")
+
+@app.get("/api/users")
+
+def api_get_users(user: Dict[str, Any] = Depends(require_user)):
+
+    check_can_manage_users(user)
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    
+
+    role = user.get("role")
+
+    company_id = user.get("company_id") or 1
+
+    
+
+    if role in ["superadmin", "masterdeveloper"]:
+
+        c.execute("""
+
+        SELECT u.id, u.company_id, u.username, u.email, u.full_name, u.role, u.permissions_json, u.is_active, u.created_at,
+
+               c.name as company_name
+
+        FROM users u
+
+        LEFT JOIN companies c ON u.company_id = c.id
+
+        WHERE LOWER(u.username) NOT IN ('superadmin', 'masterdeveloper') AND u.role NOT IN ('superadmin', 'masterdeveloper')
+
+        ORDER BY u.id ASC
+
+        """)
+
+    else:
+
+        c.execute("""
+
+        SELECT u.id, u.company_id, u.username, u.email, u.full_name, u.role, u.permissions_json, u.is_active, u.created_at,
+
+               c.name as company_name
+
+        FROM users u
+
+        LEFT JOIN companies c ON u.company_id = c.id
+
+        WHERE u.company_id = ? AND LOWER(u.username) NOT IN ('superadmin', 'masterdeveloper') AND u.role NOT IN ('superadmin', 'masterdeveloper')
+
+        ORDER BY u.id ASC
+
+        """, (company_id,))
+
+        
+
+    rows = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+
+    
+
+    for r in rows:
+
+        try:
+
+            r["permissions"] = json.loads(r.get("permissions_json") or "{}")
+
+        except:
+
+            r["permissions"] = {}
+
+            
+
+    return rows
+
+@app.post("/api/users")
+
+def api_create_user(req: CreateUserRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    check_can_manage_users(user)
+
+    
+
+    clean_username = req.username.strip().lower()
+
+    if not clean_username or len(clean_username) < 3:
+
+        raise HTTPException(status_code=400, detail="Kullanıcı adı en az 3 karakter olmalıdır.")
+
+    if not req.password or len(req.password) < 4:
+
+        raise HTTPException(status_code=400, detail="Şifre en az 4 karakter olmalıdır.")
+
+        
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    
+
+    c.execute("SELECT id FROM users WHERE username = ?", (clean_username,))
+
+    if c.fetchone():
+
+        conn.close()
+
+        raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten kullanılmaktadır.")
+
+        
+
+    role = user.get("role")
+
+    target_company_id = req.company_id if (role in ["superadmin", "masterdeveloper"] and req.company_id) else (user.get("company_id") or 1)
+
+    
+
+    target_role = req.role or "user"
+
+    if target_role in ["superadmin", "masterdeveloper"] and role not in ["superadmin", "masterdeveloper"]:
+
+        target_role = "user"
+
+        
+
+    pwd_hash = hash_password(req.password)
+
+    perms_json = json.dumps(req.permissions or {})
+
+    
+
+    c.execute("""
+
+    INSERT INTO users (company_id, username, email, password_hash, full_name, role, permissions_json, is_active)
+
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+
+    """, (target_company_id, clean_username, req.email or "", pwd_hash, req.full_name or clean_username, target_role, perms_json))
+
+    
+
+    new_id = c.lastrowid
+
+    conn.commit()
+
+    conn.close()
+
+    
+
+    return {"status": "ok", "message": "Kullanıcı başarıyla oluşturuldu.", "user_id": new_id}
+
+@app.put("/api/users/{user_id}")
+
+def api_update_user(user_id: int, req: UpdateUserRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    check_can_manage_users(user)
+
+    
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+
+    target = c.fetchone()
+
+    if not target:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
+
+    target_dict = dict(target)
+
+    
+
+    role = user.get("role")
+
+    if role not in ["superadmin", "masterdeveloper"] and target_dict.get("company_id") != user.get("company_id"):
+
+        conn.close()
+
+        raise HTTPException(status_code=403, detail="Bu kullanıcı üzerinde işlem yapamazsınız.")
+
+        
+
+    updates = []
+
+    params = []
+
+    
+
+    if req.full_name is not None:
+
+        updates.append("full_name = ?")
+
+        params.append(req.full_name)
+
+    if req.email is not None:
+
+        updates.append("email = ?")
+
+        params.append(req.email)
+
+    if req.is_active is not None:
+
+        updates.append("is_active = ?")
+
+        params.append(req.is_active)
+
+    if req.role is not None:
+
+        if req.role in ["superadmin", "masterdeveloper"] and role not in ["superadmin", "masterdeveloper"]:
+
+            pass
+
+        else:
+
+            updates.append("role = ?")
+
+            params.append(req.role)
+
+    if req.permissions is not None:
+
+        updates.append("permissions_json = ?")
+
+        params.append(json.dumps(req.permissions))
+
+    if req.password and len(req.password.strip()) >= 4:
+
+        updates.append("password_hash = ?")
+
+        params.append(hash_password(req.password.strip()))
+
+        
+
+    if updates:
+
+        params.append(user_id)
+
+        c.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
+
+        conn.commit()
+
+        
+
+    conn.close()
+
+    return {"status": "ok", "message": "Kullanıcı güncellendi."}
+
+@app.delete("/api/users/{user_id}")
+
+def api_delete_user(user_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    check_can_manage_users(user)
+
+    
+
+    if user_id == user.get("id"):
+
+        raise HTTPException(status_code=400, detail="Kendi kullanıcınızı silemezsiniz.")
+
+        
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+
+    target = c.fetchone()
+
+    if not target:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
+
+    target_dict = dict(target)
+
+    
+
+    if target_dict.get("role") in ["superadmin", "masterdeveloper"] and user.get("role") not in ["superadmin", "masterdeveloper"]:
+
+        conn.close()
+
+        raise HTTPException(status_code=403, detail="Süper yönetici hesabı silinemez.")
+
+        
+
+    c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+    c.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+
+    conn.commit()
+
+    conn.close()
+
+    
+
+    return {"status": "ok", "message": "Kullanıcı başarıyla silindi."}
+
+# ----------------- TCMB GÜNCEL DÖVİZ KURLARI -----------------
+
+currency_cache = {
+
+    "data": None,
+
+    "last_fetched": 0
+
+}
+
+@app.get("/api/currency-rates")
+
+def api_get_currency_rates():
+
+    now = time.time()
+
+    # 10 dakika önbellek
+
+    if currency_cache["data"] and (now - currency_cache["last_fetched"] < 600):
+
+        return currency_cache["data"]
+
+    url = "https://www.tcmb.gov.tr/kurlar/today.xml"
+
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+
+    
+
+    try:
+
+        with urllib.request.urlopen(req, timeout=8) as resp:
+
+            content = resp.read()
+
+            root = ET.fromstring(content)
+
+            tarih = root.attrib.get("Tarih", "")
+
+            
+
+            rates = []
+
+            symbols = {"USD": "$", "EUR": "€", "GBP": "£"}
+
+            names = {"USD": "Dolar", "EUR": "Euro", "GBP": "Sterlin"}
+
+            flags = {"USD": "🇺🇸", "EUR": "🇪🇺", "GBP": "🇬🇧"}
+
+            
+
+            for cur in root.findall("Currency"):
+
+                code = cur.attrib.get("CurrencyCode", "")
+
+                if code in ["USD", "EUR", "GBP"]:
+
+                    fb = cur.find("ForexBuying")
+
+                    fs = cur.find("ForexSelling")
+
+                    b_val = float(fb.text) if fb is not None and fb.text else 0.0
+
+                    s_val = float(fs.text) if fs is not None and fs.text else 0.0
+
+                    
+
+                    rates.append({
+
+                        "code": code,
+
+                        "name": names.get(code, code),
+
+                        "symbol": symbols.get(code, code),
+
+                        "flag": flags.get(code, ""),
+
+                        "buying": f"{b_val:.4f}".replace(".", ","),
+
+                        "selling": f"{s_val:.4f}".replace(".", ","),
+
+                        "selling_short": f"{s_val:.2f}".replace(".", ",")
+
+                    })
+
+            
+
+            # Sıralama: USD, EUR, GBP
+
+            order_map = {"USD": 1, "EUR": 2, "GBP": 3}
+
+            rates.sort(key=lambda x: order_map.get(x["code"], 99))
+
+            result = {
+
+                "status": "success",
+
+                "date": tarih,
+
+                "rates": rates
+
+            }
+
+            currency_cache["data"] = result
+
+            currency_cache["last_fetched"] = now
+
+            return result
+
+    except Exception as e:
+
+        if currency_cache["data"]:
+
+            return currency_cache["data"]
+
+        return {
+
+            "status": "error",
+
+            "message": str(e),
+
+            "date": datetime.now().strftime("%d.%m.%Y"),
+
+            "rates": [
+
+                {"code": "USD", "name": "Dolar", "symbol": "$", "flag": "🇺🇸", "buying": "48,19", "selling": "48,28", "selling_short": "48,28"},
+
+                {"code": "EUR", "name": "Euro", "symbol": "€", "flag": "🇪🇺", "buying": "55,88", "selling": "55,98", "selling_short": "55,98"},
+
+                {"code": "GBP", "name": "Sterlin", "symbol": "£", "flag": "🇬🇧", "buying": "65,13", "selling": "65,47", "selling_short": "65,47"}
+
+            ]
+
+        }
+
+# ----------------- DYNAMIC MENUS -----------------
+
+@app.get("/api/menus")
+
+def api_get_menus(user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    
+
+    c.execute("""
+
+    SELECT * FROM dynamic_menus 
+
+    WHERE (company_id = ? OR company_id IS NULL) AND is_visible = 1
+
+    ORDER BY sort_order ASC
+
+    """, (company_id,))
+
+    
+
+    rows = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+
+    
+
+    role = user.get("role")
+
+    perms = user.get("permissions") or {}
+
+    allowed_menus = []
+
+    
+
+    for m in rows:
+
+        m_key = m.get("menu_key")
+
+        
+
+        # 1. Herkese açık operasyonel menüler
+
+        if m_key in ["carsaf_liste", "siparis_yukle", "fabrictag_entegrasyon", "menu_yonetimi", "kesimhane", "yukleme_adetleri", "serbest_fiyat", "ceki_koli", "numune_takip"]:
+
+            allowed_menus.append(m)
+
+            continue
+
+            
+
+        # 2. Genel Bakış (Dashboard) - yetkilendirmeye tabi
+
+        if m_key == "dashboard":
+
+            if role in ["superadmin", "masterdeveloper", "admin"] or perms.get("can_view_dashboard"):
+
+                allowed_menus.append(m)
+
+            continue
+
+            
+
+        # 3. Kullanıcı Yönetimi - yetkilendirmeye tabi (masterdeveloper, admin veya can_manage_users)
+
+        if m_key == "kullanici_yonetimi":
+
+            if role in ["superadmin", "masterdeveloper", "admin"] or perms.get("can_manage_users"):
+
+                allowed_menus.append(m)
+
+            continue
+
+            
+
+        # 4. Süper Admin Paneli
+
+        if m_key == "superadmin_panel":
+
+            if role in ["superadmin", "masterdeveloper", "admin"] or perms.get("can_manage_licenses"):
+
+                allowed_menus.append(m)
+
+            continue
+
+            
+
+        # Genel rol kontrolü
+
+        roles_list = json.loads(m.get("allowed_roles_json") or "[]")
+
+        if role in ["superadmin", "masterdeveloper"] or role in roles_list:
+
+            allowed_menus.append(m)
+
+            
+
+    return allowed_menus
+
+# ----------------- DASHBOARD & STATS -----------------
+
+@app.get("/api/dashboard/stats")
+
+def api_dashboard_stats(user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    
+
+    c.execute("SELECT COUNT(*), COALESCE(SUM(total_quantity), 0), COALESCE(SUM(total_amount), 0) FROM orders WHERE company_id = ?", (company_id,))
+
+    order_count, total_pcs, total_eur = c.fetchone()
+
+    
+
+    c.execute("SELECT COUNT(*) FROM styles WHERE company_id = ?", (company_id,))
+
+    style_count = c.fetchone()[0]
+
+    
+
+    c.execute("SELECT COUNT(*) FROM styles WHERE company_id = ? AND (fabric_ordered = 0 OR fabric_ordered IS NULL)", (company_id,))
+
+    fabric_waiting = c.fetchone()[0]
+
+    
+
+    c.execute("SELECT COUNT(*) FROM styles WHERE company_id = ? AND (pps_sent = 0 OR pps_sent IS NULL)", (company_id,))
+
+    pps_waiting = c.fetchone()[0]
+
+    
+
+    c.execute("""
+
+    SELECT o.po_number, o.customer_name, o.brand, o.delivery_date, s.style_no, s.color_name, s.total_quantity, s.status, s.image_url, s.image_url_2
+
+    FROM styles s
+
+    JOIN orders o ON s.order_id = o.id
+
+    WHERE s.company_id = ?
+
+    ORDER BY o.delivery_date ASC LIMIT 6
+
+    """, (company_id,))
+
+    upcoming_deadlines = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+
+    
+
+    return {
+
+        "order_count": order_count,
+
+        "style_count": style_count,
+
+        "total_pieces": total_pcs,
+
+        "total_amount_eur": total_eur,
+
+        "fabric_waiting": fabric_waiting,
+
+        "pps_waiting": pps_waiting,
+
+        "upcoming_deadlines": upcoming_deadlines,
+
+        "fabrictag_connected": FabricTagConnector.is_connected()
+
+    }
+
+# ----------------- CUSTOM COLUMNS (SÜTUN EKLE) -----------------
+
+class CreateCustomColumnRequest(BaseModel):
+
+    title: str
+
+    col_type: str  # 'text', 'date', 'month_year', 'number', 'checkbox', 'select'
+
+    options: Optional[List[str]] = []
+
+    width: Optional[int] = 120
+
+@app.get("/api/custom-columns")
+
+def api_get_custom_columns(user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    
+
+    c.execute("""
+
+    CREATE TABLE IF NOT EXISTS custom_columns (
+
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        company_id INTEGER DEFAULT 1,
+
+        col_key TEXT UNIQUE,
+
+        title TEXT NOT NULL,
+
+        col_type TEXT NOT NULL,
+
+        options_json TEXT,
+
+        width INTEGER DEFAULT 120,
+
+        sort_order INTEGER DEFAULT 99,
+
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+
+    )
+
+    """)
+
+    conn.commit()
+
+    c.execute("SELECT * FROM custom_columns WHERE company_id = ? ORDER BY sort_order ASC, id ASC", (company_id,))
+
+    rows = [dict(r) for r in c.fetchall()]
+
+    for r in rows:
+
+        r["options"] = json.loads(r.get("options_json") or "[]")
+
+    conn.close()
+
+    return rows
+
+@app.post("/api/custom-columns")
+
+def api_create_custom_column(req: CreateCustomColumnRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    if req.col_type == "size":
+
+        clean_name = req.title.strip().upper()
+
+        col_key = f"size_{clean_name}"
+
+        req.title = clean_name
+
+    else:
+
+        clean_key = re.sub(r'[^a-zA-Z0-9_]', '', req.title.lower().replace(" ", "_").replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c"))
+
+        col_key = f"custom_{clean_key}_{datetime.now().strftime('%M%S')}"
+
+    c.execute("""
+
+    INSERT INTO custom_columns (company_id, col_key, title, col_type, options_json, width)
+
+    VALUES (?, ?, ?, ?, ?, ?)
+
+    """, (company_id, col_key, req.title, req.col_type, json.dumps(req.options or []), req.width or 120))
+
+    
+
+    new_id = c.lastrowid
+
+    conn.commit()
+
+    conn.close()
+
+    return {
+
+        "status": "success", 
+
+        "id": new_id, 
+
+        "col_key": col_key, 
+
+        "title": req.title, 
+
+        "col_type": req.col_type, 
+
+        "options": req.options or [],
+
+        "width": req.width or 120
+
+    }
+
+@app.delete("/api/custom-columns/{col_id}")
+
+def api_delete_custom_column(col_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("DELETE FROM custom_columns WHERE id = ?", (col_id,))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": "Sütun silindi."}
+
+class UpdateCustomFieldRequest(BaseModel):
+
+    style_id: int
+
+    col_key: str
+
+    value: Any
+
+@app.post("/api/styles/update-custom-field")
+
+def api_update_custom_field(req: UpdateCustomFieldRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT custom_fields_json, order_id FROM styles WHERE id = ?", (req.style_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    
+
+    fields = json.loads(row[0] or "{}")
+
+    old_val = fields.get(req.col_key, "")
+
+    fields[req.col_key] = req.value
+
+    new_json = json.dumps(fields)
+
+    c.execute("UPDATE styles SET custom_fields_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_json, req.style_id))
+
+    
+
+    user_name = user.get("full_name") or user.get("username")
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'Özel Sütun Değeri Güncellendi')
+
+    """, (req.style_id, row[1], user.get("user_id"), user_name, req.col_key, str(old_val), str(req.value)))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "custom_fields": fields}
+
+# ----------------- MASTER PRODUCTION SHEET (ÇARŞAF LİSTE) -----------------
+
+SIZE_SORT_ORDER = {
+
+    'XXS': 1, '2XS': 1, 'XS': 2, 'S/M': 3, 'S': 4, 'M': 5, 'L': 6, 'XL': 7,
+
+    'XXL': 8, '2XL': 8, 'XXXL': 9, '3XL': 9, '4XL': 10, '5XL': 11,
+
+    'STD': 12, 'FREE': 13, 'ONE SIZE': 14
+
+}
+
+def get_size_sort_key(sz: str):
+
+    s = str(sz).strip().upper()
+
+    # 1. Child month sizes (e.g. '12M/80', '18M/86', '24M/92', '12M', '6M', '0-3M')
+
+    m_month = re.match(r'^(\d+)(?:-(\d+))?\s*M(?:/(\d+))?$', s)
+
+    if m_month:
+
+        month = int(m_month.group(2)) if m_month.group(2) else int(m_month.group(1))
+
+        height = int(m_month.group(3)) if m_month.group(3) else 0
+
+        return (0, month, height, s)
+
+    # 2. Child slash sizes (e.g. '3/98', '4/104', '10/140')
+
+    m_slash = re.match(r'^(\d+)/(\d+)$', s)
+
+    if m_slash:
+
+        return (1, int(m_slash.group(1)), int(m_slash.group(2)), s)
+
+    # 3. Numeric sizes: ascending (e.g. 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52...)
+
+    try:
+
+        return (2, float(s.replace(',', '.')), 0, s)
+
+    except ValueError:
+
+        pass
+
+    # 4. Standard apparel sizes (XXS, XS, S, M, L, XL...)
+
+    if s in SIZE_SORT_ORDER:
+
+        return (3, SIZE_SORT_ORDER[s], 0, s)
+
+    return (4, 99, 0, s)
+
+@app.get("/api/styles")
+
+def api_get_styles(user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    role = user.get("role")
+
+    company_id = user.get("company_id") or 1
+
+    
+
+    if role in ["superadmin", "masterdeveloper"]:
+
+        sql = """
+
+        SELECT s.*, 
+
+               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date, o.status as order_status
+
+        FROM styles s
+
+        JOIN orders o ON s.order_id = o.id
+
+        ORDER BY o.id DESC, s.id ASC
+
+        """
+
+        c.execute(sql)
+
+    else:
+
+        sql = """
+
+        SELECT s.*, 
+
+               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as resolved_brand, o.season, o.delivery_date, o.order_date, o.status as order_status
+
+        FROM styles s
+
+        JOIN orders o ON s.order_id = o.id
+
+        WHERE s.company_id = ?
+
+        ORDER BY o.id DESC, s.id ASC
+
+        """
+
+        c.execute(sql, (company_id,))
+
+    styles = [dict(r) for r in c.fetchall()]
+
+    for s in styles:
+
+        if s.get("resolved_brand"):
+
+            s["brand"] = s["resolved_brand"]
+
+    
+
+    # Load FabricTag global lookup map once
+
+    ft_map = {}
+
+    try:
+
+        ft_conn = FabricTagConnector.get_connection()
+
+        if ft_conn:
+
+            ft_c = ft_conn.cursor()
+
+            ft_c.execute("SELECT id, internal_code, company_name, quality_name, quality_code, design_code, color, width, weight FROM fabrics")
+
+            for f_row in ft_c.fetchall():
+
+                f_d = dict(f_row)
+
+                if f_d.get("id"):
+
+                    ft_map[str(f_d["id"])] = f_d
+
+                if f_d.get("internal_code"):
+
+                    ft_map[f_d["internal_code"].upper()] = f_d
+
+            ft_conn.close()
+
+    except Exception:
+
+        pass
+
+    def resolve_fabric_meta(fab_id, raw_article):
+
+        found = None
+
+        if fab_id and str(fab_id) in ft_map:
+
+            found = ft_map[str(fab_id)]
+
+        elif raw_article:
+
+            m = re.search(r'ELT\d+', str(raw_article), re.IGNORECASE)
+
+            if m and m.group(0).upper() in ft_map:
+
+                found = ft_map[m.group(0).upper()]
+
+        return found
+
+    all_sizes_set = set()
+
+    style_ids = [s["id"] for s in styles]
+
+    # Pre-fetch all child relations in high-speed batches to eliminate 2,000+ sequential N+1 queries
+
+    sizes_by_style = defaultdict(list)
+
+    fl1_by_style = {}
+
+    fl2_by_style = {}
+
+    logs_by_style = defaultdict(list)
+
+    audit_counts = defaultdict(int)
+
+    if style_ids:
+
+        for i in range(0, len(style_ids), 500):
+
+            chunk = style_ids[i:i + 500]
+
+            placeholders = ",".join("?" for _ in chunk)
+
+            # 1. Size Distributions
+
+            c.execute(f"SELECT * FROM size_distributions WHERE style_id IN ({placeholders}) ORDER BY sort_order ASC, id ASC", chunk)
+
+            for row in c.fetchall():
+
+                sizes_by_style[row["style_id"]].append(dict(row))
+
+            # 2. Fabric Links (ordered ASC so highest id overwrites, matching ORDER BY id DESC LIMIT 1)
+
+            c.execute(f"SELECT * FROM fabric_links WHERE style_id IN ({placeholders}) ORDER BY id ASC", chunk)
+
+            for row in c.fetchall():
+
+                rd = dict(row)
+
+                sid = rd["style_id"]
+
+                slot = rd.get("fabric_slot")
+
+                if slot == 2:
+
+                    fl2_by_style[sid] = rd
+
+                elif slot == 1 or slot is None:
+
+                    fl1_by_style[sid] = rd
+
+            # 3. Production Status Logs (ordered DESC, take up to 15 per style)
+
+            c.execute(f"SELECT * FROM production_status_logs WHERE style_id IN ({placeholders}) ORDER BY id DESC", chunk)
+
+            for row in c.fetchall():
+
+                sid = row["style_id"]
+
+                if len(logs_by_style[sid]) < 15:
+
+                    logs_by_style[sid].append(dict(row))
+
+            # 4. Audit Log Counts
+
+            c.execute(f"SELECT style_id, COUNT(*) FROM audit_logs WHERE style_id IN ({placeholders}) GROUP BY style_id", chunk)
+
+            for row in c.fetchall():
+
+                audit_counts[row[0]] = row[1]
+
+    def is_empty_val(v):
+
+        if not v:
+
+            return True
+
+        sv = str(v).strip().upper()
+
+        return sv in ["", "KODSUZ", "YOK", "NONE", "NULL", "-"]
+
+    for s in styles:
+
+        sid = s["id"]
+
+        sizes_rows = sizes_by_style.get(sid, [])
+
+        s["sizes"] = sizes_rows
+
+        
+
+        size_map = {}
+
+        for sz in sizes_rows:
+
+            s_name = str(sz["size_name"]).strip()
+
+            qty = sz["quantity"] or 0
+
+            size_map[s_name] = qty
+
+            if qty > 0:
+
+                all_sizes_set.add(s_name)
+
+        s["size_map"] = size_map
+
+        
+
+        if sizes_rows:
+
+            sum_qty = sum(sz["quantity"] for sz in sizes_rows)
+
+            if sum_qty != s["total_quantity"]:
+
+                s["total_quantity"] = sum_qty
+
+            s["cut_total_quantity"] = sum((sz.get("cut_quantity") or 0) for sz in sizes_rows)
+
+            s["shipped_total_quantity"] = sum((sz.get("shipped_quantity") or 0) for sz in sizes_rows)
+
+        else:
+
+            s["cut_total_quantity"] = 0
+
+            s["shipped_total_quantity"] = 0
+
+        
+
+        s["custom_fields"] = json.loads(s.get("custom_fields_json") or "{}")
+
+        # Slot 1 Fabric resolution
+
+        fl1_dict = fl1_by_style.get(sid)
+
+        s["fabric_link"] = fl1_dict
+
+        f1_meta = resolve_fabric_meta(fl1_dict.get("fabrictag_id") if fl1_dict else None, s.get("fabric_article") or s.get("fabric_type"))
+
+        if f1_meta:
+
+            q_name = (f1_meta.get("quality_name") or "").strip()
+
+            q_code = (f1_meta.get("quality_code") or "").strip()
+
+            comp = (f1_meta.get("company_name") or "").strip()
+
+            des = (f1_meta.get("design_code") or "").strip()
+
+            col = (f1_meta.get("color") or "").strip()
+
+            s["fabric_company_1"] = comp
+
+            s["fabric_variant_1"] = des
+
+            s["fabric_color_1"] = col
+
+            if is_empty_val(q_name) and is_empty_val(q_code):
+
+                s["fabric_display_title_1"] = ""
+
+                s["fabric_quality_name_1"] = ""
+
+                s["fabric_quality_code_1"] = ""
+
+            else:
+
+                s["fabrictag_width"] = f1_meta.get("width")
+
+                s["fabrictag_weight"] = f1_meta.get("weight")
+
+                clean_name = "" if is_empty_val(q_name) else q_name
+
+                clean_code = "" if is_empty_val(q_code) else f"({q_code})"
+
+                q_combo = " ".join(filter(None, [clean_name, clean_code])).strip()
+
+                parts = []
+
+                if comp: parts.append(comp)
+
+                if q_combo: parts.append(q_combo)
+
+                if des: parts.append(des)
+
+                if col and not is_empty_val(col): parts.append(col)
+
+                s["fabric_display_title_1"] = " - ".join(parts) if parts else ""
+
+                s["fabric_quality_name_1"] = clean_name
+
+                s["fabric_quality_code_1"] = "" if is_empty_val(q_code) else q_code
+
+        else:
+
+            s["fabric_display_title_1"] = ""
+
+            s["fabric_quality_name_1"] = ""
+
+            s["fabric_quality_code_1"] = ""
+
+            s["fabric_company_1"] = ""
+
+            s["fabric_variant_1"] = ""
+
+            s["fabric_color_1"] = ""
+
+        # Slot 2 Fabric resolution
+
+        fl2_dict = fl2_by_style.get(sid)
+
+        s["fabric_link_2"] = fl2_dict
+
+        f2_meta = resolve_fabric_meta(fl2_dict.get("fabrictag_id") if fl2_dict else None, s.get("fabric_article_2") or s.get("fabric_type_2"))
+
+        if f2_meta:
+
+            q_name2 = (f2_meta.get("quality_name") or "").strip()
+
+            q_code2 = (f2_meta.get("quality_code") or "").strip()
+
+            comp2 = (f2_meta.get("company_name") or "").strip()
+
+            des2 = (f2_meta.get("design_code") or "").strip()
+
+            col2 = (f2_meta.get("color") or "").strip()
+
+            s["fabric_company_2"] = comp2
+
+            s["fabric_variant_2"] = des2
+
+            s["fabric_color_2"] = col2
+
+            if is_empty_val(q_name2) and is_empty_val(q_code2):
+
+                s["fabric_display_title_2"] = ""
+
+                s["fabric_quality_name_2"] = ""
+
+                s["fabric_quality_code_2"] = ""
+
+            else:
+
+                s["fabrictag_width_2"] = f2_meta.get("width")
+
+                s["fabrictag_weight_2"] = f2_meta.get("weight")
+
+                clean_name2 = "" if is_empty_val(q_name2) else q_name2
+
+                clean_code2 = "" if is_empty_val(q_code2) else f"({q_code2})"
+
+                q_combo2 = " ".join(filter(None, [clean_name2, clean_code2])).strip()
+
+                parts2 = []
+
+                if comp2: parts2.append(comp2)
+
+                if q_combo2: parts2.append(q_combo2)
+
+                if des2: parts2.append(des2)
+
+                if col2 and not is_empty_val(col2): parts2.append(col2)
+
+                s["fabric_display_title_2"] = " - ".join(parts2) if parts2 else ""
+
+                s["fabric_quality_name_2"] = clean_name2
+
+                s["fabric_quality_code_2"] = "" if is_empty_val(q_code2) else q_code2
+
+        else:
+
+            s["fabric_display_title_2"] = ""
+
+            s["fabric_quality_name_2"] = ""
+
+            s["fabric_quality_code_2"] = ""
+
+            s["fabric_company_2"] = ""
+
+            s["fabric_variant_2"] = ""
+
+            s["fabric_color_2"] = ""
+
+        if s.get("fabric_wastage_percent") is None:
+
+            s["fabric_wastage_percent"] = 5.0
+
+        if not s.get("fabric_order_unit"):
+
+            s["fabric_order_unit"] = "M"
+
+        if not s.get("fabric_price_currency_1"):
+
+            s["fabric_price_currency_1"] = s.get("currency") or "€"
+
+        if s.get("fabric_wastage_percent_2") is None:
+
+            s["fabric_wastage_percent_2"] = 5.0
+
+        if not s.get("fabric_order_unit_2"):
+
+            s["fabric_order_unit_2"] = "M"
+
+        if not s.get("fabric_price_currency_2"):
+
+            s["fabric_price_currency_2"] = s.get("currency") or "€"
+
+        if s.get("cost_data_json"):
+
+            try:
+
+                s["cost_data"] = json.loads(s["cost_data_json"])
+
+            except Exception:
+
+                s["cost_data"] = None
+
+        else:
+
+            s["cost_data"] = None
+
+        if s.get("actual_cost_data_json"):
+
+            try:
+
+                s["actual_cost_data"] = json.loads(s["actual_cost_data_json"])
+
+            except Exception:
+
+                s["actual_cost_data"] = None
+
+        else:
+
+            s["actual_cost_data"] = None
+
+        s["recent_logs"] = logs_by_style.get(sid, [])
+
+        s["audit_count"] = audit_counts.get(sid, 0)
+
+    # Also load custom columns
+
+    c.execute("SELECT * FROM custom_columns WHERE company_id = ? ORDER BY sort_order ASC, id ASC", (company_id,))
+
+    custom_cols = [dict(r) for r in c.fetchall()]
+
+    for col in custom_cols:
+
+        col["options"] = json.loads(col.get("options_json") or "[]")
+
+        if col.get("col_type") == "size" and col.get("title"):
+
+            all_sizes_set.add(str(col["title"]).strip().upper())
+
+    conn.close()
+
+    
+
+    sorted_sizes = sorted(list(all_sizes_set), key=get_size_sort_key)
+
+    
+
+    return {
+
+        "styles": styles,
+
+        "available_sizes": sorted_sizes,
+
+        "custom_columns": custom_cols
+
+    }
+
+# ----------------- BULK SAVE ENDPOINT -----------------
+
+class BulkSaveItem(BaseModel):
+
+    id: int
+
+    description: Optional[Any] = None
+
+    fabric_order_status: Optional[Any] = None
+
+    unit_price: Optional[Any] = None
+
+    status: Optional[Any] = None
+
+    fabric_ordered: Optional[Any] = None
+
+    pps_sent: Optional[Any] = None
+
+    shipping_sample_sent: Optional[Any] = None
+
+    unit_meters: Optional[Any] = None
+
+    unit_grams: Optional[Any] = None
+
+    fabric_wastage_percent: Optional[Any] = None
+
+    fabric_ordered_meters: Optional[Any] = None
+
+    fabric_price_1: Optional[Any] = None
+
+    fabric_price_currency_1: Optional[Any] = None
+
+    fabric_arrival_date: Optional[Any] = None
+
+    fabric_received_meters: Optional[Any] = None
+
+    unit_meters_2: Optional[Any] = None
+
+    unit_grams_2: Optional[Any] = None
+
+    fabric_wastage_percent_2: Optional[Any] = None
+
+    fabric_ordered_meters_2: Optional[Any] = None
+
+    fabric_price_2: Optional[Any] = None
+
+    fabric_price_currency_2: Optional[Any] = None
+
+    fabric_arrival_date_2: Optional[Any] = None
+
+    fabric_received_meters_2: Optional[Any] = None
+
+    channel: Optional[Any] = None
+
+    size_map: Optional[Dict[str, Any]] = None
+
+    custom_fields: Optional[Dict[str, Any]] = None
+
+class BulkSaveRequest(BaseModel):
+
+    items: List[BulkSaveItem]
+
+@app.post("/api/styles/bulk-save")
+
+def api_bulk_save_styles(req: BulkSaveRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    user_name = user.get("full_name") or user.get("username")
+
+    saved_count = 0
+
+    for item in req.items:
+
+        u_price = None
+
+        if item.unit_price is not None and str(item.unit_price).strip() != "":
+
+            try:
+
+                u_price = float(str(item.unit_price).replace(",", "."))
+
+            except Exception:
+
+                pass
+
+        fp1 = None
+
+        if item.fabric_price_1 is not None and str(item.fabric_price_1).strip() != "":
+
+            try:
+
+                fp1 = float(str(item.fabric_price_1).replace(",", "."))
+
+            except Exception:
+
+                pass
+
+        fp2 = None
+
+        if item.fabric_price_2 is not None and str(item.fabric_price_2).strip() != "":
+
+            try:
+
+                fp2 = float(str(item.fabric_price_2).replace(",", "."))
+
+            except Exception:
+
+                pass
+
+        c.execute("""
+
+        UPDATE styles SET
+
+            description = COALESCE(?, description),
+
+            fabric_order_status = COALESCE(?, fabric_order_status),
+
+            unit_price = COALESCE(?, unit_price),
+
+            status = COALESCE(?, status),
+
+            unit_meters = COALESCE(?, unit_meters),
+
+            unit_grams = COALESCE(?, unit_grams),
+
+            fabric_wastage_percent = COALESCE(?, fabric_wastage_percent),
+
+            fabric_ordered_meters = COALESCE(?, fabric_ordered_meters),
+
+            fabric_price_1 = COALESCE(?, fabric_price_1),
+
+            fabric_price_currency_1 = COALESCE(?, fabric_price_currency_1),
+
+            unit_meters_2 = COALESCE(?, unit_meters_2),
+
+            unit_grams_2 = COALESCE(?, unit_grams_2),
+
+            fabric_wastage_percent_2 = COALESCE(?, fabric_wastage_percent_2),
+
+            fabric_ordered_meters_2 = COALESCE(?, fabric_ordered_meters_2),
+
+            fabric_price_2 = COALESCE(?, fabric_price_2),
+
+            fabric_price_currency_2 = COALESCE(?, fabric_price_currency_2),
+
+            fabric_arrival_date = COALESCE(?, fabric_arrival_date),
+
+            fabric_received_meters = COALESCE(?, fabric_received_meters),
+
+            fabric_arrival_date_2 = COALESCE(?, fabric_arrival_date_2),
+
+            fabric_received_meters_2 = COALESCE(?, fabric_received_meters_2),
+
+            channel = COALESCE(?, channel),
+
+            updated_at = CURRENT_TIMESTAMP
+
+        WHERE id = ?
+
+        """, (
+
+            item.description,
+
+            item.fabric_order_status,
+
+            u_price,
+
+            item.status,
+
+            item.unit_meters,
+
+            item.unit_grams,
+
+            item.fabric_wastage_percent,
+
+            item.fabric_ordered_meters,
+
+            fp1,
+
+            item.fabric_price_currency_1,
+
+            item.unit_meters_2,
+
+            item.unit_grams_2,
+
+            item.fabric_wastage_percent_2,
+
+            item.fabric_ordered_meters_2,
+
+            fp2,
+
+            item.fabric_price_currency_2,
+
+            item.fabric_arrival_date,
+
+            item.fabric_received_meters,
+
+            item.fabric_arrival_date_2,
+
+            item.fabric_received_meters_2,
+
+            item.channel,
+
+            item.id
+
+        ))
+
+        if item.custom_fields is not None:
+
+            c.execute("UPDATE styles SET custom_fields_json = ? WHERE id = ?", (json.dumps(item.custom_fields), item.id))
+
+        if item.size_map:
+
+            for sz_name, sz_qty in item.size_map.items():
+
+                try:
+
+                    qty_int = int(str(sz_qty).strip() or 0)
+
+                except Exception:
+
+                    qty_int = 0
+
+                c.execute("SELECT id FROM size_distributions WHERE style_id = ? AND size_name = ?", (item.id, sz_name))
+
+                row = c.fetchone()
+
+                if row:
+
+                    c.execute("UPDATE size_distributions SET quantity = ? WHERE id = ?", (qty_int, row[0]))
+
+                else:
+
+                    c.execute("INSERT INTO size_distributions (style_id, size_name, quantity) VALUES (?, ?, ?)", (item.id, sz_name, qty_int))
+
+            
+
+            c.execute("SELECT SUM(quantity) FROM size_distributions WHERE style_id = ?", (item.id,))
+
+            new_tot = c.fetchone()[0] or 0
+
+            c.execute("UPDATE styles SET total_quantity = ?, total_amount = ? * COALESCE(unit_price, 0) WHERE id = ?", (new_tot, new_tot, item.id))
+
+        
+
+        saved_count += 1
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": f"{saved_count} satırdaki tüm değişiklikler başarıyla kaydedildi."}
+
+# ----------------- DELETE STYLE / ORDER -----------------
+
+def check_can_delete_orders(user: Dict[str, Any]):
+
+    role = user.get("role")
+
+    perms = user.get("permissions") or {}
+
+    if role in ["superadmin", "masterdeveloper", "admin"]:
+
+        return True
+
+    if perms.get("can_delete_orders"):
+
+        return True
+
+    raise HTTPException(status_code=403, detail="Sipariş ve modelleri silme yetkiniz bulunmamaktadır.")
+
+@app.delete("/api/styles/{style_id}")
+
+def api_delete_style(style_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    check_can_delete_orders(user)
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT order_id, style_no, color_name, total_quantity FROM styles WHERE id = ?", (style_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Silinecek model bulunamadı.")
+
+    
+
+    order_id, style_no, color_name, total_qty = row[0], row[1], row[2], row[3]
+
+    try:
+
+        c.execute("DELETE FROM audit_logs WHERE style_id = ?", (style_id,))
+
+        c.execute("DELETE FROM size_distributions WHERE style_id = ?", (style_id,))
+
+        c.execute("DELETE FROM production_status_logs WHERE style_id = ?", (style_id,))
+
+        c.execute("DELETE FROM fabric_links WHERE style_id = ?", (style_id,))
+
+        c.execute("DELETE FROM styles WHERE id = ?", (style_id,))
+
+        c.execute("SELECT COUNT(*), COALESCE(SUM(total_quantity), 0), COALESCE(SUM(total_amount), 0) FROM styles WHERE order_id = ?", (order_id,))
+
+        rem_count, rem_qty, rem_amt = c.fetchone()
+
+        if rem_count == 0:
+
+            c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+
+        else:
+
+            c.execute("UPDATE orders SET total_quantity = ?, total_amount = ? WHERE id = ?", (rem_qty, rem_amt, order_id))
+
+        conn.commit()
+
+    except Exception as e:
+
+        conn.rollback()
+
+        conn.close()
+
+        raise HTTPException(status_code=500, detail=f"Silme hatası: {str(e)}")
+
+# ----------------- ORDER MANAGEMENT & PERMANENT DELETE -----------------
+
+@app.get("/api/orders/list")
+
+def api_get_orders_list(user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    role = user.get("role")
+
+    comp_id = user.get("company_id")
+
+    
+
+    if role in ["superadmin", "masterdeveloper"]:
+
+        c.execute("""
+
+            SELECT o.id, o.po_number, o.customer_name, o.brand, o.season, o.order_date, o.delivery_date,
+
+                   o.total_quantity, o.total_amount, o.currency, o.status, o.created_at,
+
+                   COUNT(s.id) as styles_count,
+
+                   GROUP_CONCAT(DISTINCT s.style_no) as style_names
+
+            FROM orders o
+
+            LEFT JOIN styles s ON s.order_id = o.id
+
+            GROUP BY o.id
+
+            ORDER BY o.id DESC
+
+        """)
+
+    else:
+
+        c.execute("""
+
+            SELECT o.id, o.po_number, o.customer_name, o.brand, o.season, o.order_date, o.delivery_date,
+
+                   o.total_quantity, o.total_amount, o.currency, o.status, o.created_at,
+
+                   COUNT(s.id) as styles_count,
+
+                   GROUP_CONCAT(DISTINCT s.style_no) as style_names
+
+            FROM orders o
+
+            LEFT JOIN styles s ON s.order_id = o.id
+
+            WHERE o.company_id = ?
+
+            GROUP BY o.id
+
+            ORDER BY o.id DESC
+
+        """, (comp_id or 1,))
+
+        
+
+    rows = [dict(r) for r in c.fetchall()]
+
+    
+
+    if rows:
+
+        order_ids = [r["id"] for r in rows]
+
+        placeholders = ",".join("?" for _ in order_ids)
+
+        c.execute(f"""
+
+            SELECT id, order_id, style_no, description, color_code, color_name, total_quantity, status, image_url
+
+            FROM styles
+
+            WHERE order_id IN ({placeholders})
+
+            ORDER BY id ASC
+
+        """, tuple(order_ids))
+
+        all_styles = [dict(s) for s in c.fetchall()]
+
+        styles_map = {}
+
+        for s in all_styles:
+
+            styles_map.setdefault(s["order_id"], []).append(s)
+
+        for r in rows:
+
+            r["styles"] = styles_map.get(r["id"], [])
+
+            # Also build a comprehensive search string for colors and styles
+
+            color_parts = []
+
+            for s in r["styles"]:
+
+                if s.get("color_code"):
+
+                    color_parts.append(str(s["color_code"]).strip())
+
+                if s.get("color_name"):
+
+                    color_parts.append(str(s["color_name"]).strip())
+
+            r["color_names"] = ", ".join(dict.fromkeys(color_parts))
+
+    conn.close()
+
+    return rows
+
+@app.delete("/api/orders/{order_id}")
+
+def api_delete_order(order_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    check_can_delete_orders(user)
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT id, po_number, customer_name FROM orders WHERE id = ?", (order_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Sipariş bulunamadı.")
+
+    
+
+    po_num, cust = row["po_number"], row["customer_name"]
+
+    try:
+
+        c.execute("SELECT id FROM styles WHERE order_id = ?", (order_id,))
+
+        style_ids = [r["id"] for r in c.fetchall()]
+
+        for s_id in style_ids:
+
+            c.execute("DELETE FROM audit_logs WHERE style_id = ?", (s_id,))
+
+            c.execute("DELETE FROM size_distributions WHERE style_id = ?", (s_id,))
+
+            c.execute("DELETE FROM production_status_logs WHERE style_id = ?", (s_id,))
+
+            c.execute("DELETE FROM fabric_links WHERE style_id = ?", (s_id,))
+
+        
+
+        c.execute("DELETE FROM styles WHERE order_id = ?", (order_id,))
+
+        c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+
+        conn.commit()
+
+    except Exception as e:
+
+        conn.rollback()
+
+        conn.close()
+
+        raise HTTPException(status_code=500, detail=f"Sipariş silme hatası: {str(e)}")
+
+    conn.close()
+
+    return {"status": "success", "message": f"Sipariş (PO: {po_num}, Müşteri: {cust}) ve tüm modelleri kalıcı olarak silindi."}
+
+class BulkDeleteOrdersRequest(BaseModel):
+
+    order_ids: List[int]
+
+@app.post("/api/orders/bulk-delete")
+
+def api_bulk_delete_orders(req: BulkDeleteOrdersRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    if not req.order_ids:
+
+        return {"status": "success", "deleted_count": 0}
+
+    
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    try:
+
+        for order_id in req.order_ids:
+
+            c.execute("SELECT id FROM styles WHERE order_id = ?", (order_id,))
+
+            style_ids = [r["id"] for r in c.fetchall()]
+
+            for s_id in style_ids:
+
+                c.execute("DELETE FROM audit_logs WHERE style_id = ?", (s_id,))
+
+                c.execute("DELETE FROM size_distributions WHERE style_id = ?", (s_id,))
+
+                c.execute("DELETE FROM production_status_logs WHERE style_id = ?", (s_id,))
+
+                c.execute("DELETE FROM fabric_links WHERE style_id = ?", (s_id,))
+
+            c.execute("DELETE FROM styles WHERE order_id = ?", (order_id,))
+
+            c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+
+        conn.commit()
+
+    except Exception as e:
+
+        conn.rollback()
+
+        conn.close()
+
+        raise HTTPException(status_code=500, detail=f"Toplu silme hatası: {str(e)}")
+
+    conn.close()
+
+    return {"status": "success", "deleted_count": len(req.order_ids)}
+
+def get_excel_currency_format(cur_code: str = "EUR") -> tuple[str, str]:
+
+    """
+
+    Excel'e aktarılan tüm para birimlerinde sembolü rakamın önüne alır.
+
+    Türkçe Excel'de '#,##0.00' formatı küsüratı virgül ',', binlikleri nokta '.' olarak görüntüler.
+
+    Hücreye gerçek sayı (float) yazıldığında Excel bunu tam olarak sayı/para birimi olarak algılar.
+
+    Örnek:
+
+      EUR: symbol='€', format='"€" #,##0.00' -> '€ 26,25'
+
+      TRY: symbol='₺', format='"₺" #,##0.00' -> '₺ 1.250,50'
+
+      USD: symbol='$', format='"$" #,##0.00' -> '$ 45,50'
+
+      GBP: symbol='£', format='"£" #,##0.00' -> '£ 30,00'
+
+    """
+
+    c = str(cur_code or "EUR").upper().strip()
+
+    if c in ["USD", "$"]:
+
+        return "$", '"$" #,##0.00'
+
+    elif c in ["TL", "TRY", "₺"]:
+
+        return "₺", '"₺" #,##0.00'
+
+    elif c in ["GBP", "£"]:
+
+        return "£", '"£" #,##0.00'
+
+    else:
+
+        return "€", '"€" #,##0.00'
+
+def safe_price_float(val):
+
+    if val is None or str(val).strip() == "":
+
+        return None
+
+    if isinstance(val, (int, float)):
+
+        return float(val)
+
+    try:
+
+        s_clean = str(val).strip().replace("€", "").replace("₺", "").replace("$", "").replace("£", "").replace("TL", "").replace("EUR", "").replace("USD", "").strip()
+
+        s_clean = s_clean.replace(",", ".")
+
+        return float(s_clean)
+
+    except Exception:
+
+        return None
+
+def safe_unit_float(val):
+
+    if val is None or str(val).strip() == "":
+
+        return None
+
+    if isinstance(val, (int, float)):
+
+        return float(val)
+
+    try:
+
+        s_clean = str(val).strip()
+
+        m = re.search(r'[-+]?[0-9]+[.,]?[0-9]*', s_clean)
+
+        if m:
+
+            num_str = m.group(0).replace(",", ".")
+
+            return float(num_str)
+
+        return None
+
+    except Exception:
+
+        return None
+
+class ExportExcelRequest(BaseModel):
+
+    style_ids: Optional[List[int]] = None
+
+def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, company_id: int = 1) -> Response:
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    
+
+    if style_ids and len(style_ids) > 0:
+
+        placeholders = ",".join("?" for _ in style_ids)
+
+        order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
+
+        sql = f"""
+
+        SELECT s.*, 
+
+               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
+
+        FROM styles s
+
+        JOIN orders o ON s.order_id = o.id
+
+        WHERE s.company_id = ? AND s.id IN ({placeholders})
+
+        ORDER BY {order_by_clause}
+
+        """
+
+        params = [company_id] + style_ids
+
+    else:
+
+        sql = """
+
+        SELECT s.*, 
+
+               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
+
+        FROM styles s
+
+        JOIN orders o ON s.order_id = o.id
+
+        WHERE s.company_id = ?
+
+        ORDER BY o.id DESC, s.id ASC
+
+        """
+
+        params = [company_id]
+
+        
+
+    c.execute(sql, tuple(params))
+
+    styles = [dict(r) for r in c.fetchall()]
+
+    all_style_ids = [s["id"] for s in styles]
+
+    
+
+    # 1. Beden Dağılımlarını Topla
+
+    sizes_by_style = {}
+
+    present_size_names = []
+
+    size_seen = set()
+
+    
+
+    if all_style_ids:
+
+        pl_ids = ",".join("?" for _ in all_style_ids)
+
+        c.execute(f"""
+
+        SELECT style_id, size_name, quantity, sort_order
+
+        FROM size_distributions
+
+        WHERE style_id IN ({pl_ids})
+
+        ORDER BY sort_order ASC, id ASC
+
+        """, tuple(all_style_ids))
+
+        for sz_row in c.fetchall():
+
+            sid = sz_row["style_id"]
+
+            sname = str(sz_row["size_name"]).strip()
+
+            qty = sz_row["quantity"] or 0
+
+            if sid not in sizes_by_style:
+
+                sizes_by_style[sid] = {}
+
+            sizes_by_style[sid][sname] = qty
+
+            if sname not in size_seen and qty > 0:
+
+                size_seen.add(sname)
+
+                present_size_names.append(sname)
+
+                
+
+    present_size_names.sort(key=get_size_sort_key)
+
+    
+
+    # 2. Kumaş Bağlantılarını Topla (fabric_links)
+
+    fl_by_style = {}
+
+    if all_style_ids:
+
+        pl_ids = ",".join("?" for _ in all_style_ids)
+
+        c.execute(f"""
+
+        SELECT * FROM fabric_links WHERE style_id IN ({pl_ids}) ORDER BY id ASC
+
+        """, tuple(all_style_ids))
+
+        for fl in c.fetchall():
+
+            sid = fl["style_id"]
+
+            if sid not in fl_by_style:
+
+                fl_by_style[sid] = dict(fl)
+
+    # FabricTag detaylarını entegre et
+
+    ft_map = {}
+
+    try:
+
+        ft_conn = FabricTagConnector.get_connection()
+
+        if ft_conn:
+
+            ft_c = ft_conn.cursor()
+
+            ft_c.execute("SELECT id, internal_code, company_name, quality_name, quality_code, design_code, color, width, weight, composition FROM fabrics")
+
+            for f_row in ft_c.fetchall():
+
+                f_d = dict(f_row)
+
+                if f_d.get("id"):
+
+                    ft_map[str(f_d["id"])] = f_d
+
+                if f_d.get("internal_code"):
+
+                    ft_map[f_d["internal_code"].upper()] = f_d
+
+                if f_d.get("quality_code"):
+
+                    ft_map[f_d["quality_code"].upper()] = f_d
+
+            ft_conn.close()
+
+    except Exception:
+
+        pass
+
+        
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Sipariş Listesi"
+
+    
+
+    # Modern Excel Görünümü: Izgara çizgilerini göster ve üst başlığı dondur
+
+    ws.views.sheetView[0].showGridLines = True
+
+    ws.freeze_panes = "B2"
+
+    
+
+    # Başlıkları Oluştur
+
+    headers = [
+
+        "Görsel", "Müşteri", "Marka", "Kanal", "Sezon", "PO No", "Model No", 
+
+        "Renk Kodu", "Renk Adı"
+
+    ]
+
+    
+
+    size_col_start = len(headers) + 1
+
+    for sz_name in present_size_names:
+
+        headers.append(f"Beden {sz_name}")
+
+    size_col_end = len(headers)
+
+    
+
+    col_idx_qty = len(headers) + 1
+
+    headers.append("Toplam Adet")
+
+    col_idx_price = len(headers) + 1
+
+    headers.append("Birim Fiyat")
+
+    col_idx_currency = len(headers) + 1
+
+    headers.append("Döviz")
+
+    col_idx_amount = len(headers) + 1
+
+    headers.append("Toplam Tutar")
+
+    
+
+    # Kumaş Bilgileri Sütunları (FabricTag Kumaş Deposu)
+
+    headers.extend([
+
+        "Kumaşçı",
+
+        "Kalite Kodu",
+
+        "Kalite Adı",
+
+        "Varyant",
+
+        "Renk",
+
+        "Karışım",
+
+        "Ağırlık",
+
+        "En",
+
+        "Birim Metraj (M)",
+
+        "Birim Gramaj (GR)",
+
+        "Birim Metraj 2 (M)",
+
+        "Birim Gramaj 2 (GR)",
+
+        "Sipariş Kumaş (M/KG)",
+
+        "Gelen Kumaş (M/KG)",
+
+        "Kumaş Durumu / Termin"
+
+    ])
+
+    
+
+    col_idx_ordered_fabric = headers.index("Sipariş Kumaş (M/KG)") + 1
+
+    col_idx_received_fabric = headers.index("Gelen Kumaş (M/KG)") + 1
+
+    
+
+    # Diğer Sütunlar
+
+    headers.extend([
+
+        "Sipariş Tarihi",
+
+        "Yükleme Tarihi",
+
+        "Üretim Aşaması",
+
+        "Beden Dağılımı (Özet)",
+
+        "Notlar"
+
+    ])
+
+    
+
+    # Modern Başlık Tasarımı (Koyu Füme / Slate Navy, Beyaz Kalın Yazı)
+
+    header_font = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
+
+    header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    
+
+    header_border = Border(
+
+        left=Side(style="thin", color="334155"),
+
+        right=Side(style="thin", color="334155"),
+
+        top=Side(style="thin", color="0F172A"),
+
+        bottom=Side(style="medium", color="0F172A")
+
+    )
+
+    
+
+    ws.row_dimensions[1].height = 34
+
+    for col_num, h in enumerate(headers, 1):
+
+        cell = ws.cell(row=1, column=col_num, value=h)
+
+        cell.font = header_font
+
+        cell.fill = header_fill
+
+        cell.alignment = header_align
+
+        cell.border = header_border
+
+        
+
+    # Görsel sütunu genişliği
+
+    ws.column_dimensions["A"].width = 18
+
+    img_buffers = []
+
+    
+
+    # Hücre kenarlık ve yazı tipleri
+
+    cell_border = Border(
+
+        left=Side(style="thin", color="E2E8F0"),
+
+        right=Side(style="thin", color="E2E8F0"),
+
+        top=Side(style="thin", color="E2E8F0"),
+
+        bottom=Side(style="thin", color="E2E8F0")
+
+    )
+
+    
+
+    font_normal = Font(name="Segoe UI", size=9.5, color="1E293B")
+
+    font_bold = Font(name="Segoe UI", size=9.5, bold=True, color="0F172A")
+
+    font_style_no = Font(name="Segoe UI", size=10, bold=True, color="0F172A")
+
+    font_muted = Font(name="Segoe UI", size=9, color="94A3B8")
+
+    
+
+    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+
+    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    
+
+    align_center = Alignment(horizontal="center", vertical="center")
+
+    align_left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    align_left = Alignment(horizontal="left", vertical="center")
+
+    
+
+    last_row = 1
+
+    
+
+    for idx, s in enumerate(styles, start=2):
+
+        last_row = idx
+
+        ws.row_dimensions[idx].height = 75
+
+        current_fill = fill_white if (idx % 2 == 0) else fill_zebra
+
+        
+
+        # Beden dağılımı metni
+
+        style_size_map = sizes_by_style.get(s["id"], {})
+
+        sizes_summary_str = ", ".join(f"{sz}: {qty}" for sz, qty in style_size_map.items() if qty > 0)
+
+        
+
+        # Notlar
+
+        notes_val = s.get("notes") or ""
+
+        if not notes_val and s.get("custom_fields_json"):
+
+            try:
+
+                cf = json.loads(s["custom_fields_json"])
+
+                notes_val = cf.get("notes") or cf.get("notlar") or ""
+
+            except Exception:
+
+                pass
+
+                
+
+        qty = s.get("total_quantity") or 0
+
+        price = s.get("unit_price") or 0
+
+        tot_amt = (price or 0) * (qty or 0)
+
+        
+
+        # Kumaş Bilgileri (FabricTag ve stiller tablosu harmanlanır)
+
+        fl = fl_by_style.get(s["id"], {})
+
+        f_meta = None
+
+        if fl.get("fabrictag_id") and str(fl["fabrictag_id"]) in ft_map:
+
+            f_meta = ft_map[str(fl["fabrictag_id"])]
+
+        if not f_meta:
+
+            raw_art = str(s.get("fabric_article") or s.get("fabric_type") or "")
+
+            m_elt = re.search(r'ELT\d+', raw_art, re.IGNORECASE)
+
+            if m_elt and m_elt.group(0).upper() in ft_map:
+
+                f_meta = ft_map[m_elt.group(0).upper()]
+
+        if not f_meta and fl.get("fabric_code") and fl["fabric_code"].upper() in ft_map:
+
+            f_meta = ft_map[fl["fabric_code"].upper()]
+
+        def clean_field(val):
+
+            if not val:
+
+                return ""
+
+            sv = str(val).strip()
+
+            if sv.upper() in ["KODSUZ", "YOK", "NONE", "NULL", "-", "—", "İSİMSİZ", "ISIMSIZ", "TANIMSIZ", "BİLGİSİ YOK", "BILGISI YOK", "BİLGİ YOK", "BILGI YOK", "BELİRTİLMEDİ", "BELIRTILMEDI"]:
+
+                return ""
+
+            return sv
+
+        def clean_weight(val):
+
+            v = clean_field(val)
+
+            if not v:
+
+                return ""
+
+            v_num = re.sub(r'^(gr|gramaj|weight)[:\s]*', '', v, flags=re.I).strip()
+
+            if v_num.isdigit():
+
+                return f"{v_num} gr"
+
+            return v
+
+        def clean_width(val):
+
+            v = clean_field(val)
+
+            if not v:
+
+                return ""
+
+            v_num = re.sub(r'^(en|genişlik|width)[:\s]*', '', v, flags=re.I).strip()
+
+            if v_num.isdigit():
+
+                return f"{v_num} cm"
+
+            return v
+
+        fabric_supplier_val = clean_field(f_meta.get("company_name") if f_meta else (fl.get("supplier") or s.get("fabric_company_1") or ""))
+
+        fabric_qcode_val = clean_field(f_meta.get("quality_code") if f_meta else (fl.get("fabric_code") or s.get("fabric_quality_code_1") or ""))
+
+        fabric_qname_val = clean_field(f_meta.get("quality_name") if f_meta else (fl.get("fabric_name") or s.get("fabric_quality_name_1") or s.get("fabric_article") or ""))
+
+        fabric_variant_val = clean_field(f_meta.get("design_code") if f_meta else (s.get("fabric_variant_1") or ""))
+
+        fabric_color_val = clean_field(f_meta.get("color") if f_meta else (s.get("fabric_color_1") or ""))
+
+        fabric_comp_val = clean_field(f_meta.get("composition") if f_meta else (fl.get("composition") or s.get("fabric_composition") or ""))
+
+        fabric_weight_val = clean_weight(f_meta.get("weight") if f_meta else (s.get("fabric_weight") or fl.get("ft_weight") or ""))
+
+        fabric_width_val = clean_width(f_meta.get("width") if f_meta else (s.get("fabric_width") or fl.get("ft_width") or ""))
+
+        fabric_ordered_m = s.get("fabric_ordered_meters") or 0.0
+
+        fabric_received_m = s.get("fabric_received_meters") or 0.0
+
+        fabric_status_val = s.get("fabric_order_status") or fl.get("status") or ""
+
+        
+
+        # A Sütunu: Görsel Hücresi
+
+        cell_a = ws.cell(row=idx, column=1)
+
+        cell_a.border = cell_border
+
+        cell_a.fill = current_fill
+
+        
+
+        img_url = s.get("image_url") or s.get("image_url_2")
+
+        img_added = False
+
+        if img_url:
+
+            try:
+
+                pil_img = None
+
+                if img_url.startswith("data:image"):
+
+                    hdr, enc = img_url.split(",", 1)
+
+                    pil_img = PILImage.open(io.BytesIO(base64.b64decode(enc)))
+
+                elif img_url.startswith("/uploads/"):
+
+                    p = UPLOADS_DIR / img_url.replace("/uploads/", "").lstrip("/")
+
+                    if p.exists():
+
+                        pil_img = PILImage.open(p)
+
+                elif Path(img_url).exists():
+
+                    pil_img = PILImage.open(img_url)
+
+                    
+
+                if pil_img:
+
+                    pil_img = pil_img.convert("RGB")
+
+                    pil_img.thumbnail((105, 88), PILImage.Resampling.LANCZOS)
+
+                    buf = io.BytesIO()
+
+                    pil_img.save(buf, format="JPEG", quality=88)
+
+                    buf.seek(0)
+
+                    img_buffers.append(buf)
+
+                    xl_img = OpenpyxlImage(buf)
+
+                    img_w = pil_img.width
+
+                    img_h = pil_img.height
+
+                    # Hücrede En ve Boydan Ortalama (Horizontal & Vertical Center)
+
+                    # Sütun A genişliği: 18 karakter (~140px), Satır yüksekliği: 75pt (~100px)
+
+                    col_w_px = 140
+
+                    row_h_px = 100
+
+                    x_off_px = max(0, (col_w_px - img_w) // 2)
+
+                    y_off_px = max(0, (row_h_px - img_h) // 2)
+
+                    marker = AnchorMarker(col=0, colOff=pixels_to_EMU(x_off_px), row=idx - 1, rowOff=pixels_to_EMU(y_off_px))
+
+                    size = XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h))
+
+                    xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
+
+                    ws.add_image(xl_img)
+
+                    img_added = True
+
+            except Exception:
+
+                pass
+
+                
+
+        if not img_added:
+
+            cell_a.value = "[Görsel Yok]"
+
+            cell_a.alignment = align_center
+
+            cell_a.font = font_muted
+
+            
+
+        # Satır Verilerini Sırayla Doldur
+
+        # 1. Temel Bilgiler (2-9)
+
+        ws.cell(row=idx, column=2, value=s.get("customer_name") or "").alignment = align_left
+
+        ws.cell(row=idx, column=2).font = font_bold
+
+        ws.cell(row=idx, column=3, value=s.get("brand") or "").alignment = align_left
+
+        ws.cell(row=idx, column=4, value=s.get("channel") or "").alignment = align_left
+
+        ws.cell(row=idx, column=5, value=s.get("season") or "").alignment = align_center
+
+        ws.cell(row=idx, column=6, value=s.get("po_number") or "").alignment = align_center
+
+        ws.cell(row=idx, column=6).font = font_bold
+
+        ws.cell(row=idx, column=7, value=s.get("style_no") or "").alignment = align_center
+
+        ws.cell(row=idx, column=7).font = font_style_no
+
+        ws.cell(row=idx, column=8, value=s.get("color_code") or "").alignment = align_center
+
+        ws.cell(row=idx, column=9, value=s.get("color_name") or "").alignment = align_left_wrap
+
+        
+
+        # 2. Beden Dağılımı Sütunları (TÜM RAKAMLAR ORTALI)
+
+        for s_idx, sz_name in enumerate(present_size_names, start=size_col_start):
+
+            sz_qty = style_size_map.get(sz_name)
+
+            c_sz = ws.cell(row=idx, column=s_idx, value=sz_qty if sz_qty else None)
+
+            c_sz.alignment = align_center
+
+            if sz_qty:
+
+                c_sz.number_format = "#,##0"
+
+                c_sz.font = font_bold
+
+                
+
+        # 3. Miktar ve Fiyatlar (TÜM RAKAMLAR ORTALI, PARA BİRİMİ ÖNDE, VİRGÜLLÜ)
+
+        c_qty = ws.cell(row=idx, column=col_idx_qty, value=qty)
+
+        c_qty.alignment = align_center
+
+        c_qty.number_format = "#,##0"
+
+        c_qty.font = font_bold
+
+        
+
+        cur_sym, cur_fmt = get_excel_currency_format(s.get("currency"))
+
+        c_prc = ws.cell(row=idx, column=col_idx_price)
+
+        c_prc.alignment = align_center
+
+        prc_num = safe_price_float(price)
+
+        c_prc.value = prc_num if prc_num is not None else 0.0
+
+        c_prc.number_format = cur_fmt
+
+        
+
+        c_cur = ws.cell(row=idx, column=col_idx_currency, value=cur_sym)
+
+        c_cur.alignment = align_center
+
+        
+
+        c_amt = ws.cell(row=idx, column=col_idx_amount)
+
+        c_amt.alignment = align_center
+
+        amt_num = safe_price_float(tot_amt)
+
+        c_amt.value = amt_num if amt_num is not None else 0.0
+
+        c_amt.number_format = cur_fmt
+
+        c_amt.font = font_bold
+
+        
+
+        # 4. Kumaş Bilgileri Sütunları (Kumaşçı, Kalite Kodu, Kalite Adı, Varyant, Renk, Karışım, Ağırlık, En)
+
+        ws.cell(row=idx, column=headers.index("Kumaşçı") + 1, value=fabric_supplier_val).alignment = align_left
+
+        ws.cell(row=idx, column=headers.index("Kalite Kodu") + 1, value=fabric_qcode_val).alignment = align_center
+
+        ws.cell(row=idx, column=headers.index("Kalite Adı") + 1, value=fabric_qname_val).alignment = align_left_wrap
+
+        ws.cell(row=idx, column=headers.index("Varyant") + 1, value=fabric_variant_val).alignment = align_center
+
+        ws.cell(row=idx, column=headers.index("Renk") + 1, value=fabric_color_val).alignment = align_center
+
+        ws.cell(row=idx, column=headers.index("Karışım") + 1, value=fabric_comp_val).alignment = align_left_wrap
+
+        ws.cell(row=idx, column=headers.index("Ağırlık") + 1, value=fabric_weight_val).alignment = align_center
+
+        ws.cell(row=idx, column=headers.index("En") + 1, value=fabric_width_val).alignment = align_center
+
+        
+
+        # Birim Metraj ve Gramajlar (mt ve gr)
+
+        u_meters = safe_unit_float(s.get("unit_meters") or s.get("pps_unit_meters"))
+
+        c_um = ws.cell(row=idx, column=headers.index("Birim Metraj (M)") + 1, value=u_meters)
+
+        c_um.alignment = align_center
+
+        if u_meters is not None:
+
+            c_um.number_format = "#,##0.00"
+
+        u_grams = safe_unit_float(s.get("unit_grams"))
+
+        c_ug = ws.cell(row=idx, column=headers.index("Birim Gramaj (GR)") + 1, value=u_grams)
+
+        c_ug.alignment = align_center
+
+        if u_grams is not None:
+
+            c_ug.number_format = "#,##0.##"
+
+        u_meters_2 = safe_unit_float(s.get("unit_meters_2"))
+
+        c_um2 = ws.cell(row=idx, column=headers.index("Birim Metraj 2 (M)") + 1, value=u_meters_2)
+
+        c_um2.alignment = align_center
+
+        if u_meters_2 is not None:
+
+            c_um2.number_format = "#,##0.00"
+
+        u_grams_2 = safe_unit_float(s.get("unit_grams_2"))
+
+        c_ug2 = ws.cell(row=idx, column=headers.index("Birim Gramaj 2 (GR)") + 1, value=u_grams_2)
+
+        c_ug2.alignment = align_center
+
+        if u_grams_2 is not None:
+
+            c_ug2.number_format = "#,##0.##"
+
+        # Kumaş Metrajları (TÜM RAKAMLAR ORTALI)
+
+        c_ord_f = ws.cell(row=idx, column=col_idx_ordered_fabric, value=fabric_ordered_m if fabric_ordered_m else None)
+
+        c_ord_f.alignment = align_center
+
+        if fabric_ordered_m:
+
+            c_ord_f.number_format = "#,##0.0"
+
+            
+
+        c_rec_f = ws.cell(row=idx, column=col_idx_received_fabric, value=fabric_received_m if fabric_received_m else None)
+
+        c_rec_f.alignment = align_center
+
+        if fabric_received_m:
+
+            c_rec_f.number_format = "#,##0.0"
+
+            c_rec_f.font = font_bold
+
+            
+
+        ws.cell(row=idx, column=headers.index("Kumaş Durumu / Termin") + 1, value=fabric_status_val).alignment = align_left_wrap
+
+        
+
+        # 5. Tarihler, Aşama ve Notlar
+
+        ws.cell(row=idx, column=headers.index("Sipariş Tarihi") + 1, value=s.get("order_date") or "").alignment = align_center
+
+        ws.cell(row=idx, column=headers.index("Yükleme Tarihi") + 1, value=s.get("delivery_date") or "").alignment = align_center
+
+        ws.cell(row=idx, column=headers.index("Üretim Aşaması") + 1, value=s.get("status") or "Planlama aşamasında").alignment = align_center
+
+        ws.cell(row=idx, column=headers.index("Üretim Aşaması") + 1).font = font_bold
+
+        
+
+        ws.cell(row=idx, column=headers.index("Beden Dağılımı (Özet)") + 1, value=sizes_summary_str).alignment = align_left_wrap
+
+        ws.cell(row=idx, column=headers.index("Notlar") + 1, value=notes_val).alignment = align_left_wrap
+
+        # Tüm hücrelerin çerçevesini ve zemin rengini uygula
+
+        for c_idx in range(2, len(headers) + 1):
+
+            cell = ws.cell(row=idx, column=c_idx)
+
+            cell.border = cell_border
+
+            cell.fill = current_fill
+
+            if not cell.font or cell.font.name != "Segoe UI":
+
+                cell.font = font_normal
+
+    # Modern Genel Toplam Satırı
+
+    if last_row >= 2:
+
+        sum_row = last_row + 1
+
+        ws.row_dimensions[sum_row].height = 30
+
+        sum_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+
+        sum_border = Border(
+
+            top=Side(style="thin", color="94A3B8"),
+
+            bottom=Side(style="double", color="0F172A"),
+
+            left=Side(style="thin", color="E2E8F0"),
+
+            right=Side(style="thin", color="E2E8F0")
+
+        )
+
+        
+
+        for c_idx in range(1, len(headers) + 1):
+
+            cell = ws.cell(row=sum_row, column=c_idx)
+
+            cell.fill = sum_fill
+
+            cell.border = sum_border
+
+            cell.font = Font(name="Segoe UI", size=10, bold=True, color="0F172A")
+
+            cell.alignment = align_center
+
+            
+
+        ws.cell(row=sum_row, column=2, value="GENEL TOPLAM").alignment = Alignment(horizontal="left", vertical="center")
+
+        
+
+        # Beden Sütunları Toplamları (ORTALI)
+
+        for s_idx in range(size_col_start, size_col_end + 1):
+
+            c_letter = get_column_letter(s_idx)
+
+            c_sz_sum = ws.cell(row=sum_row, column=s_idx, value=f"=SUM({c_letter}2:{c_letter}{last_row})")
+
+            c_sz_sum.number_format = "#,##0"
+
+            c_sz_sum.alignment = align_center
+
+        
+
+        # Adet Toplamı (ORTALI)
+
+        col_qty_letter = get_column_letter(col_idx_qty)
+
+        cell_qty = ws.cell(row=sum_row, column=col_idx_qty, value=f"=SUM({col_qty_letter}2:{col_qty_letter}{last_row})")
+
+        cell_qty.number_format = "#,##0"
+
+        cell_qty.alignment = align_center
+
+        
+
+        # Tutar Toplamı (ORTALI, PARA BİRİMİ ÖNDE, VİRGÜLLÜ)
+
+        col_amt_letter = get_column_letter(col_idx_amount)
+
+        cell_amt = ws.cell(row=sum_row, column=col_idx_amount, value=f"=SUM({col_amt_letter}2:{col_amt_letter}{last_row})")
+
+        first_cur = styles[0].get("currency") if styles else "EUR"
+
+        _, tot_cur_fmt = get_excel_currency_format(first_cur)
+
+        cell_amt.number_format = tot_cur_fmt
+
+        cell_amt.alignment = align_center
+
+        
+
+        # Kumaş Metraj Toplamları (ORTALI)
+
+        col_ordf_letter = get_column_letter(col_idx_ordered_fabric)
+
+        c_ordf_sum = ws.cell(row=sum_row, column=col_idx_ordered_fabric, value=f"=SUM({col_ordf_letter}2:{col_ordf_letter}{last_row})")
+
+        c_ordf_sum.number_format = "#,##0.0"
+
+        c_ordf_sum.alignment = align_center
+
+        
+
+        col_recf_letter = get_column_letter(col_idx_received_fabric)
+
+        c_recf_sum = ws.cell(row=sum_row, column=col_idx_received_fabric, value=f"=SUM({col_recf_letter}2:{col_recf_letter}{last_row})")
+
+        c_recf_sum.number_format = "#,##0.0"
+
+        c_recf_sum.alignment = align_center
+
+        
+
+        # Otomatik Filtreleme (AutoFilter) Etkinleştir
+
+        last_col_letter = get_column_letter(len(headers))
+
+        ws.auto_filter.ref = f"A1:{last_col_letter}{last_row}"
+
+    # Sütun Genişliklerini İçeriğe Göre Otomatik Dengele
+
+    for col_idx in range(2, len(headers) + 1):
+
+        col_letter = get_column_letter(col_idx)
+
+        max_len = 0
+
+        for cell in ws[col_letter]:
+
+            val_str = str(cell.value or "")
+
+            if val_str.startswith("="):
+
+                continue
+
+            if "\n" in val_str:
+
+                lines = val_str.split("\n")
+
+                max_len = max(max_len, max(len(l) for l in lines))
+
+            else:
+
+                max_len = max(max_len, len(val_str))
+
+        # Beden sütunları dar kalsın (en az 9, en çok 14)
+
+        if size_col_start <= col_idx <= size_col_end:
+
+            ws.column_dimensions[col_letter].width = max(9, min(14, max_len + 3))
+
+        else:
+
+            ws.column_dimensions[col_letter].width = max(11, min(45, max_len + 3))
+
+    conn.close()
+
+    out = io.BytesIO()
+
+    wb.save(out)
+
+    out.seek(0)
+
+    
+
+    filename = f"Siparisler_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+
+    val = out.getvalue()
+
+    return Response(
+
+        content=val,
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers={
+
+            "Content-Disposition": f'attachment; filename="{filename}"',
+
+            "Content-Length": str(len(val)),
+
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+
+        }
+
+    )
+
+@app.get("/api/styles/export-excel")
+
+def api_export_styles_excel_get(ids: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
+
+    user = None
+
+    if authorization:
+
+        t = authorization.replace("Bearer ", "").strip()
+
+        user = get_current_user(t)
+
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
+
+    
+
+    style_ids = None
+
+    if ids:
+
+        try:
+
+            style_ids = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
+
+        except Exception:
+
+            pass
+
+            
+
+    return generate_styles_excel_workbook(style_ids, company_id)
+
+@app.post("/api/styles/export-excel")
+
+def api_export_styles_excel_post(req: ExportExcelRequest, authorization: Optional[str] = Header(None)):
+
+    user = None
+
+    if authorization:
+
+        t = authorization.replace("Bearer ", "").strip()
+
+        user = get_current_user(t)
+
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
+
+    
+
+    return generate_styles_excel_workbook(req.style_ids, company_id)
+
+# ----------------- ÖZET YAZDIR İMALAT ÇARŞAF EXCEL EXPORT -----------------
+
+def generate_carsaf_print_excel_workbook(
+
+    style_ids: Optional[List[int]] = None,
+
+    title: Optional[str] = None,
+
+    company_id: int = 1,
+
+    consolidate: Optional[str] = "0",
+
+    show_channels: Optional[str] = "0",
+
+    col_order: Optional[str] = None
+
+) -> Response:
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    
+
+    if style_ids and len(style_ids) > 0:
+
+        placeholders = ",".join("?" for _ in style_ids)
+
+        order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
+
+        sql = f"""
+
+        SELECT s.*, 
+
+               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
+
+        FROM styles s
+
+        JOIN orders o ON s.order_id = o.id
+
+        WHERE s.company_id = ? AND s.id IN ({placeholders})
+
+        ORDER BY {order_by_clause}
+
+        """
+
+        params = [company_id] + style_ids
+
+    else:
+
+        sql = """
+
+        SELECT s.*, 
+
+               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
+
+        FROM styles s
+
+        JOIN orders o ON s.order_id = o.id
+
+        WHERE s.company_id = ?
+
+        ORDER BY o.id DESC, s.id ASC
+
+        """
+
+        params = [company_id]
+
+        
+
+    c.execute(sql, tuple(params))
+
+    styles = [dict(r) for r in c.fetchall()]
+
+    
+
+    is_show_channels = show_channels in ["1", "true", "True", True]
+
+    # Kanalları topla seçeneği aktifse aynı model ve renkteki satırları birleştirip adetleri topla
+
+    if consolidate in ["1", "true", "True", True]:
+
+        consolidated = []
+
+        groups = {}
+
+        for s in styles:
+
+            s_cust = (s.get("customer_name") or s.get("brand") or "").strip().upper()
+
+            s_no = (s.get("style_no") or "").strip().upper()
+
+            c_code = (s.get("color_code") or "").strip().upper()
+
+            c_name = (s.get("color_name") or "").strip().upper()
+
+            group_key = f"{s_cust}___{s_no}___{c_name}___{c_code}"
+
+            
+
+            qty = int(s.get("total_quantity") or 0)
+
+            s_chan = (s.get("channel") or "").strip()
+
+            if group_key not in groups:
+
+                new_s = dict(s)
+
+                new_s["total_quantity"] = qty
+
+                new_s["_channels_list"] = [s_chan] if s_chan else []
+
+                groups[group_key] = new_s
+
+                consolidated.append(new_s)
+
+            else:
+
+                groups[group_key]["total_quantity"] += qty
+
+                if s_chan and s_chan not in groups[group_key].get("_channels_list", []):
+
+                    groups[group_key].setdefault("_channels_list", []).append(s_chan)
+
+                if not groups[group_key].get("image_url") and s.get("image_url"):
+
+                    groups[group_key]["image_url"] = s.get("image_url")
+
+                if not groups[group_key].get("image_url_2") and s.get("image_url_2"):
+
+                    groups[group_key]["image_url_2"] = s.get("image_url_2")
+
+                if not groups[group_key].get("notes") and s.get("notes"):
+
+                    groups[group_key]["notes"] = s.get("notes")
+
+        for item in consolidated:
+
+            if "_channels_list" in item:
+
+                item["channel"] = ", ".join(item["_channels_list"])
+
+        styles = consolidated
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "İmalat Çarşaf Özeti"
+
+    ws.views.sheetView[0].showGridLines = True
+
+    
+
+    fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+
+    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    fill_title = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+
+    fill_total = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
+
+    
+
+    border_thin = Border(
+
+        left=Side(style="thin", color="64748B"),
+
+        right=Side(style="thin", color="64748B"),
+
+        top=Side(style="thin", color="64748B"),
+
+        bottom=Side(style="thin", color="64748B")
+
+    )
+
+    border_total = Border(
+
+        left=Side(style="thin", color="64748B"),
+
+        right=Side(style="thin", color="64748B"),
+
+        top=Side(style="thin", color="64748B"),
+
+        bottom=Side(style="double", color="0F172A")
+
+    )
+
+    
+
+    font_title = Font(name="Segoe UI", size=13, bold=True, color="0F172A")
+
+    font_header = Font(name="Segoe UI", size=10.5, bold=True, color="000000")
+
+    font_bold = Font(name="Segoe UI", size=10, bold=True, color="0F172A")
+
+    font_normal = Font(name="Segoe UI", size=9.5, color="1E293B")
+
+    font_total = Font(name="Segoe UI", size=10.5, bold=True, color="0F172A")
+
+    font_muted = Font(name="Segoe UI", size=8.5, color="94A3B8")
+
+    
+
+    align_center = Alignment(horizontal="center", vertical="center")
+
+    align_left = Alignment(horizontal="left", vertical="center")
+
+    align_left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    
+
+    # Sütun Tanımları ve Sıralaması
+
+    col_defs = {
+
+        "image": {"title": "GÖRSEL", "width": 16, "align": align_center},
+
+        "style": {"title": "STYLE", "width": 18, "align": align_center},
+
+        "color": {"title": "RENK", "width": 22, "align": align_left_wrap},
+
+        "channel": {"title": "KANAL", "width": 16, "align": align_center},
+
+        "fabric": {"title": "KUMAŞ", "width": 30, "align": align_left_wrap},
+
+        "quantity": {"title": "ADET", "width": 12, "align": align_center},
+
+        "price": {"title": "PRICE", "width": 14, "align": align_center},
+
+        "notes": {"title": "NOTLAR", "width": 26, "align": align_left_wrap},
+
+    }
+
+    default_order = ["image", "style", "color", "channel", "fabric", "quantity", "price", "notes"] if is_show_channels else ["image", "style", "color", "fabric", "quantity", "price", "notes"]
+
+    
+
+    if col_order:
+
+        requested = [k.strip() for k in col_order.split(",") if k.strip() in col_defs]
+
+        if not is_show_channels:
+
+            requested = [k for k in requested if k != "channel"]
+
+        col_keys = []
+
+        for k in requested:
+
+            if k not in col_keys:
+
+                col_keys.append(k)
+
+        for k in default_order:
+
+            if k not in col_keys:
+
+                col_keys.append(k)
+
+    else:
+
+        col_keys = default_order
+
+    num_cols = len(col_keys)
+
+    # 1. Başlık Banner'ı
+
+    header_title_text = (title or "MÜŞTERİ SEZON İMALAT ÇARŞAF LİSTESİ").strip().upper()
+
+    last_col_letter = get_column_letter(num_cols)
+
+    ws.merge_cells(f"A1:{last_col_letter}1")
+
+    title_cell = ws["A1"]
+
+    title_cell.value = header_title_text
+
+    title_cell.font = font_title
+
+    title_cell.alignment = align_center
+
+    title_cell.fill = fill_title
+
+    ws.row_dimensions[1].height = 32
+
+    for c_idx in range(1, num_cols + 1):
+
+        ws.cell(row=1, column=c_idx).border = border_thin
+
+        
+
+    # 2. Sütun Başlıkları
+
+    ws.row_dimensions[2].height = 25
+
+    for c_idx, col_key in enumerate(col_keys, start=1):
+
+        c_def = col_defs[col_key]
+
+        c_cell = ws.cell(row=2, column=c_idx, value=c_def["title"])
+
+        c_cell.fill = fill_yellow
+
+        c_cell.font = font_header
+
+        c_cell.alignment = align_center if col_key in ("image", "style", "channel", "quantity", "price") else align_left
+
+        c_cell.border = border_thin
+
+        col_letter = get_column_letter(c_idx)
+
+        ws.column_dimensions[col_letter].width = c_def["width"]
+
+        
+
+    # 3. Satırlar
+
+    curr_row = 2
+
+    for s in styles:
+
+        curr_row += 1
+
+        row_fill = fill_white if (curr_row % 2 == 1) else fill_zebra
+
+        ws.row_dimensions[curr_row].height = 75
+
+        
+
+        for c_idx, col_key in enumerate(col_keys, start=1):
+
+            cell = ws.cell(row=curr_row, column=c_idx)
+
+            cell.fill = row_fill
+
+            cell.border = border_thin
+
+            
+
+            if col_key == "image":
+
+                img_added = False
+
+                img_url = s.get("image_url") or s.get("image_url_2")
+
+                if img_url and os.path.exists(UPLOADS_DIR):
+
+                    try:
+
+                        fn = os.path.basename(img_url.split("?")[0])
+
+                        possible_paths = [
+
+                            os.path.join(UPLOADS_DIR, fn),
+
+                            os.path.join(UPLOADS_DIR, "styles", fn)
+
+                        ]
+
+                        img_path = next((p for p in possible_paths if os.path.isfile(p)), None)
+
+                        if img_path:
+
+                            with PILImage.open(img_path) as pil_img:
+
+                                orig_w, orig_h = pil_img.size
+
+                                max_w, max_h = 95, 90
+
+                                ratio = min(max_w / max(1, orig_w), max_h / max(1, orig_h))
+
+                                new_w = max(1, int(orig_w * ratio))
+
+                                new_h = max(1, int(orig_h * ratio))
+
+                            xl_img = OpenpyxlImage(img_path)
+
+                            xl_img.width = new_w
+
+                            xl_img.height = new_h
+
+                            col_w_px = int(col_defs["image"]["width"] * 7.5)
+
+                            row_h_px = int(75 * 1.33)
+
+                            x_off_px = max(0, (col_w_px - new_w) // 2)
+
+                            y_off_px = max(0, (row_h_px - new_h) // 2)
+
+                            marker = AnchorMarker(col=c_idx - 1, colOff=pixels_to_EMU(x_off_px), row=curr_row - 1, rowOff=pixels_to_EMU(y_off_px))
+
+                            size = XDRPositiveSize2D(pixels_to_EMU(new_w), pixels_to_EMU(new_h))
+
+                            xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
+
+                            ws.add_image(xl_img)
+
+                            img_added = True
+
+                    except Exception:
+
+                        pass
+
+                if not img_added:
+
+                    cell.value = "[Resim Yok]"
+
+                    cell.font = font_muted
+
+                    cell.alignment = align_center
+
+            elif col_key == "style":
+
+                cell.value = s.get("style_no") or ""
+
+                cell.font = font_bold
+
+                cell.alignment = align_center
+
+            elif col_key == "color":
+
+                c_code = (s.get("color_code") or "").strip()
+
+                c_name = (s.get("color_name") or "").strip()
+
+                if c_code and c_name:
+
+                    c_name_clean = re.sub(rf'\s*\({re.escape(c_code)}\)', '', c_name, flags=re.IGNORECASE).strip()
+
+                    if c_code.lower() in c_name_clean.lower():
+
+                        color_disp = c_name_clean
+
+                    else:
+
+                        color_disp = f"{c_code} {c_name_clean}".strip()
+
+                else:
+
+                    color_disp = c_name or c_code or "-"
+
+                cell.value = color_disp
+
+                cell.font = font_bold
+
+                cell.alignment = align_left_wrap
+
+            elif col_key == "channel":
+
+                cell.value = s.get("channel") or "-"
+
+                cell.font = font_bold
+
+                cell.alignment = align_center
+
+            elif col_key == "fabric":
+
+                fabric_text = s.get("fabric_article") or s.get("fabric_type") or "-"
+
+                cell.value = fabric_text
+
+                cell.font = font_normal
+
+                cell.alignment = align_left_wrap
+
+            elif col_key == "quantity":
+
+                qty = int(s.get("total_quantity") or 0)
+
+                cell.value = qty
+
+                cell.font = font_bold
+
+                cell.alignment = align_center
+
+                cell.number_format = "#,##0"
+
+            elif col_key == "price":
+
+                p_val = s.get("unit_price")
+
+                cur_sym, cur_fmt = get_excel_currency_format(s.get("currency"))
+
+                cell.font = font_bold
+
+                cell.alignment = align_center
+
+                pf = safe_price_float(p_val)
+
+                if pf is not None:
+
+                    cell.value = pf
+
+                    cell.number_format = cur_fmt
+
+                elif p_val is not None and str(p_val).strip() != "":
+
+                    s_clean = str(p_val).strip().replace(".", ",")
+
+                    cell.value = f"{cur_sym} {s_clean}"
+
+                else:
+
+                    cell.value = None
+
+            elif col_key == "notes":
+
+                notes_val = s.get("notes") or ""
+
+                if not notes_val and s.get("custom_fields_json"):
+
+                    try:
+
+                        cf = json.loads(s["custom_fields_json"])
+
+                        notes_val = cf.get("notes") or cf.get("notlar") or ""
+
+                    except Exception:
+
+                        pass
+
+                cell.value = notes_val
+
+                cell.font = font_normal
+
+                cell.alignment = align_left_wrap
+
+    # 4. Toplam Satırı
+
+    if curr_row >= 3:
+
+        sum_row = curr_row + 1
+
+        ws.row_dimensions[sum_row].height = 28
+
+        for c_idx in range(1, num_cols + 1):
+
+            c = ws.cell(row=sum_row, column=c_idx)
+
+            c.fill = fill_total
+
+            c.border = border_total
+
+        label_col = 2 if num_cols >= 2 else 1
+
+        ws.cell(row=sum_row, column=label_col, value=f"TOPLAM ({len(styles)} Model)").font = font_total
+
+        ws.cell(row=sum_row, column=label_col).alignment = align_center
+
+        
+
+        if "quantity" in col_keys:
+
+            qty_col_idx = col_keys.index("quantity") + 1
+
+            qty_col_letter = get_column_letter(qty_col_idx)
+
+            cell_sum_qty = ws.cell(row=sum_row, column=qty_col_idx, value=f"=SUM({qty_col_letter}3:{qty_col_letter}{curr_row})")
+
+            cell_sum_qty.font = font_total
+
+            cell_sum_qty.alignment = align_center
+
+            cell_sum_qty.number_format = "#,##0"
+
+    output = io.BytesIO()
+
+    wb.save(output)
+
+    output.seek(0)
+
+    
+
+    val = output.getvalue()
+
+    raw_fname = (title or "Imalat_Ozet_Listesi").strip()
+
+    safe_fname = re.sub(r'[^a-zA-Z0-9_\-]', '_', raw_fname)[:40]
+
+    filename = f"{safe_fname}.xlsx"
+
+    
+
+    return Response(
+
+        content=val,
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers={
+
+            "Content-Disposition": f'attachment; filename="{filename}"',
+
+            "Content-Length": str(len(val)),
+
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+
+        }
+
+    )
+
+@app.get("/api/styles/export-carsaf-excel")
+
+def api_export_carsaf_excel_get(
+
+    ids: Optional[str] = Query(None),
+
+    title: Optional[str] = Query(None),
+
+    consolidate: Optional[str] = Query("0"),
+
+    show_channels: Optional[str] = Query("0"),
+
+    col_order: Optional[str] = Query(None),
+
+    authorization: Optional[str] = Header(None)
+
+):
+
+    user = None
+
+    if authorization:
+
+        t = authorization.replace("Bearer ", "").strip()
+
+        user = get_current_user(t)
+
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
+
+    
+
+    style_ids = None
+
+    if ids:
+
+        try:
+
+            style_ids = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
+
+        except Exception:
+
+            pass
+
+            
+
+    return generate_carsaf_print_excel_workbook(style_ids, title, company_id, consolidate, show_channels, col_order)
+
+# ----------------- KUMAŞ SİPARİŞ ÇİZELGESİ EXCEL EXPORT -----------------
+
+class KumasSiparisRowItem(BaseModel):
+
+    supplier: Optional[str] = ""
+
+    code: Optional[str] = ""
+
+    name: Optional[str] = ""
+
+    variant: Optional[str] = ""
+
+    color: Optional[str] = ""
+
+    modelsAndColors: Optional[str] = ""
+
+    formattedTotalMeters: Optional[str] = ""
+
+    unit: Optional[str] = "M"
+
+class KumasSiparisExportRequest(BaseModel):
+
+    rows: List[KumasSiparisRowItem] = []
+
+    total_count: int = 0
+
+    total_models: int = 0
+
+    formatted_meters: Optional[str] = ""
+
+    formatted_kg: Optional[str] = ""
+
+    combined_total: Optional[str] = ""
+
+def generate_kumas_siparis_excel_workbook(req: KumasSiparisExportRequest) -> Response:
+
+    import openpyxl
+
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Kumas Siparis Listesi"
+
+    
+
+    if hasattr(ws.views, 'sheetView') and len(ws.views.sheetView) > 0:
+
+        ws.views.sheetView[0].showGridLines = True
+
+    # Title block dimensions
+
+    ws.row_dimensions[2].height = 24
+
+    ws.row_dimensions[3].height = 18
+
+    ws.row_dimensions[4].height = 10
+
+    ws.row_dimensions[5].height = 26
+
+    ws["A2"] = "KUMAŞ SİPARİŞ LİSTESİ"
+
+    ws["A2"].font = Font(name="Calibri", size=15, bold=True, color="0F172A")
+
+    
+
+    date_str = datetime.now().strftime("%d.%m.%Y")
+
+    ws["A3"] = f"Ekranda Listelenen Siparişler • Toplam {req.total_count} Kalite • {req.total_models} Model"
+
+    ws["A3"].font = Font(name="Calibri", size=10, italic=True, color="64748B")
+
+    ws["H2"] = f"Tarih: {date_str}"
+
+    ws["H2"].font = Font(name="Calibri", size=10, bold=True, color="64748B")
+
+    ws["H2"].alignment = Alignment(horizontal="right", vertical="center")
+
+    tot_badge = req.combined_total or req.formatted_meters or "0 M"
+
+    ws["H3"] = f"Toplam: {tot_badge}"
+
+    ws["H3"].font = Font(name="Calibri", size=10, bold=True, color="047857")
+
+    ws["H3"].alignment = Alignment(horizontal="right", vertical="center")
+
+    headers = [
+
+        ("#", 6, "center"),
+
+        ("Kumaşçı", 22, "left"),
+
+        ("Kalite Kodu", 16, "center"),
+
+        ("Kalite Adı", 26, "left"),
+
+        ("Kumaş Varyant", 18, "left"),
+
+        ("Kumaş Renk", 18, "left"),
+
+        ("Model Adları ve Renkleri", 45, "left"),
+
+        ("Kumaş Sipariş Miktarı", 22, "right")
+
+    ]
+
+    header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+
+    header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+
+    header_border = Border(
+
+        left=Side(style='thin', color='334155'),
+
+        right=Side(style='thin', color='334155'),
+
+        top=Side(style='medium', color='0F172A'),
+
+        bottom=Side(style='medium', color='0F172A')
+
+    )
+
+    for col_idx, (h_title, col_width, h_align) in enumerate(headers, start=1):
+
+        cell = ws.cell(row=5, column=col_idx, value=h_title)
+
+        cell.fill = header_fill
+
+        cell.font = header_font
+
+        cell.alignment = Alignment(horizontal=h_align, vertical="center", wrap_text=True)
+
+        cell.border = header_border
+
+        col_letter = get_column_letter(col_idx)
+
+        ws.column_dimensions[col_letter].width = col_width
+
+    thin_border = Border(
+
+        left=Side(style='thin', color='E2E8F0'),
+
+        right=Side(style='thin', color='E2E8F0'),
+
+        top=Side(style='thin', color='E2E8F0'),
+
+        bottom=Side(style='thin', color='E2E8F0')
+
+    )
+
+    even_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+
+    odd_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    qty_fill = PatternFill(start_color="F0FDF4", end_color="F0FDF4", fill_type="solid")
+
+    start_row = 6
+
+    for idx, r in enumerate(req.rows, start=1):
+
+        curr_row = start_row + idx - 1
+
+        ws.row_dimensions[curr_row].height = 22
+
+        row_fill = odd_fill if idx % 2 == 1 else even_fill
+
+        supplier_val = (r.supplier or "").strip()
+
+        code_val = (r.code or "").strip()
+
+        name_val = (r.name or "").strip()
+
+        variant_val = (r.variant or "").strip()
+
+        color_val = (r.color or "").strip()
+
+        # 1. Kumaşçı ismini Kalite Adından tamamen temizle (ör: "ÖZEL TEKSTİL - VASA 02" -> "VASA 02")
+
+        if supplier_val and name_val:
+
+            s_low = supplier_val.lower().strip()
+
+            n_low = name_val.lower().strip()
+
+            if n_low.startswith(s_low):
+
+                name_val = name_val[len(supplier_val):].lstrip(" -_:/").strip()
+
+        # 2. Kalite Adı içinde halen " - " kalmışsa ayır (ör: "(VIGO SATEN) - 27231") - parantezden ÖNCE çalıştırılır!
+
+        if name_val and ' - ' in name_val:
+
+            subparts = [p.strip() for p in name_val.split(' - ') if p.strip()]
+
+            if len(subparts) >= 2:
+
+                name_val = subparts[0]
+
+                if not code_val:
+
+                    code_val = subparts[1]
+
+        # 3. Kalite Adı içinde parantezli kod varsa veya tüm ad parantezliyse çıkar (ör: "VASA 02 (DA.20535)" vs "(VIGO SATEN)")
+
+        if name_val:
+
+            m = re.search(r'\(([^)]+)\)', name_val)
+
+            if m:
+
+                inside = m.group(1).strip()
+
+                name_wo = re.sub(r'\s*\([^)]+\)\s*', ' ', name_val).strip()
+
+                if name_wo:
+
+                    if not code_val:
+
+                        code_val = re.sub(r'^ART\.?\s*', '', inside, flags=re.I).strip()
+
+                    name_val = name_wo
+
+                else:
+
+                    name_val = inside
+
+        # 4. Kalite adını saran parantez ve tireleri temizle
+
+        name_val = re.sub(r'^\((.*)\)$', r'\1', name_val).strip()
+
+        name_val = name_val.strip(" -_:/")
+
+        # 5. Kalite kodunu saran parantezleri temizle (ör: "(27231)" -> "27231")
+
+        if code_val:
+
+            code_val = re.sub(r'^\((.*)\)$', r'\1', code_val).strip()
+
+        # 6. Varyant ile kod aynı ise varyantı temizle (ör: 27231 hem kod hem varyanta yazılmışsa)
+
+        if variant_val and code_val and variant_val.lower() == code_val.lower():
+
+            variant_val = ""
+
+        # 7. Kalite kodu boş ama varyant bir kalite kodu gibi görünüyorsa
+
+        if not code_val and variant_val and re.match(r'^[0-9A-Za-z\.\-_/]+$', variant_val):
+
+            code_val = variant_val
+
+            variant_val = ""
+
+        c1 = ws.cell(row=curr_row, column=1, value=idx)
+
+        c1.alignment = Alignment(horizontal="center", vertical="center")
+
+        c1.font = Font(name="Calibri", size=10, bold=True, color="64748B")
+
+        c1.fill = row_fill
+
+        c1.border = thin_border
+
+        c2 = ws.cell(row=curr_row, column=2, value=supplier_val)
+
+        c2.alignment = Alignment(horizontal="left", vertical="center")
+
+        c2.font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+
+        c2.fill = row_fill
+
+        c2.border = thin_border
+
+        c3 = ws.cell(row=curr_row, column=3, value=code_val)
+
+        c3.alignment = Alignment(horizontal="center", vertical="center")
+
+        c3.font = Font(name="Consolas", size=10, bold=True, color="334155")
+
+        c3.fill = row_fill
+
+        c3.border = thin_border
+
+        c4 = ws.cell(row=curr_row, column=4, value=name_val)
+
+        c4.alignment = Alignment(horizontal="left", vertical="center")
+
+        c4.font = Font(name="Calibri", size=10, bold=True, color="1E293B")
+
+        c4.fill = row_fill
+
+        c4.border = thin_border
+
+        c5 = ws.cell(row=curr_row, column=5, value=variant_val)
+
+        c5.alignment = Alignment(horizontal="left", vertical="center")
+
+        c5.font = Font(name="Calibri", size=10, color="334155")
+
+        c5.fill = row_fill
+
+        c5.border = thin_border
+
+        c6 = ws.cell(row=curr_row, column=6, value=color_val)
+
+        c6.alignment = Alignment(horizontal="left", vertical="center")
+
+        c6.font = Font(name="Calibri", size=10, bold=True, color="334155")
+
+        c6.fill = row_fill
+
+        c6.border = thin_border
+
+        c7 = ws.cell(row=curr_row, column=7, value=r.modelsAndColors or "")
+
+        c7.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+        c7.font = Font(name="Calibri", size=9.5, color="0F172A")
+
+        c7.fill = row_fill
+
+        c7.border = thin_border
+
+        c8 = ws.cell(row=curr_row, column=8, value=r.formattedTotalMeters or "")
+
+        c8.alignment = Alignment(horizontal="right", vertical="center")
+
+        c8.font = Font(name="Consolas", size=10, bold=True, color="15803D")
+
+        c8.fill = qty_fill
+
+        c8.border = thin_border
+
+    tot_row = start_row + len(req.rows)
+
+    ws.row_dimensions[tot_row].height = 26
+
+    ws.merge_cells(start_row=tot_row, start_column=1, end_row=tot_row, end_column=6)
+
+    total_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+
+    total_border = Border(
+
+        left=Side(style='thin', color='334155'),
+
+        right=Side(style='thin', color='334155'),
+
+        top=Side(style='medium', color='0F172A'),
+
+        bottom=Side(style='medium', color='0F172A')
+
+    )
+
+    cell_tot_label = ws.cell(row=tot_row, column=1, value=f"TOPLAM ({req.total_count} Kumaş Kalitesi)")
+
+    cell_tot_label.font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+
+    cell_tot_label.alignment = Alignment(horizontal="left", vertical="center")
+
+    for col in range(1, 7):
+
+        c = ws.cell(row=tot_row, column=col)
+
+        c.fill = total_fill
+
+        c.border = total_border
+
+    cell_tot_models = ws.cell(row=tot_row, column=7, value=f"{req.total_models} Model Kaydı")
+
+    cell_tot_models.font = Font(name="Calibri", size=10, bold=True, color="CBD5E1")
+
+    cell_tot_models.alignment = Alignment(horizontal="left", vertical="center")
+
+    cell_tot_models.fill = total_fill
+
+    cell_tot_models.border = total_border
+
+    qty_val = req.combined_total or (f"{req.formatted_meters} + {req.formatted_kg}".strip(" +") if (req.formatted_meters or req.formatted_kg) else "0 M")
+
+    cell_tot_qty = ws.cell(row=tot_row, column=8, value=qty_val)
+
+    cell_tot_qty.font = Font(name="Consolas", size=11, bold=True, color="34D399")
+
+    cell_tot_qty.alignment = Alignment(horizontal="right", vertical="center")
+
+    cell_tot_qty.fill = total_fill
+
+    cell_tot_qty.border = total_border
+
+    output = io.BytesIO()
+
+    wb.save(output)
+
+    output.seek(0)
+
+    filename = f"Kumas_Siparis_Listesi_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    headers = {
+
+        'Content-Disposition': f'attachment; filename="{filename}"',
+
+        'Access-Control-Expose-Headers': 'Content-Disposition'
+
+    }
+
+    return Response(
+
+        content=output.getvalue(),
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers=headers
+
+    )
+
+@app.post("/api/styles/export-kumas-siparis-excel")
+
+def api_export_kumas_siparis_excel(req: KumasSiparisExportRequest, authorization: Optional[str] = Header(None)):
+
+    user = None
+
+    if authorization:
+
+        t = authorization.replace("Bearer ", "").strip()
+
+        user = get_current_user(t)
+
+    return generate_kumas_siparis_excel_workbook(req)
+
+# ----------------- BUDGET EXCEL EXPORT (ÖRNEK BÜTÇE FORMATI) -----------------
+
+def generate_budget_excel_workbook(style_ids: Optional[List[int]] = None, company_id: int = 1) -> Response:
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    
+
+    # Safe company_id fallback
+
+    cid = company_id if company_id is not None else 1
+
+    if style_ids and len(style_ids) > 0:
+
+        placeholders = ",".join("?" for _ in style_ids)
+
+        order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
+
+        sql = f"""
+
+        SELECT s.*, 
+
+               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
+
+        FROM styles s
+
+        JOIN orders o ON s.order_id = o.id
+
+        WHERE (s.company_id = ? OR s.company_id IS NULL) AND s.id IN ({placeholders})
+
+        ORDER BY {order_by_clause}
+
+        """
+
+        params = [cid] + style_ids
+
+    else:
+
+        sql = """
+
+        SELECT s.*, 
+
+               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
+
+        FROM styles s
+
+        JOIN orders o ON s.order_id = o.id
+
+        WHERE (s.company_id = ? OR s.company_id IS NULL)
+
+        ORDER BY o.id DESC, s.id ASC
+
+        """
+
+        params = [cid]
+
+        
+
+    c.execute(sql, tuple(params))
+
+    styles = [dict(r) for r in c.fetchall()]
+
+    all_style_ids = [s["id"] for s in styles]
+
+    fl_by_style = {}
+
+    if all_style_ids:
+
+        pl_ids = ",".join("?" for _ in all_style_ids)
+
+        c.execute(f"SELECT * FROM fabric_links WHERE style_id IN ({pl_ids}) ORDER BY id ASC", tuple(all_style_ids))
+
+        for fl in c.fetchall():
+
+            sid = fl["style_id"]
+
+            if sid not in fl_by_style:
+
+                fl_by_style[sid] = dict(fl)
+
+    conn.close()
+
+    # FabricTag global cache
+
+    ft_map = {}
+
+    try:
+
+        ft_conn = FabricTagConnector.get_connection()
+
+        if ft_conn:
+
+            ft_c = ft_conn.cursor()
+
+            ft_c.execute("SELECT id, internal_code, company_name, quality_name, quality_code, design_code, color FROM fabrics")
+
+            for f_row in ft_c.fetchall():
+
+                f_d = dict(f_row)
+
+                if f_d.get("id"):
+
+                    ft_map[str(f_d["id"])] = f_d
+
+                if f_d.get("internal_code"):
+
+                    ft_map[f_d["internal_code"].upper()] = f_d
+
+                if f_d.get("quality_code"):
+
+                    ft_map[f_d["quality_code"].upper()] = f_d
+
+            ft_conn.close()
+
+    except Exception:
+
+        pass
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Bütçe Tablosu"
+
+    ws.views.sheetView[0].showGridLines = True
+
+    ws.freeze_panes = "K2"
+
+    first_cust = (styles[0].get("customer_name") or styles[0].get("brand") or "ÜRETİM") if styles else "ÜRETİM"
+
+    first_season = (styles[0].get("season") or "") if styles else ""
+
+    title_col_1 = f"{first_cust}  {first_season} SMS".strip() or "BÜTÇE LİSTESİ"
+
+    # Headers: Style removed, Kumaş expanded into Kumaşçı, Kalite Adı, Kalite Kodu, Varyant, Renk (49 columns total)
+
+    headers = [
+
+        "Görsel",
+
+        title_col_1,
+
+        "Model - Renk",
+
+        "Renk",
+
+        "Kumaşçı",
+
+        "Kalite Adı",
+
+        "Kalite Kodu",
+
+        "Varyant",
+
+        "Kumaş Rengi",
+
+        "QUANTITY",
+
+        "PRICE ",
+
+        "KUMAŞ 1  FİYAT",
+
+        "1 iç  CM",
+
+        "KUMAŞ 1 TOTAL",
+
+        "KUMAŞ 2 FİYAT",
+
+        "1 iç gramaj ",
+
+        "KUMAŞ 2 TOTAL ",
+
+        "kumaş toplam ",
+
+        "KUMAŞ 3 FİYAT",
+
+        "1 iç gramaj ",
+
+        "KUMAŞ 3 TOTAL ",
+
+        "FASON",
+
+        "KES.İŞT",
+
+        "AKS",
+
+        "ETKOL",
+
+        "LOGO",
+
+        "NAKIŞ",
+
+        "BRİT",
+
+        "LASTİK",
+
+        "Düğme",
+
+        "Çıtçıt",
+
+        "DIGER",
+
+        "KARGO",
+
+        "NAKLIYE",
+
+        "KUMAŞ ",
+
+        "ASTAR",
+
+        "DİKME",
+
+        "İlik-Düğme",
+
+        "Çıtçıt Çakım",
+
+        "",
+
+        "",
+
+        "",
+
+        "maliyet TL",
+
+        "maliyet  EURO ",
+
+        "Euro",
+
+        "PRICE",
+
+        "TOPLAM maliyet TL +   6%",
+
+        "TOPLAM maliyet EUR +   6%",
+
+        "Order Toplamı "
+
+    ]
+
+    header_font = Font(name="Segoe UI", size=9.5, bold=True, color="000000")
+
+    header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    header_border = Border(
+
+        left=Side(style="thin", color="CBD5E1"),
+
+        right=Side(style="thin", color="CBD5E1"),
+
+        top=Side(style="medium", color="475569"),
+
+        bottom=Side(style="medium", color="475569")
+
+    )
+
+    ws.row_dimensions[1].height = 34
+
+    for col_num, h in enumerate(headers, 1):
+
+        cell = ws.cell(row=1, column=col_num, value=h)
+
+        cell.font = header_font
+
+        cell.fill = header_fill
+
+        cell.alignment = header_align
+
+        cell.border = header_border
+
+    cell_border = Border(
+
+        left=Side(style="thin", color="E2E8F0"),
+
+        right=Side(style="thin", color="E2E8F0"),
+
+        top=Side(style="thin", color="E2E8F0"),
+
+        bottom=Side(style="thin", color="E2E8F0")
+
+    )
+
+    fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+
+    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    font_normal = Font(name="Segoe UI", size=9, color="1E293B")
+
+    font_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
+
+    font_muted = Font(name="Segoe UI", size=8.5, color="94A3B8")
+
+    align_center = Alignment(horizontal="center", vertical="center")
+
+    align_left = Alignment(horizontal="left", vertical="center")
+
+    align_right = Alignment(horizontal="right", vertical="center")
+
+    last_row = 1
+
+    total_qty = 0
+
+    total_maliyet_tl_sum = 0.0
+
+    total_maliyet_eur_sum = 0.0
+
+    total_order_sum = 0.0
+
+    img_buffers = []
+
+    for idx, s in enumerate(styles, start=2):
+
+        last_row = idx
+
+        ws.row_dimensions[idx].height = 75
+
+        current_fill = fill_white if (idx % 2 == 0) else fill_zebra
+
+        # 0. Görsel (A Sütunu / Column 1)
+
+        img_url = s.get("image_url") or s.get("image_url_2")
+
+        cell_a = ws.cell(row=idx, column=1)
+
+        cell_a.fill = current_fill
+
+        cell_a.border = cell_border
+
+        img_added = False
+
+        if img_url:
+
+            try:
+
+                pil_img = None
+
+                if img_url.startswith("data:image"):
+
+                    hdr, enc = img_url.split(",", 1)
+
+                    pil_img = PILImage.open(io.BytesIO(base64.b64decode(enc)))
+
+                elif img_url.startswith("/uploads/"):
+
+                    p = UPLOADS_DIR / img_url.replace("/uploads/", "").lstrip("/")
+
+                    if p.exists():
+
+                        pil_img = PILImage.open(p)
+
+                elif img_url.startswith("/data/uploads/") or img_url.startswith("data/uploads/"):
+
+                    rel_path = img_url.lstrip("/")
+
+                    p = Path(rel_path)
+
+                    if p.exists():
+
+                        pil_img = PILImage.open(p)
+
+                elif Path(img_url).exists():
+
+                    pil_img = PILImage.open(img_url)
+
+                    
+
+                if pil_img:
+
+                    pil_img = pil_img.convert("RGB")
+
+                    pil_img.thumbnail((105, 88), PILImage.Resampling.LANCZOS)
+
+                    buf = io.BytesIO()
+
+                    pil_img.save(buf, format="JPEG", quality=88)
+
+                    buf.seek(0)
+
+                    img_buffers.append(buf)
+
+                    xl_img = OpenpyxlImage(buf)
+
+                    img_w = pil_img.width
+
+                    img_h = pil_img.height
+
+                    # Hücrede En ve Boydan Ortalama (Horizontal & Vertical Center)
+
+                    col_w_px = 140
+
+                    row_h_px = 100
+
+                    x_off_px = max(0, (col_w_px - img_w) // 2)
+
+                    y_off_px = max(0, (row_h_px - img_h) // 2)
+
+                    marker = AnchorMarker(col=0, colOff=pixels_to_EMU(x_off_px), row=idx - 1, rowOff=pixels_to_EMU(y_off_px))
+
+                    size = XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h))
+
+                    xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
+
+                    ws.add_image(xl_img)
+
+                    img_added = True
+
+            except Exception:
+
+                pass
+
+                
+
+        if not img_added:
+
+            cell_a.value = "[Görsel Yok]"
+
+            cell_a.alignment = align_center
+
+            cell_a.font = font_muted
+
+        cost_data = {}
+
+        if s.get("cost_data_json"):
+
+            try:
+
+                cost_data = json.loads(s["cost_data_json"])
+
+            except Exception:
+
+                cost_data = {}
+
+        def safe_num(val, default=0.0):
+
+            if val is None or val == "":
+
+                return default
+
+            try:
+
+                if isinstance(val, (int, float)):
+
+                    return float(val)
+
+                s_clean = str(val).strip().replace(",", ".")
+
+                return float(s_clean)
+
+            except Exception:
+
+                return default
+
+        rates = cost_data.get("exchangeRates") or {"EUR": 55.75, "USD": 48.9, "TL": 1.0}
+
+        eur_rate = safe_num(rates.get("EUR"), 55.75)
+
+        fabrics = cost_data.get("fabrics") or []
+
+        items = cost_data.get("items") or []
+
+        def normalize_tr(text):
+
+            if not text:
+
+                return ""
+
+            s_val = str(text).replace("İ", "i").replace("I", "i").replace("ı", "i").replace("\u0307", "")
+
+            tr_map = {"ğ": "g", "ü": "u", "ş": "s", "ö": "o", "ç": "c"}
+
+            for c, r in tr_map.items():
+
+                s_val = s_val.replace(c, r).replace(c.upper(), r)
+
+            return s_val.lower().strip()
+
+        fb1 = fabrics[0] if len(fabrics) > 0 else {}
+
+        fb1_price = safe_num(fb1.get("price") or s.get("fabric_price_1"))
+
+        fb1_meters = safe_num(fb1.get("meters") or s.get("unit_meters"))
+
+        fb1_grams = safe_num(fb1.get("grams") or s.get("unit_grams"))
+
+        fb1_cm = round(fb1_meters * 100) if fb1.get("unit_type") != "KG" else fb1_grams
+
+        fb1_total = safe_num(fb1.get("total_tl"))
+
+        fb2 = fabrics[1] if len(fabrics) > 1 else {}
+
+        fb2_price = safe_num(fb2.get("price") or s.get("fabric_price_2"))
+
+        fb2_meters = safe_num(fb2.get("meters") or s.get("unit_meters_2"))
+
+        fb2_grams = safe_num(fb2.get("grams") or s.get("unit_grams_2"))
+
+        fb2_gramaj = fb2_grams if fb2_grams > 0 else (fb2_meters * 100)
+
+        fb2_total = safe_num(fb2.get("total_tl"))
+
+        fb3 = fabrics[2] if len(fabrics) > 2 else {}
+
+        fb3_price = safe_num(fb3.get("price"))
+
+        fb3_meters = safe_num(fb3.get("meters"))
+
+        fb3_grams = safe_num(fb3.get("grams"))
+
+        fb3_gramaj = fb3_grams if fb3_grams > 0 else (fb3_meters * 100)
+
+        fb3_total = safe_num(fb3.get("total_tl"))
+
+        kumas_toplam = safe_num(cost_data.get("totals", {}).get("toplam_kumas_tl") or (fb1_total + fb2_total + fb3_total))
+
+        v_fason = 0.0
+
+        v_kesim = 0.0
+
+        v_aks = 0.0
+
+        v_etkol = 0.0
+
+        v_logo = 0.0
+
+        v_nakis = 0.0
+
+        v_brit = 0.0
+
+        v_lastik = 0.0
+
+        v_dugme = 0.0
+
+        v_citcit = 0.0
+
+        v_diger = 0.0
+
+        v_kargo = 0.0
+
+        v_nakliye = 0.0
+
+        v_kumas_extra = 0.0
+
+        v_astar = 0.0
+
+        v_dikme = 0.0
+
+        v_ilik_dugme = 0.0
+
+        v_citcit_cakim = 0.0
+
+        for it in items:
+
+            n = normalize_tr(it.get("name"))
+
+            v = it.get("total_tl")
+
+            if v is None or v == "":
+
+                v = it.get("evaluated_price")
+
+            if v is None or v == "":
+
+                v = it.get("price")
+
+            val = safe_num(v, 0.0)
+
+            if val == 0.0:
+
+                continue
+
+            if "ilik" in n:
+
+                v_ilik_dugme += val
+
+            elif "cakim" in n:
+
+                v_citcit_cakim += val
+
+            elif "citcit" in n:
+
+                v_citcit += val
+
+            elif "dugme" in n or "fermuar" in n:
+
+                v_dugme += val
+
+            elif any(k in n for k in ["fason", "dikim"]):
+
+                v_fason += val
+
+            elif any(k in n for k in ["kesim", "pastal"]):
+
+                v_kesim += val
+
+            elif any(k in n for k in ["etiket", "etkol", "kol"]):
+
+                v_etkol += val
+
+            elif "logo" in n:
+
+                v_logo += val
+
+            elif any(k in n for k in ["nakis", "naki", "nakış", "baski", "baskı", "tas", "taş"]):
+
+                v_nakis += val
+
+            elif any(k in n for k in ["brit", "birit", "biye"]):
+
+                v_brit += val
+
+            elif "lastik" in n:
+
+                v_lastik += val
+
+            elif "kargo" in n:
+
+                v_kargo += val
+
+            elif any(k in n for k in ["nakliye", "sevkiyat"]):
+
+                v_nakliye += val
+
+            elif any(k in n for k in ["yikama", "apre", "terbiye"]):
+
+                v_kumas_extra += val
+
+            elif any(k in n for k in ["astar", "tela", "vatka"]):
+
+                v_astar += val
+
+            elif any(k in n for k in ["dikme", "el dikisi"]):
+
+                v_dikme += val
+
+            elif any(k in n for k in ["aksesuar", "aks", "kapsul"]):
+
+                v_aks += val
+
+            else:
+
+                # Maliyette girilen diger tum kalemler
+
+                v_diger += val
+
+        totals = cost_data.get("totals") or {}
+
+        maliyet_tl = safe_num(totals.get("maliyet_1_tl") or totals.get("maliyet_2_tl"))
+
+        if maliyet_tl == 0.0 and (kumas_toplam > 0 or v_fason > 0):
+
+            imalat_sum = v_fason + v_kesim + v_aks + v_etkol + v_logo + v_nakis + v_brit + v_lastik + v_dugme + v_citcit + v_diger + v_kargo + v_nakliye + v_kumas_extra + v_astar + v_dikme + v_ilik_dugme + v_citcit_cakim
+
+            maliyet_tl = round((kumas_toplam + imalat_sum) * 1.06, 2)
+
+            
+
+        maliyet_eur = safe_num(totals.get("maliyet_1_doviz") or (round(maliyet_tl / eur_rate, 2) if eur_rate > 0 else 0.0))
+
+        price = safe_num(totals.get("toplam_satis_doviz") or s.get("unit_price"))
+
+        qty = int(safe_num(s.get("total_quantity")))
+
+        total_qty += qty
+
+        tot_maliyet_tl = round(maliyet_tl * qty, 2)
+
+        tot_maliyet_eur = round(maliyet_eur * qty, 2)
+
+        order_toplam = round(price * qty, 2)
+
+        total_maliyet_tl_sum += tot_maliyet_tl
+
+        total_maliyet_eur_sum += tot_maliyet_eur
+
+        total_order_sum += order_toplam
+
+        style_no = str(s.get("style_no") or "")
+
+        color_code = str(s.get("color_code") or "").strip()
+
+        color_name = str(s.get("color_name") or "").strip()
+
+        model_color = f"{style_no}-{color_code or color_name}"
+
+        cust_season = f"{s.get('customer_name') or ''} {s.get('season') or ''}".strip()
+
+        display_color = (f"{color_code} {color_name}".strip()) if (color_code and color_name and not color_name.startswith(color_code)) else (color_name or color_code)
+
+        # Resolve Fabric Details (Kumaşçı, Kalite Adı, Kalite Kodu, Varyant, Kumaş Rengi)
+
+        fl = fl_by_style.get(s["id"], {})
+
+        f_meta = None
+
+        if fl.get("fabrictag_id") and str(fl["fabrictag_id"]) in ft_map:
+
+            f_meta = ft_map[str(fl["fabrictag_id"])]
+
+        if not f_meta:
+
+            raw_art = str(s.get("fabric_article") or s.get("fabric_type") or "")
+
+            m_elt = re.search(r'ELT\d+', raw_art, re.IGNORECASE)
+
+            if m_elt and m_elt.group(0).upper() in ft_map:
+
+                f_meta = ft_map[m_elt.group(0).upper()]
+
+        def clean_kumas_val(v):
+
+            if not v: return ""
+
+            sv = str(v).strip()
+
+            if re.match(r'^ELT\d+$', sv, re.IGNORECASE):
+
+                return ""
+
+            if sv.upper() in ["KODSUZ", "YOK", "NONE", "NULL", "-", "—", "İSİMSİZ", "ISIMSIZ", "TANIMSIZ", "BİLGİSİ YOK", "BILGISI YOK", "BİLGİ YOK", "BILGI YOK", "BELİRTİLMEDİ", "BELIRTILMEDI"]:
+
+                return ""
+
+            return sv
+
+        kumasci = ""
+
+        kalite_adi = ""
+
+        kalite_kodu = ""
+
+        varyant = ""
+
+        kumas_renk = ""
+
+        if f_meta:
+
+            kumasci = clean_kumas_val(f_meta.get("company_name"))
+
+            kalite_adi = clean_kumas_val(f_meta.get("quality_name"))
+
+            kalite_kodu = clean_kumas_val(f_meta.get("quality_code"))
+
+            varyant = clean_kumas_val(f_meta.get("design_code"))
+
+            kumas_renk = clean_kumas_val(f_meta.get("color") or display_color)
+
+        else:
+
+            raw = str(s.get("fabric_article") or s.get("fabric_type") or "")
+
+            raw = re.sub(r'\bELT\d+\b\s*[-–—:]*\s*', '', raw, flags=re.IGNORECASE).strip()
+
+            parts = [p.strip() for p in raw.split(" - ") if p.strip()]
+
+            if len(parts) >= 2:
+
+                kumasci = clean_kumas_val(parts[0])
+
+                rest = parts[1]
+
+                if "(" in rest and ")" in rest:
+
+                    kalite_adi = clean_kumas_val(rest.split("(")[0].strip())
+
+                    kalite_kodu = clean_kumas_val(rest.split("(")[1].split(")")[0].strip())
+
+                else:
+
+                    kalite_adi = clean_kumas_val(rest)
+
+            elif len(parts) == 1:
+
+                kumasci = clean_kumas_val(parts[0])
+
+            varyant = clean_kumas_val(s.get("fabric_variant_1"))
+
+            kumas_renk = clean_kumas_val(display_color)
+
+        row_data = [
+
+            cust_season,
+
+            model_color,
+
+            display_color,
+
+            kumasci,
+
+            kalite_adi,
+
+            kalite_kodu,
+
+            varyant,
+
+            kumas_renk,
+
+            qty if qty else None,
+
+            price if price else None,
+
+            fb1_price if fb1_price else 0,
+
+            fb1_cm if fb1_cm else 0,
+
+            fb1_total if fb1_total else 0,
+
+            fb2_price if fb2_price else 0,
+
+            fb2_gramaj if fb2_gramaj else 0,
+
+            fb2_total if fb2_total else 0,
+
+            kumas_toplam if kumas_toplam else 0,
+
+            fb3_price if fb3_price else None,
+
+            fb3_gramaj if fb3_gramaj else None,
+
+            fb3_total if fb3_total else None,
+
+            v_fason if v_fason else 0,
+
+            v_kesim if v_kesim else 0,
+
+            v_aks if v_aks else 0,
+
+            v_etkol if v_etkol else 0,
+
+            v_logo if v_logo else 0,
+
+            v_nakis if v_nakis else 0,
+
+            v_brit if v_brit else 0,
+
+            v_lastik if v_lastik else 0,
+
+            v_dugme if v_dugme else 0,
+
+            v_citcit if v_citcit else 0,
+
+            v_diger if v_diger else 0,
+
+            v_kargo if v_kargo else 0,
+
+            v_nakliye if v_nakliye else 0,
+
+            v_kumas_extra if v_kumas_extra else 0,
+
+            v_astar if v_astar else 0,
+
+            v_dikme if v_dikme else 0,
+
+            v_ilik_dugme if v_ilik_dugme else 0,
+
+            v_citcit_cakim if v_citcit_cakim else 0,
+
+            None,
+
+            None,
+
+            None,
+
+            maliyet_tl if maliyet_tl else 0,
+
+            maliyet_eur if maliyet_eur else 0,
+
+            eur_rate,
+
+            price if price else 0,
+
+            tot_maliyet_tl if tot_maliyet_tl else 0,
+
+            tot_maliyet_eur if tot_maliyet_eur else 0,
+
+            order_toplam if order_toplam else 0
+
+        ]
+
+        # Populate columns 2 to 49 (column 1 is Görsel)
+
+        for c_idx_offset, val in enumerate(row_data, start=2):
+
+            c_cell = ws.cell(row=idx, column=c_idx_offset, value=val)
+
+            c_cell.fill = current_fill
+
+            c_cell.border = cell_border
+
+            c_cell.font = font_normal
+
+            if c_idx_offset in [2, 3, 5, 6]:
+
+                c_cell.alignment = align_left
+
+            elif c_idx_offset in [4, 7, 8, 9]:
+
+                c_cell.alignment = align_center
+
+                c_cell.font = font_bold
+
+            elif c_idx_offset == 10:  # QUANTITY
+
+                c_cell.alignment = align_center
+
+                c_cell.font = font_bold
+
+                c_cell.number_format = "#,##0"
+
+            elif c_idx_offset in [11, 46]:  # PRICE
+
+                c_cell.alignment = align_right
+
+                c_cell.font = font_bold
+
+                _, b_prc_fmt = get_excel_currency_format(s.get("currency") or "EUR")
+
+                c_cell.number_format = b_prc_fmt
+
+            elif c_idx_offset in [45]:  # EUR RATE
+
+                c_cell.alignment = align_center
+
+                c_cell.number_format = "#,##0.00"
+
+            elif c_idx_offset in [43, 47]:  # Maliyet TL ve TOPLAM maliyet TL + 6%
+
+                c_cell.alignment = align_right
+
+                c_cell.font = font_bold
+
+                c_cell.number_format = '"₺" #,##0.00'
+
+            elif c_idx_offset in [44, 48, 49]:  # Maliyet EUR, TOPLAM EUR, Order Toplamı
+
+                c_cell.alignment = align_right
+
+                c_cell.font = font_bold
+
+                c_cell.number_format = '"€" #,##0.00'
+
+            elif isinstance(val, (int, float)):
+
+                c_cell.alignment = align_right
+
+                c_cell.number_format = "#,##0.00"
+
+    # Summary Total Row
+
+    tot_row = last_row + 1
+
+    ws.row_dimensions[tot_row].height = 28
+
+    tot_fill = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid")
+
+    tot_font = Font(name="Segoe UI", size=10, bold=True, color="000000")
+
+    
+
+    ws.merge_cells(start_row=tot_row, start_column=1, end_row=tot_row, end_column=9)
+
+    cell_tot_lbl = ws.cell(row=tot_row, column=1, value="GENEL TOPLAM:")
+
+    cell_tot_lbl.font = tot_font
+
+    cell_tot_lbl.alignment = Alignment(horizontal="right", vertical="center")
+
+    
+
+    c_tot_qty = ws.cell(row=tot_row, column=10, value=total_qty)
+
+    c_tot_qty.font = tot_font
+
+    c_tot_qty.alignment = align_center
+
+    c_tot_qty.number_format = "#,##0"
+
+    
+
+    c_tot_tl = ws.cell(row=tot_row, column=47, value=total_maliyet_tl_sum)
+
+    c_tot_tl.font = tot_font
+
+    c_tot_tl.alignment = align_right
+
+    c_tot_tl.number_format = '"₺" #,##0.00'
+
+    
+
+    c_tot_eur = ws.cell(row=tot_row, column=48, value=total_maliyet_eur_sum)
+
+    c_tot_eur.font = tot_font
+
+    c_tot_eur.alignment = align_right
+
+    c_tot_eur.number_format = '"€" #,##0.00'
+
+    
+
+    c_tot_order = ws.cell(row=tot_row, column=49, value=total_order_sum)
+
+    c_tot_order.font = tot_font
+
+    c_tot_order.alignment = align_right
+
+    c_tot_order.number_format = '"€" #,##0.00'
+
+    
+
+    for c_i in range(1, 50):
+
+        c_tot = ws.cell(row=tot_row, column=c_i)
+
+        c_tot.fill = tot_fill
+
+        c_tot.border = Border(top=Side(style="medium", color="475569"), bottom=Side(style="double", color="475569"))
+
+    ws.column_dimensions["A"].width = 18  # Görsel
+
+    ws.column_dimensions["B"].width = 24  # Müşteri / Sezon
+
+    ws.column_dimensions["C"].width = 20  # Model - Renk
+
+    ws.column_dimensions["D"].width = 16  # Renk
+
+    ws.column_dimensions["E"].width = 22  # Kumaşçı
+
+    ws.column_dimensions["F"].width = 22  # Kalite Adı
+
+    ws.column_dimensions["G"].width = 16  # Kalite Kodu
+
+    ws.column_dimensions["H"].width = 16  # Varyant
+
+    ws.column_dimensions["I"].width = 18  # Kumaş Rengi
+
+    ws.column_dimensions["J"].width = 14  # Quantity
+
+    ws.column_dimensions["K"].width = 14  # Price
+
+    ws.column_dimensions["R"].width = 16  # Kumaş Toplam
+
+    ws.column_dimensions["AQ"].width = 16 # Maliyet TL
+
+    ws.column_dimensions["AR"].width = 16 # Maliyet EUR
+
+    ws.column_dimensions["AS"].width = 12 # Euro Kuru
+
+    ws.column_dimensions["AT"].width = 14 # Price
+
+    ws.column_dimensions["AU"].width = 20 # Toplam Maliyet TL +6%
+
+    ws.column_dimensions["AV"].width = 20 # Toplam Maliyet EUR +6%
+
+    ws.column_dimensions["AW"].width = 18 # Order Toplamı
+
+    buf = io.BytesIO()
+
+    wb.save(buf)
+
+    buf.seek(0)
+
+    
+
+    filename = f"Butce_Tablosu_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    return Response(
+
+        content=buf.getvalue(),
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+
+    )
+
+@app.get("/api/styles/export-budget-excel")
+
+def api_export_budget_excel_get(ids: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
+
+    user = None
+
+    if authorization:
+
+        t = authorization.replace("Bearer ", "").strip()
+
+        user = get_current_user(t)
+
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
+
+    
+
+    style_ids = None
+
+    if ids:
+
+        try:
+
+            style_ids = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
+
+        except Exception:
+
+            pass
+
+            
+
+    return generate_budget_excel_workbook(style_ids, company_id)
+
+@app.post("/api/styles/export-budget-excel")
+
+def api_export_budget_excel_post(req: ExportExcelRequest, authorization: Optional[str] = Header(None)):
+
+    user = None
+
+    if authorization:
+
+        t = authorization.replace("Bearer ", "").strip()
+
+        user = get_current_user(t)
+
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
+
+    
+
+    return generate_budget_excel_workbook(req.style_ids, company_id)
+
+# ----------------- SINGLE SIZE INLINE UPDATE -----------------
+
+class UpdateSingleSizeRequest(BaseModel):
+
+    style_id: int
+
+    size_name: str
+
+    quantity: int
+
+    reason: Optional[str] = "Hızlı Beden Revizyonu"
+
+@app.post("/api/styles/update-single-size")
+
+def api_update_single_size(req: UpdateSingleSizeRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT total_quantity, order_id, style_no, color_name FROM styles WHERE id = ?", (req.style_id,))
+
+    st = c.fetchone()
+
+    if not st:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    
+
+    old_total = st[0] or 0
+
+    order_id = st[1]
+
+    style_no = st[2]
+
+    color_name = st[3]
+
+    c.execute("SELECT id, quantity FROM size_distributions WHERE style_id = ? AND size_name = ?", (req.style_id, req.size_name))
+
+    row = c.fetchone()
+
+    old_size_qty = row[1] if row else 0
+
+    if row:
+
+        c.execute("UPDATE size_distributions SET quantity = ? WHERE id = ?", (req.quantity, row[0]))
+
+    else:
+
+        c.execute("INSERT INTO size_distributions (style_id, size_name, quantity) VALUES (?, ?, ?)", (req.style_id, req.size_name, req.quantity))
+
+    c.execute("SELECT SUM(quantity) FROM size_distributions WHERE style_id = ?", (req.style_id,))
+
+    new_total = c.fetchone()[0] or 0
+
+    c.execute("UPDATE styles SET total_quantity = ?, total_amount = ? * unit_price, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_total, new_total, req.style_id))
+
+    c.execute("""
+
+    UPDATE orders 
+
+    SET total_quantity = (SELECT SUM(total_quantity) FROM styles WHERE order_id = ?),
+
+        total_amount = (SELECT SUM(total_quantity * unit_price) FROM styles WHERE order_id = ?)
+
+    WHERE id = ?
+
+    """, (order_id, order_id, order_id))
+
+    user_name = user.get("full_name") or user.get("username")
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+
+    """, (req.style_id, order_id, user.get("user_id"), user_name, f"size_{req.size_name}", f"{req.size_name}: {old_size_qty}", f"{req.size_name}: {req.quantity}", f"{req.reason} (Toplam: {old_total} -> {new_total})"))
+
+    c.execute("""
+
+    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
+
+    VALUES (?, ?, 'Beden Revizyonu', ?, ?)
+
+    """, (req.style_id, user_name, f"Beden {req.size_name} Değiştirildi", f"{req.size_name}: {old_size_qty} -> {req.quantity} Adet (Yeni Toplam: {new_total})"))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "new_total": new_total, "message": f"{req.size_name} bedeni güncellendi. Yeni toplam: {new_total}"}
+
+# ----------------- DUAL IMAGE UPLOAD (SLOT 1 & SLOT 2) -----------------
+
+@app.post("/api/styles/{style_id}/image")
+
+async def api_upload_style_image(
+
+    style_id: int, 
+
+    slot: int = Query(1),
+
+    file: UploadFile = File(...), 
+
+    user: Dict[str, Any] = Depends(require_user)
+
+):
+
+    raw_fname = file.filename or "image.png"
+
+    ext = Path(raw_fname).suffix.lower()
+
+    if not ext or ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+
+        c_type = (getattr(file, "content_type", "") or "").lower()
+
+        if "jpeg" in c_type or "jpg" in c_type:
+
+            ext = ".jpg"
+
+        elif "webp" in c_type:
+
+            ext = ".webp"
+
+        elif "gif" in c_type:
+
+            ext = ".gif"
+
+        else:
+
+            ext = ".png" 
+
+    
+
+    filename = f"style_{style_id}_s{slot}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+
+    dest_path = STYLE_IMAGES_DIR / filename
+
+    
+
+    with open(dest_path, "wb") as buffer:
+
+        shutil.copyfileobj(file.file, buffer)
+
+        
+
+    rel_url = f"/uploads/styles/{filename}"
+
+    
+
+    col_name = "image_url_2" if slot == 2 else "image_url"
+
+    
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute(f"UPDATE styles SET {col_name} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (rel_url, style_id))
+
+    
+
+    user_name = user.get("full_name") or user.get("username")
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, 'Eski Görsel', ?, ?)
+
+    """, (style_id, user.get("user_id"), user_name, col_name, rel_url, f"Model Fotoğrafı Yüklendi (Görsel {slot})"))
+
+    conn.commit()
+
+    conn.close()
+
+    
+
+    return {"status": "success", "image_url": rel_url, "slot": slot}
+
+@app.delete("/api/styles/{style_id}/image/{slot}")
+
+def api_delete_style_image(style_id: int, slot: int, user: Dict[str, Any] = Depends(require_user)):
+
+    col_name = "image_url_2" if slot == 2 else "image_url"
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute(f"UPDATE styles SET {col_name} = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (style_id,))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": f"Görsel {slot} silindi."}
+
+@app.post("/api/styles/{style_id}/swap-images")
+
+def api_swap_style_images(style_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT image_url, image_url_2 FROM styles WHERE id = ?", (style_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    img1, img2 = row[0], row[1]
+
+    c.execute("UPDATE styles SET image_url = ?, image_url_2 = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (img2, img1, style_id))
+
+    user_name = user.get("full_name") or user.get("username")
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, 'image_url', ?, ?, 'Görsel 1 ve 2 Yer Değiştirildi')
+
+    """, (style_id, user.get("user_id"), user_name, str(img1), str(img2)))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "image_url": img2, "image_url_2": img1, "message": "Görseller yer değiştirildi."}
+
+# ----------------- UPDATE CELL WITH AUDIT LOG & TIMESTAMPS -----------------
+
+class StyleUpdateFieldRequest(BaseModel):
+
+    style_id: int
+
+    field: str
+
+    value: Any
+
+    reason: Optional[str] = "Kullanıcı Düzenlemesi"
+
+@app.post("/api/styles/update-cell")
+
+def api_update_style_cell(req: StyleUpdateFieldRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    if req.field in ["order_date", "delivery_date", "season", "po_number"]:
+
+        c.execute("SELECT order_id FROM styles WHERE id = ?", (req.style_id,))
+
+        s_row = c.fetchone()
+
+        if not s_row:
+
+            conn.close()
+
+            raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+        order_id = s_row[0]
+
+        c.execute(f"UPDATE orders SET {req.field} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (req.value, order_id))
+
+        user_name = user.get("full_name") or user.get("username")
+
+        c.execute("""
+
+        INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+        VALUES (?, ?, ?, ?, ?, '', ?, ?)
+
+        """, (req.style_id, order_id, user.get("user_id"), user_name, req.field, str(req.value), req.reason))
+
+        conn.commit()
+
+        conn.close()
+
+        return {"status": "success", "message": f"{req.field} güncellendi"}
+
+    c.execute(f"SELECT {req.field}, order_id FROM styles WHERE id = ?", (req.style_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    
+
+    old_val = str(row[0] or "")
+
+    order_id = row[1]
+
+    new_val = str(req.value or "")
+
+    user_name = user.get("full_name") or user.get("username")
+
+    now_date_str = datetime.now().strftime('%d.%m.%Y')
+
+    now_time_str = datetime.now().strftime('%d.%m.%Y %H:%M')
+
+    extra_sql = ""
+
+    extra_params = []
+
+    if req.field == "fabric_ordered":
+
+        val_int = int(req.value or 0)
+
+        date_val = now_date_str if val_int == 1 else None
+
+        extra_sql = ", fabric_ordered_date = ?"
+
+        extra_params.append(date_val)
+
+    elif req.field == "pps_sent":
+
+        str_val = str(req.value or "").strip()
+
+        date_val = now_date_str if str_val and str_val != "-" and str_val != "0" else None
+
+        extra_sql = ", pps_sent_date = ?"
+
+        extra_params.append(date_val)
+
+    elif req.field == "shipping_sample_sent":
+
+        val_int = int(req.value or 0)
+
+        date_val = now_date_str if val_int == 1 else None
+
+        extra_sql = ", shipping_sample_sent_date = ?"
+
+        extra_params.append(date_val)
+
+    elif req.field == "status":
+
+        extra_sql = ", last_status_updated_by = ?, last_status_updated_at = ?"
+
+        extra_params.extend([user_name, now_time_str])
+
+    sql = f"UPDATE styles SET {req.field} = ? {extra_sql}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+
+    c.execute(sql, [req.value] + extra_params + [req.style_id])
+
+    if req.field == "brand" and order_id:
+
+        c.execute("UPDATE orders SET brand = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (req.value, order_id))
+
+        c.execute("UPDATE styles SET brand = ?, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?", (req.value, order_id))
+
+    
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+
+    """, (req.style_id, order_id, user.get("user_id"), user_name, req.field, old_val, new_val, req.reason))
+
+    if req.field == "unit_price":
+
+        c.execute("""
+
+        UPDATE orders 
+
+        SET total_amount = (SELECT SUM(total_quantity * unit_price) FROM styles WHERE order_id = ?)
+
+        WHERE id = ?
+
+        """, (order_id, order_id))
+
+    elif req.field == "fabric_received_meters":
+
+        rec_meters = float(req.value or 0)
+
+        if rec_meters > 0:
+
+            log_msg = f"{now_date_str} tarihinde {rec_meters} metre kumaş geldi."
+
+            c.execute("""
+
+            INSERT INTO production_status_logs (style_id, user_name, category, title, message)
+
+            VALUES (?, ?, 'Kumaş Girişi', 'Kumaş Depoya Geldi', ?)
+
+            """, (req.style_id, user_name, log_msg))
+
+    c.execute("""
+
+    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
+
+    VALUES (?, ?, 'İşlem Aşaması', ?, ?)
+
+    """, (req.style_id, user_name, f"'{req.field}' Değiştirildi", f"{old_val} ➜ {new_val} ({req.reason})"))
+
+    conn.commit()
+
+    conn.close()
+
+    return {
+
+        "status": "success", 
+
+        "message": f"{req.field} güncellendi",
+
+        "user_name": user_name,
+
+        "date_str": date_val if 'date_val' in locals() else now_date_str
+
+    }
+
+# ----------------- KESİMHANE & PASTAL GÜNCELLEME -----------------
+
+class CuttingSizeItem(BaseModel):
+
+    size_name: str
+
+    cut_quantity: int = 0
+
+class CuttingUpdateRequest(BaseModel):
+
+    style_id: int
+
+    cut_meters: Optional[float] = 0.0
+
+    sizes: List[CuttingSizeItem] = []
+
+@app.post("/api/cutting/update")
+
+def api_update_cutting(req: CuttingUpdateRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT id, order_id, style_no, total_quantity, cut_meters, actual_unit_meters, cutting_date FROM styles WHERE id = ?", (req.style_id,))
+
+    style_row = c.fetchone()
+
+    if not style_row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    
+
+    order_id = style_row["order_id"]
+
+    user_name = user.get("full_name") or user.get("username") or "Kesim Şefi"
+
+    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    total_cut_qty = 0
+
+    for sz in req.sizes:
+
+        c.execute("""
+
+        UPDATE size_distributions 
+
+        SET cut_quantity = ? 
+
+        WHERE style_id = ? AND size_name = ?
+
+        """, (int(sz.cut_quantity or 0), req.style_id, sz.size_name))
+
+        total_cut_qty += int(sz.cut_quantity or 0)
+
+    cut_m = float(req.cut_meters or 0.0)
+
+    actual_unit_m = round(cut_m / total_cut_qty, 3) if total_cut_qty > 0 and cut_m > 0 else 0.0
+
+    c.execute("""
+
+    UPDATE styles 
+
+    SET cut_meters = ?, actual_unit_meters = ?, cutting_date = ?, updated_at = CURRENT_TIMESTAMP 
+
+    WHERE id = ?
+
+    """, (cut_m, actual_unit_m, now_str, req.style_id))
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, 'cutting_update', ?, ?, 'Kesimhane Beden & Metraj Güncellemesi')
+
+    """, (req.style_id, order_id, user.get("user_id"), user_name, 
+
+          f"M:{style_row['cut_meters']}", f"M:{cut_m}, Adet:{total_cut_qty}, Birim:{actual_unit_m}, Tarih:{now_str}"))
+
+    conn.commit()
+
+    conn.close()
+
+    return {
+
+        "status": "success",
+
+        "style_id": req.style_id,
+
+        "total_cut_quantity": total_cut_qty,
+
+        "cut_meters": cut_m,
+
+        "actual_unit_meters": actual_unit_m,
+
+        "cutting_date": now_str
+
+    }
+
+# ----------------- KESİM FİŞİ EXCEL DIŞA AKTARIM -----------------
+
+class CuttingSlipColorItem(BaseModel):
+
+    name: str
+
+    channel: Optional[str] = ""
+
+    quantities: List[Any] = []
+
+    total: Optional[int] = 0
+
+class CuttingSlipExportRequest(BaseModel):
+
+    customer_name: Optional[str] = ""
+
+    brand: Optional[str] = ""
+
+    style_no: Optional[str] = ""
+
+    channel: Optional[str] = ""
+
+    date: Optional[str] = ""
+
+    image_url: Optional[str] = ""
+
+    sizes: List[str] = []
+
+    has_channel_info: Optional[bool] = False
+
+    colors: List[CuttingSlipColorItem] = []
+
+@app.post("/api/cutting/export-slip-excel")
+
+def api_export_cutting_slip_excel(req: CuttingSlipExportRequest):
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Sayfa1"
+
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+
+    ws.page_setup.fitToWidth = 1
+
+    ws.page_setup.fitToHeight = 1
+
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    thin = Side(border_style="thin", color="000000")
+
+    medium = Side(border_style="medium", color="000000")
+
+    box_border = Border(top=thin, left=thin, right=thin, bottom=thin)
+
+    has_channel = bool(req.has_channel_info and any(bool(c.channel and str(c.channel).strip()) for c in req.colors))
+
+    num_sizes = len(req.sizes)
+
+    # Kolon yerleşimi:
+
+    # Boş / adetsiz sütunlar kaldırıldı.
+
+    # Kanal varsa: Col 1: RENK/VARYANT, Col 2: KANAL, Col 3..(2+num_sizes): Bedenler, Son Kolon: TOPLAM
+
+    # Kanal yoksa: Col 1: RENK/VARYANT, Col 2..(1+num_sizes): Bedenler, Son Kolon: TOPLAM
+
+    if has_channel:
+
+        total_cols = max(4, 1 + 1 + num_sizes + 1)
+
+        size_col_letters = [get_column_letter(3 + idx) for idx in range(num_sizes)]
+
+        ws.column_dimensions['A'].width = 22
+
+        ws.column_dimensions['B'].width = 16
+
+        for sc in size_col_letters:
+
+            ws.column_dimensions[sc].width = 12
+
+    else:
+
+        total_cols = max(4, 1 + num_sizes + 1)
+
+        size_col_letters = [get_column_letter(2 + idx) for idx in range(num_sizes)]
+
+        ws.column_dimensions['A'].width = 24
+
+        for sc in size_col_letters:
+
+            ws.column_dimensions[sc].width = 12
+
+    last_col_letter = get_column_letter(total_cols)
+
+    ws.column_dimensions[last_col_letter].width = 15
+
+    # Row 1: KESİM FİŞİ
+
+    ws.row_dimensions[1].height = 30
+
+    ws.merge_cells(f"A1:{last_col_letter}1")
+
+    cell_a1 = ws["A1"]
+
+    cell_a1.value = "KESİM FİŞİ"
+
+    cell_a1.font = Font(name="Arial", size=20, bold=True)
+
+    cell_a1.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Row 2: MÜŞTERİ & TARİH
+
+    ws.row_dimensions[2].height = 25
+
+    ws["A2"].value = "MÜŞTERİ:"
+
+    ws["A2"].font = Font(name="Arial", size=14, bold=True)
+
+    ws["A2"].alignment = Alignment(horizontal="right", vertical="center")
+
+    second_last_col_letter = get_column_letter(max(2, total_cols - 1))
+
+    if total_cols > 4:
+
+        ws.merge_cells(f"B2:{get_column_letter(total_cols - 2)}2")
+
+    ws["B2"].value = req.customer_name or ""
+
+    ws["B2"].font = Font(name="Arial", size=14, bold=False)
+
+    ws["B2"].alignment = Alignment(horizontal="left", vertical="center")
+
+    for ci in range(1, total_cols + 1):
+
+        ws[f"{get_column_letter(ci)}2"].border = box_border
+
+    ws[f"{second_last_col_letter}2"].value = "TARİH"
+
+    ws[f"{second_last_col_letter}2"].font = Font(name="Arial", size=14, bold=True)
+
+    ws[f"{second_last_col_letter}2"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"{last_col_letter}2"].value = req.date or datetime.now().strftime("%d.%m.%Y")
+
+    ws[f"{last_col_letter}2"].font = Font(name="Arial", size=14, bold=False)
+
+    ws[f"{last_col_letter}2"].alignment = Alignment(horizontal="center", vertical="center")
+
+    # Row 3: MARKA
+
+    ws.row_dimensions[3].height = 25
+
+    ws["A3"].value = "MARKA:"
+
+    ws["A3"].font = Font(name="Arial", size=14, bold=True)
+
+    ws["A3"].alignment = Alignment(horizontal="right", vertical="center")
+
+    brand_val = req.brand or ""
+
+    ch_clean = str(req.channel or "").strip()
+
+    if ch_clean and ch_clean != '__NONE__' and ch_clean.lower() != 'yok':
+
+        brand_val = f"{brand_val} (Kanal: {ch_clean})" if brand_val else f"Kanal: {ch_clean}"
+
+    if total_cols > 2:
+
+        ws.merge_cells(f"B3:{last_col_letter}3")
+
+    ws["B3"].value = brand_val
+
+    ws["B3"].font = Font(name="Arial", size=14, bold=False)
+
+    ws["B3"].alignment = Alignment(horizontal="left", vertical="center")
+
+    for ci in range(1, total_cols + 1):
+
+        ws[f"{get_column_letter(ci)}3"].border = box_border
+
+    # Rows 4 to 8: Image box
+
+    ws.merge_cells("A4:A8")
+
+    for r in range(4, 9):
+
+        ws.row_dimensions[r].height = 26
+
+        for ci in range(1, total_cols + 1):
+
+            ws[f"{get_column_letter(ci)}{r}"].border = box_border
+
+    img_added = False
+
+    if req.image_url:
+
+        clean_img_url = req.image_url.split("?")[0].lstrip("/")
+
+        possible_paths = [
+
+            BASE_DIR / clean_img_url,
+
+            BASE_DIR / "data" / clean_img_url,
+
+            BASE_DIR / "data" / "uploads" / clean_img_url.replace("uploads/", ""),
+
+            BASE_DIR / clean_img_url.replace("uploads/", "data/uploads/")
+
+        ]
+
+        for p in possible_paths:
+
+            if p.exists() and p.is_file():
+
+                try:
+
+                    openpyxl_img = OpenpyxlImage(str(p))
+
+                    with PILImage.open(str(p)) as pil_img:
+
+                        orig_w, orig_h = pil_img.size
+
+                        ratio = min(150.0 / max(1, orig_w), 125.0 / max(1, orig_h))
+
+                        openpyxl_img.width = int(orig_w * ratio)
+
+                        openpyxl_img.height = int(orig_h * ratio)
+
+                    ws.add_image(openpyxl_img, "A4")
+
+                    img_added = True
+
+                    break
+
+                except Exception as ex:
+
+                    print("Error adding image to excel:", ex)
+
+    if not img_added:
+
+        ws["A4"].value = "[ RESİM ]"
+
+        ws["A4"].font = Font(name="Arial", size=12, color="888888")
+
+        ws["A4"].alignment = Alignment(horizontal="center", vertical="center")
+
+    # Row 4: ARTICLE
+
+    ws["B4"].value = "ARTICLE     :"
+
+    ws["B4"].font = Font(name="Arial", size=14, bold=True)
+
+    ws["B4"].alignment = Alignment(horizontal="left", vertical="center")
+
+    
+
+    if total_cols > 2:
+
+        ws.merge_cells(f"C4:{last_col_letter}4")
+
+        ws["C4"].value = req.style_no or ""
+
+        ws["C4"].font = Font(name="Calibri", size=18, bold=True)
+
+        ws["C4"].alignment = Alignment(horizontal="left", vertical="center")
+
+    else:
+
+        ws["B4"].value = f"ARTICLE: {req.style_no or ''}"
+
+    # Row 5: KUMAŞ KG
+
+    ws["B5"].value = "KUMAŞ KG :"
+
+    ws["B5"].font = Font(name="Arial", size=14, bold=False)
+
+    ws["B5"].alignment = Alignment(horizontal="left", vertical="center")
+
+    if total_cols > 2:
+
+        ws.merge_cells(f"C5:{last_col_letter}5")
+
+    # Row 6: METRAJ
+
+    ws["B6"].value = "METRAJ      :"
+
+    ws["B6"].font = Font(name="Arial", size=14, bold=False)
+
+    ws["B6"].alignment = Alignment(horizontal="left", vertical="center")
+
+    if total_cols > 2:
+
+        ws.merge_cells(f"C6:{last_col_letter}6")
+
+    # Row 7: EN
+
+    ws["B7"].value = "EN :"
+
+    ws["B7"].font = Font(name="Arial", size=14, bold=False)
+
+    ws["B7"].alignment = Alignment(horizontal="left", vertical="center")
+
+    if total_cols > 2:
+
+        ws.merge_cells(f"C7:{last_col_letter}7")
+
+    # Row 8: GRAMAJ
+
+    ws["B8"].value = "GRAMAJ:"
+
+    ws["B8"].font = Font(name="Arial", size=14, bold=False)
+
+    ws["B8"].alignment = Alignment(horizontal="left", vertical="center")
+
+    if total_cols > 2:
+
+        ws.merge_cells(f"C8:{last_col_letter}8")
+
+    # Row 9: spacer
+
+    ws.row_dimensions[9].height = 12
+
+    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+    # Row 10: Size Headers (KOMPLE SARI ZEMİN #FFFF00)
+
+    ws.row_dimensions[10].height = 28
+
+    for ci in range(1, total_cols + 1):
+
+        c_letter = get_column_letter(ci)
+
+        ws[f"{c_letter}10"].fill = yellow_fill
+
+        ws[f"{c_letter}10"].border = Border(
+
+            top=medium,
+
+            bottom=thin,
+
+            left=medium if ci == 1 else thin,
+
+            right=medium if ci == total_cols else thin
+
+        )
+
+    ws["A10"].value = "RENK / VARYANT"
+
+    ws["A10"].font = Font(name="Arial", size=11, bold=True)
+
+    ws["A10"].alignment = Alignment(horizontal="center", vertical="center")
+
+    if has_channel:
+
+        ws["B10"].value = "KANAL"
+
+        ws["B10"].font = Font(name="Arial", size=12, bold=True)
+
+        ws["B10"].alignment = Alignment(horizontal="center", vertical="center")
+
+    for sc, sz in zip(size_col_letters, req.sizes):
+
+        ws[f"{sc}10"].value = sz
+
+        ws[f"{sc}10"].font = Font(name="Arial", size=16, bold=True)
+
+        ws[f"{sc}10"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"{last_col_letter}10"].value = "TOPLAM"
+
+    ws[f"{last_col_letter}10"].font = Font(name="Arial", size=16, bold=True)
+
+    ws[f"{last_col_letter}10"].alignment = Alignment(horizontal="center", vertical="center")
+
+    # Dynamic row heights based on color count so 9 colors fit on 1 A4 page
+
+    num_colors = max(1, len(req.colors))
+
+    if num_colors >= 7:
+
+        row_h_qty = 22
+
+        row_h_empty = 20
+
+    elif num_colors >= 4:
+
+        row_h_qty = 26
+
+        row_h_empty = 24
+
+    else:
+
+        row_h_qty = 30
+
+        row_h_empty = 28
+
+    cur_row = 11
+
+    for c_idx, col_info in enumerate(req.colors):
+
+        # 1. SATIR: Adet satırı
+
+        ws.row_dimensions[cur_row].height = row_h_qty
+
+        top_border_style = thin if c_idx == 0 else medium
+
+        for ci in range(1, total_cols + 1):
+
+            c_letter = get_column_letter(ci)
+
+            ws[f"{c_letter}{cur_row}"].border = Border(
+
+                top=top_border_style,
+
+                bottom=thin,
+
+                left=medium if ci == 1 else thin,
+
+                right=medium if ci == total_cols else thin
+
+            )
+
+        ws[f"A{cur_row}"].value = col_info.name
+
+        ws[f"A{cur_row}"].font = Font(name="Arial", size=10 if num_colors >= 7 else 11, bold=True)
+
+        ws[f"A{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+        
+
+        if has_channel:
+
+            ws[f"B{cur_row}"].value = col_info.channel or ""
+
+            ws[f"B{cur_row}"].font = Font(name="Arial", size=11, bold=True)
+
+            ws[f"B{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+        for sc, q in zip(size_col_letters, col_info.quantities):
+
+            val = int(q) if (q is not None and str(q).isdigit()) else (q if q else "")
+
+            ws[f"{sc}{cur_row}"].value = val
+
+            ws[f"{sc}{cur_row}"].font = Font(name="Arial", size=13 if num_colors >= 7 else 16, bold=False)
+
+            ws[f"{sc}{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+        
+
+        ws[f"{last_col_letter}{cur_row}"].value = col_info.total
+
+        ws[f"{last_col_letter}{cur_row}"].font = Font(name="Arial", size=13 if num_colors >= 7 else 16, bold=True)
+
+        ws[f"{last_col_letter}{cur_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+        
+
+        # 2. SATIR: 1. Extra Boş Kutucuk Satırı
+
+        cur_row += 1
+
+        ws.row_dimensions[cur_row].height = row_h_empty
+
+        for ci in range(1, total_cols + 1):
+
+            c_letter = get_column_letter(ci)
+
+            ws[f"{c_letter}{cur_row}"].border = Border(
+
+                top=thin,
+
+                bottom=thin,
+
+                left=medium if ci == 1 else thin,
+
+                right=medium if ci == total_cols else thin
+
+            )
+
+        # 3. SATIR: 2. Extra Boş Kutucuk Satırı (HER RENK BİTİMİNDE ALT ÇİZGİSİ BOLD / MEDIUM)
+
+        cur_row += 1
+
+        ws.row_dimensions[cur_row].height = row_h_empty
+
+        for ci in range(1, total_cols + 1):
+
+            c_letter = get_column_letter(ci)
+
+            ws[f"{c_letter}{cur_row}"].border = Border(
+
+                top=thin,
+
+                bottom=medium,
+
+                left=medium if ci == 1 else thin,
+
+                right=medium if ci == total_cols else thin
+
+            )
+
+        
+
+        # Renk bitiminden sonra doğrudan sonraki satıra geç (aradaki boşluk kaldırıldı)
+
+        cur_row += 1
+
+    output = io.BytesIO()
+
+    wb.save(output)
+
+    output.seek(0)
+
+    
+
+    clean_style = re.sub(r'[^a-zA-Z0-9_-]', '_', req.style_no or 'Model')
+
+    filename = f"KESIM_FISI_{clean_style}.xlsx"
+
+    return Response(
+
+        content=output.getvalue(),
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+
+    )
+
+class ShippingSizeItem(BaseModel):
+
+    size_name: str
+
+    shipped_quantity: int = 0
+
+class ShippingUpdateRequest(BaseModel):
+
+    style_id: int
+
+    sizes: List[ShippingSizeItem] = []
+
+    shipping_date: Optional[str] = None
+
+@app.post("/api/shipping/update")
+
+def api_update_shipping(req: ShippingUpdateRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT id, order_id, style_no, total_quantity, shipping_date FROM styles WHERE id = ?", (req.style_id,))
+
+    style_row = c.fetchone()
+
+    if not style_row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    
+
+    order_id = style_row["order_id"]
+
+    user_name = user.get("full_name") or user.get("username") or "Sevkiyat Sorumlusu"
+
+    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    final_shipping_date = (req.shipping_date or "").strip()
+
+    if not final_shipping_date:
+
+        c.execute("SELECT o.delivery_date FROM styles s JOIN orders o ON s.order_id = o.id WHERE s.id = ?", (req.style_id,))
+
+        o_row = c.fetchone()
+
+        del_date = o_row[0] if o_row else None
+
+        final_shipping_date = style_row["shipping_date"] or del_date or now_str
+
+    total_shipped_qty = 0
+
+    for sz in req.sizes:
+
+        c.execute("""
+
+        UPDATE size_distributions 
+
+        SET shipped_quantity = ? 
+
+        WHERE style_id = ? AND size_name = ?
+
+        """, (int(sz.shipped_quantity or 0), req.style_id, sz.size_name))
+
+        total_shipped_qty += int(sz.shipped_quantity or 0)
+
+    c.execute("""
+
+    UPDATE styles 
+
+    SET shipping_date = ?, updated_at = CURRENT_TIMESTAMP 
+
+    WHERE id = ?
+
+    """, (final_shipping_date, req.style_id))
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, 'shipping_update', ?, ?, 'Yükleme Adetleri Güncellendi')
+
+    """, (req.style_id, order_id, user.get("user_id"), user_name, 
+
+          f"Tarih:{style_row['shipping_date']}", f"Adet:{total_shipped_qty}, Tarih:{now_str}"))
+
+    conn.commit()
+
+    conn.close()
+
+    return {
+
+        "status": "success",
+
+        "style_id": req.style_id,
+
+        "total_shipped_quantity": total_shipped_qty,
+
+        "shipping_date": final_shipping_date
+
+    }
+
+# ----------------- PACKING LIST & CARTON LABELS (ÇEKİ LİSTESİ & KOLİ ÜSTÜ) -----------------
+
+class PackingProcessRequest(BaseModel):
+
+    style_id: int
+
+    sizes: Dict[str, int]
+
+    channel: Optional[str] = ""
+
+    notes: Optional[str] = ""
+
+def find_matching_styles_for_packing(customer: str, style_no: str, color_name: str, limit: int = 15):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    norm_style = re.sub(r'[^a-zA-Z0-9]', '', style_no or '').lower()
+
+    style_prefix = norm_style[:5] if len(norm_style) >= 5 else norm_style
+
+    c.execute("""
+
+        SELECT s.id, s.order_id, s.style_no, s.color_code, s.color_name, s.total_quantity,
+
+               o.po_number, o.customer_name, o.brand, o.order_date, o.delivery_date
+
+        FROM styles s
+
+        JOIN orders o ON s.order_id = o.id
+
+        ORDER BY s.id DESC
+
+    """)
+
+    all_styles = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+
+    scored = []
+
+    for s in all_styles:
+
+        score = 0
+
+        s_norm = re.sub(r'[^a-zA-Z0-9]', '', s.get('style_no') or '').lower()
+
+        c_norm = (s.get('customer_name') or '').lower()
+
+        b_norm = (s.get('brand') or '').lower()
+
+        col_norm = (s.get('color_name') or '').lower()
+
+        # Customer / Brand match
+
+        if customer:
+
+            cust_clean = customer.lower()
+
+            if cust_clean in c_norm or cust_clean in b_norm:
+
+                score += 35
+
+            if 'anna' in cust_clean and ('anna' in c_norm or 'anna' in b_norm):
+
+                score += 35
+
+        # Style match
+
+        if norm_style and norm_style == s_norm:
+
+            score += 100
+
+        elif style_prefix and style_prefix in s_norm:
+
+            score += 50
+
+        elif style_no and any(part in (s.get('style_no') or '').lower() for part in style_no.lower().split('-') if len(part) >= 3):
+
+            score += 30
+
+        # Color match
+
+        if color_name:
+
+            col_target = color_name.lower()
+
+            if col_norm and (col_target in col_norm or col_norm in col_target):
+
+                score += 40
+
+            c_code = color_name.split()[0] if ' ' in color_name else ''
+
+            if c_code and c_code.lower() in (s.get('color_code') or '').lower():
+
+                score += 30
+
+        if score > 0:
+
+            scored.append((score, s))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    best_match = scored[0][1] if (scored and scored[0][0] >= 30) else None
+
+    candidates = [item[1] for item in scored[:limit] if item[0] >= 30]
+
+    return best_match, candidates
+
+@app.post("/api/packing-list/upload")
+
+async def api_upload_packing_list(
+
+    file: UploadFile = File(...),
+
+    user: Dict[str, Any] = Depends(require_user)
+
+):
+
+    import shutil
+
+    from pathlib import Path
+
+    import unicodedata, re
+
+    orig_name = unicodedata.normalize('NFC', file.filename or "packing_list.xlsx")
+
+    ext = Path(orig_name).suffix.lower()
+
+    safe_stem = re.sub(r'[^\w\s\.-]', '_', Path(orig_name).stem).strip()
+
+    clean_name = f"packing_{int(datetime.now().timestamp())}_{safe_stem}{ext}"
+
+    save_path = UPLOADS_DIR / clean_name
+
+    file_name = orig_name
+
+    with open(save_path, "wb") as buffer:
+
+        shutil.copyfileobj(file.file, buffer)
+
+    try:
+
+        parsed_data = OrderParserEngine.parse_packing_list(str(save_path))
+
+    except Exception as e:
+
+        raise HTTPException(status_code=400, detail=f"Çeki listesi okunamadı: {str(e)}")
+
+    best_match, candidates = find_matching_styles_for_packing(
+
+        parsed_data.get("customer", ""),
+
+        parsed_data.get("style_no", ""),
+
+        parsed_data.get("color", "")
+
+    )
+
+    return {
+
+        "status": "success",
+
+        "file_name": file_name,
+
+        "parsed_data": parsed_data,
+
+        "matched_style": best_match,
+
+        "candidate_styles": candidates
+
+    }
+
+@app.get("/api/packing-list/sample")
+
+def api_sample_packing_list(user: Dict[str, Any] = Depends(require_user)):
+
+    sample_file = BASE_DIR / "scratch" / "Anna_Van_Toor_koli_ustu_x2.xlsm"
+
+    if not sample_file.exists():
+
+        raise HTTPException(status_code=404, detail="Örnek dosya scratch/Anna_Van_Toor_koli_ustu_x2.xlsm bulunamadı.")
+
+    try:
+
+        parsed_data = OrderParserEngine.parse_packing_list(str(sample_file))
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"Örnek dosya okunamadı: {str(e)}")
+
+    best_match, candidates = find_matching_styles_for_packing(
+
+        parsed_data.get("customer", ""),
+
+        parsed_data.get("style_no", ""),
+
+        parsed_data.get("color", "")
+
+    )
+
+    return {
+
+        "status": "success",
+
+        "file_name": "Anna_Van_Toor_koli_ustu_x2.xlsm (Örnek Şablon)",
+
+        "parsed_data": parsed_data,
+
+        "matched_style": best_match,
+
+        "candidate_styles": candidates
+
+    }
+
+@app.post("/api/packing-list/process")
+
+def api_process_packing_list(
+
+    req: PackingProcessRequest,
+
+    user: Dict[str, Any] = Depends(require_user)
+
+):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT id, order_id, style_no, total_quantity, shipping_date FROM styles WHERE id = ?", (req.style_id,))
+
+    style_row = c.fetchone()
+
+    if not style_row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Eşleşen model bulunamadı.")
+
+    order_id = style_row["order_id"]
+
+    user_name = user.get("full_name") or user.get("username") or "Çeki Listesi Sorumlusu"
+
+    now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    # Fetch existing size distributions for this style
+
+    c.execute("SELECT id, size_name, shipped_quantity, quantity FROM size_distributions WHERE style_id = ?", (req.style_id,))
+
+    existing_sizes = {r["size_name"]: dict(r) for r in c.fetchall()}
+
+    total_shipped_qty = 0
+
+    for sz_name, sz_qty in req.sizes.items():
+
+        qty_int = int(sz_qty or 0)
+
+        total_shipped_qty += qty_int
+
+        if sz_name in existing_sizes:
+
+            c.execute("""
+
+                UPDATE size_distributions
+
+                SET shipped_quantity = ?
+
+                WHERE style_id = ? AND size_name = ?
+
+            """, (qty_int, req.style_id, sz_name))
+
+        else:
+
+            c.execute("""
+
+                INSERT INTO size_distributions (style_id, size_name, quantity, shipped_quantity)
+
+                VALUES (?, ?, ?, ?)
+
+            """, (req.style_id, sz_name, qty_int, qty_int))
+
+    # Update style shipping_date and optional channel
+
+    if req.channel:
+
+        c.execute("""
+
+            UPDATE styles
+
+            SET shipping_date = ?, channel = ?, updated_at = CURRENT_TIMESTAMP
+
+            WHERE id = ?
+
+        """, (now_str, req.channel, req.style_id))
+
+    else:
+
+        c.execute("""
+
+            UPDATE styles
+
+            SET shipping_date = ?, updated_at = CURRENT_TIMESTAMP
+
+            WHERE id = ?
+
+        """, (now_str, req.style_id))
+
+    # Audit log
+
+    c.execute("""
+
+        INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+        VALUES (?, ?, ?, ?, 'packing_list_process', ?, ?, ?)
+
+    """, (req.style_id, order_id, user.get("user_id"), user_name,
+
+          f"Tarih:{style_row['shipping_date']}", f"Yüklenen Toplam:{total_shipped_qty}, Tarih:{now_str}",
+
+          req.notes or 'Çeki Listesinden Yükleme Adetleri Sisteme İşlendi'))
+
+    # Production status log (activity stream)
+
+    c.execute("""
+
+        INSERT INTO production_status_logs (style_id, user_id, user_name, category, title, message)
+
+        VALUES (?, ?, ?, 'Sevkiyat', 'Çeki Listesi İşlendi', ?)
+
+    """, (req.style_id, user.get("user_id"), user_name,
+
+          f"Çeki listesinden toplam {total_shipped_qty} adet sevkiyat işlendi. {req.notes or ''}"))
+
+    conn.commit()
+
+    conn.close()
+
+    return {
+
+        "status": "success",
+
+        "message": f"Çeki listesi başarıyla sisteme işlendi. Toplam {total_shipped_qty} adet kaydedildi.",
+
+        "style_id": req.style_id,
+
+        "total_shipped_quantity": total_shipped_qty,
+
+        "shipping_date": final_shipping_date
+
+    }
+
+# ----------------- CARTON LABEL TEMPLATES & DESIGNER -----------------
+
+class CartonTemplateSaveRequest(BaseModel):
+
+    id: Optional[int] = None
+
+    customer_name: str
+
+    template_name: str
+
+    paper_size: Optional[str] = "A4"
+
+    orientation: Optional[str] = "landscape"
+
+    width_mm: Optional[float] = 297.0
+
+    height_mm: Optional[float] = 210.0
+
+    items_per_page: Optional[int] = 2
+
+    border_style: Optional[str] = "solid"
+
+    border_width: Optional[int] = 1
+
+    show_grid_lines: Optional[bool] = True
+
+    margin_mm: Optional[int] = 6
+
+    font_scale: Optional[float] = 1.0
+
+    layout_json: Optional[Any] = {}
+
+    is_default: Optional[bool] = False
+
+@app.get("/api/carton-templates")
+
+def api_get_carton_templates(
+
+    customer: Optional[str] = None,
+
+    user: Dict[str, Any] = Depends(require_user)
+
+):
+
+    company_id = user.get("company_id") or 1
+
+    templates = get_carton_templates(company_id=company_id, customer_name=customer)
+
+    return {"status": "success", "templates": templates}
+
+@app.get("/api/carton-templates/{template_id}")
+
+def api_get_carton_template_by_id(
+
+    template_id: int,
+
+    user: Dict[str, Any] = Depends(require_user)
+
+):
+
+    tpl = get_carton_template_by_id(template_id)
+
+    if not tpl:
+
+        raise HTTPException(status_code=404, detail="Şablon bulunamadı.")
+
+    return {"status": "success", "template": tpl}
+
+@app.post("/api/carton-templates/upload-excel")
+
+async def api_upload_carton_template_excel(
+
+    file: UploadFile = File(...),
+
+    user: Dict[str, Any] = Depends(require_user)
+
+):
+
+    # Enforce Excel only (.xlsx, .xlsm, .xls)
+
+    valid_exts = {".xlsx", ".xlsm", ".xls"}
+
+    ext = Path(file.filename).suffix.lower()
+
+    if ext not in valid_exts:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail="Sadece Excel formatları (.xlsx, .xlsm, .xls) kabul edilir. Koli üstü formülasyonu ve hücre yapısı analizi için lütfen Excel dosyası yükleyin."
+
+        )
+
+    temp_path = UPLOADS_DIR / f"template_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+
+    content = await file.read()
+
+    with open(temp_path, "wb") as f:
+
+        f.write(content)
+
+    try:
+
+        analyzed = OrderParserEngine.analyze_carton_label_excel(str(temp_path))
+
+        analyzed["file_name"] = file.filename
+
+        return {
+
+            "status": "success",
+
+            "message": "Excel koli üstü şablonu ve formülasyonları başarıyla analiz edildi.",
+
+            "data": analyzed
+
+        }
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"Excel şablonu çözümlenemedi: {str(e)}")
+
+    finally:
+
+        if temp_path.exists():
+
+            try:
+
+                temp_path.unlink()
+
+            except Exception:
+
+                pass
+
+@app.post("/api/carton-templates/save")
+
+def api_save_carton_template(
+
+    req: CartonTemplateSaveRequest,
+
+    user: Dict[str, Any] = Depends(require_user)
+
+):
+
+    data = req.dict()
+
+    data["company_id"] = user.get("company_id") or 1
+
+    t_id = save_or_update_carton_template(data)
+
+    return {
+
+        "status": "success",
+
+        "id": t_id,
+
+        "message": f"'{req.template_name}' şablonu ve sayfa yapısı başarıyla kaydedildi."
+
+    }
+
+@app.delete("/api/carton-templates/{template_id}")
+
+def api_delete_carton_template(
+
+    template_id: int,
+
+    user: Dict[str, Any] = Depends(require_user)
+
+):
+
+    success = delete_carton_template(template_id)
+
+    if not success:
+
+        raise HTTPException(status_code=404, detail="Silinecek şablon bulunamadı.")
+
+    return {"status": "success", "message": "Şablon başarıyla silindi."}
+
+# ----------------- FABRIC ASSIGNMENT -----------------
+
+class AssignFabricRequest(BaseModel):
+
+    style_id: int
+
+    fabrictag_id: Optional[int] = None
+
+    fabric_name: str
+
+    composition: str
+
+    supplier: Optional[str] = ""
+
+    fabric_slot: Optional[int] = 1
+
+@app.post("/api/styles/assign-fabric")
+
+def api_assign_fabric(req: AssignFabricRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    slot = req.fabric_slot or 1
+
+    
+
+    c.execute("SELECT fabric_article, fabric_composition, fabric_article_2, fabric_composition_2, order_id FROM styles WHERE id = ?", (req.style_id,))
+
+    row = c.fetchone()
+
+    order_id = row[4] if row else None
+
+    
+
+    if slot == 2:
+
+        old_article = (row[2] or "") if row else ""
+
+        old_comp = (row[3] or "") if row else ""
+
+        c.execute("""
+
+        UPDATE styles 
+
+        SET fabric_article_2 = ?, fabric_composition_2 = ?, updated_at = CURRENT_TIMESTAMP 
+
+        WHERE id = ?
+
+        """, (req.fabric_name, req.composition, req.style_id))
+
+    else:
+
+        old_article = (row[0] or "") if row else ""
+
+        old_comp = (row[1] or "") if row else ""
+
+        c.execute("""
+
+        UPDATE styles 
+
+        SET fabric_article = ?, fabric_composition = ?, updated_at = CURRENT_TIMESTAMP 
+
+        WHERE id = ?
+
+        """, (req.fabric_name, req.composition, req.style_id))
+
+    c.execute("DELETE FROM fabric_links WHERE style_id = ? AND (fabric_slot = ? OR (? = 1 AND fabric_slot IS NULL))", (req.style_id, slot, slot))
+
+    c.execute("""
+
+    INSERT INTO fabric_links (style_id, fabrictag_id, fabric_name, composition, supplier, fabric_slot, status)
+
+    VALUES (?, ?, ?, ?, ?, ?, 'Atandı')
+
+    """, (req.style_id, req.fabrictag_id, req.fabric_name, req.composition, req.supplier, slot))
+
+    user_name = user.get("full_name") or user.get("username")
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, 'fabric_assignment', ?, ?, ?)
+
+    """, (req.style_id, order_id, user.get("user_id"), user_name, f"{old_article} ({old_comp})", f"{req.fabric_name} ({req.composition})", f"FabricTag Kumaş {slot} Ataması Yapıldı"))
+
+    c.execute("""
+
+    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
+
+    VALUES (?, ?, 'Kumaş', 'Kumaş Değiştirildi / Atandı', ?)
+
+    """, (req.style_id, user_name, f"Yeni Kumaş: {req.fabric_name} | {req.composition} ({req.supplier})"))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": "Kumaş başarıyla atandı"}
+
+class DetachFabricRequest(BaseModel):
+
+    style_id: int
+
+    fabric_slot: Optional[int] = 1
+
+@app.post("/api/styles/detach-fabric")
+
+def api_detach_fabric(req: DetachFabricRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    slot = req.fabric_slot or 1
+
+    
+
+    c.execute("SELECT fabric_article, fabric_composition, fabric_article_2, fabric_composition_2, order_id FROM styles WHERE id = ?", (req.style_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    
+
+    order_id = row[4]
+
+    if slot == 2:
+
+        old_article = row[2] or ""
+
+        old_comp = row[3] or ""
+
+        c.execute("""
+
+        UPDATE styles 
+
+        SET fabric_article_2 = '', fabric_composition_2 = '', fabric_type_2 = '', updated_at = CURRENT_TIMESTAMP 
+
+        WHERE id = ?
+
+        """, (req.style_id,))
+
+    else:
+
+        old_article = row[0] or ""
+
+        old_comp = row[1] or ""
+
+        c.execute("""
+
+        UPDATE styles 
+
+        SET fabric_article = '', fabric_composition = '', fabric_type = '', updated_at = CURRENT_TIMESTAMP 
+
+        WHERE id = ?
+
+        """, (req.style_id,))
+
+    c.execute("DELETE FROM fabric_links WHERE style_id = ? AND (fabric_slot = ? OR (? = 1 AND fabric_slot IS NULL))", (req.style_id, slot, slot))
+
+    user_name = user.get("full_name") or user.get("username")
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, 'fabric_detachment', ?, '', ?)
+
+    """, (req.style_id, order_id, user.get("user_id"), user_name, f"{old_article} ({old_comp})", f"Kumaş {slot} Ataması İptal Edildi"))
+
+    c.execute("""
+
+    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
+
+    VALUES (?, ?, 'Kumaş', 'Kumaş İptal Edildi / Kaldırıldı', ?)
+
+    """, (req.style_id, user_name, f"Kumaş {slot} ataması kaldırıldı. Önceki: {old_article} ({old_comp})"))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": f"Kumaş {slot} ataması kaldırıldı"}
+
+# ----------------- COST CALCULATION ENDPOINTS -----------------
+
+def check_can_view_costs(user: Dict[str, Any]):
+
+    role = user.get("role")
+
+    perms = user.get("permissions") or {}
+
+    if role in ["superadmin", "masterdeveloper", "admin"]:
+
+        return True
+
+    if perms.get("can_view_costs"):
+
+        return True
+
+    raise HTTPException(status_code=403, detail="Maliyet verilerini görüntüleme yetkiniz bulunmamaktadır.")
+
+def check_can_edit_costs(user: Dict[str, Any]):
+
+    role = user.get("role")
+
+    perms = user.get("permissions") or {}
+
+    if role in ["superadmin", "masterdeveloper", "admin"]:
+
+        return True
+
+    if perms.get("can_edit_costs"):
+
+        return True
+
+    raise HTTPException(status_code=403, detail="Maliyet verilerini düzenleme yetkiniz bulunmamaktadır.")
+
+class CostSaveRequest(BaseModel):
+
+    cost_data: Dict[str, Any]
+
+    apply_to_unit_price: bool = False
+
+    calculated_price: Optional[float] = None
+
+    currency: Optional[str] = None
+
+@app.get("/api/styles/{style_id}/cost")
+
+def api_get_style_cost(style_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    check_can_view_costs(user)
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT cost_data_json, unit_price, currency FROM styles WHERE id = ?", (style_id,))
+
+    row = c.fetchone()
+
+    conn.close()
+
+    if not row:
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    cost_json = row[0]
+
+    data = json.loads(cost_json) if cost_json else None
+
+    return {
+
+        "status": "success",
+
+        "cost_data": data,
+
+        "unit_price": row[1],
+
+        "currency": row[2] or "€"
+
+    }
+
+@app.post("/api/styles/{style_id}/cost")
+
+def api_save_style_cost(style_id: int, req: CostSaveRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    check_can_edit_costs(user)
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    user_name = user.get("full_name") or user.get("username")
+
+    c.execute("SELECT order_id, unit_price, currency FROM styles WHERE id = ?", (style_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    order_id, old_price, cur_currency = row[0], row[1], row[2]
+
+    cost_str = json.dumps(req.cost_data)
+
+    
+
+    if req.apply_to_unit_price and req.calculated_price is not None:
+
+        c.execute("UPDATE styles SET cost_data_json = ?, unit_price = ?, currency = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+
+                  (cost_str, req.calculated_price, req.currency or cur_currency, style_id))
+
+    else:
+
+        c.execute("UPDATE styles SET cost_data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (cost_str, style_id))
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, 'cost_calculation', '', ?, 'Maliyet Hesaplama Verileri Güncellendi')
+
+    """, (style_id, order_id, user.get("user_id"), user_name, str(req.calculated_price or '')))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": "Maliyet başarıyla kaydedildi"}
+
+class ActualCostSaveRequest(BaseModel):
+
+    actual_cost_data: Dict[str, Any]
+
+    calculated_total: Optional[float] = None
+
+    currency: Optional[str] = "TL"
+
+@app.post("/api/styles/{style_id}/actual-cost")
+
+def api_save_style_actual_cost(style_id: int, req: ActualCostSaveRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    user_name = user.get("full_name") or user.get("username")
+
+    c.execute("SELECT order_id FROM styles WHERE id = ?", (style_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Model bulunamadı.")
+
+    order_id = row[0]
+
+    cost_str = json.dumps(req.actual_cost_data)
+
+    c.execute("UPDATE styles SET actual_cost_data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (cost_str, style_id))
+
+    c.execute("""
+
+    INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+    VALUES (?, ?, ?, ?, 'actual_cost', '', ?, 'Gerçekleşen Maliyet & Fatura Verileri Kaydedildi')
+
+    """, (style_id, order_id, user.get("user_id"), user_name, str(req.calculated_total or '')))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": "Gerçekleşen maliyet ve fatura verileri başarıyla kaydedildi."}
+
+# ----------------- FREE COST STUDIES (SERBEST FİYAT ÇALIŞMALARI) -----------------
+
+class FreeCostStudySaveRequest(BaseModel):
+
+    season: Optional[str] = ""
+
+    customer_name: Optional[str] = ""
+
+    brand: Optional[str] = ""
+
+    model_no: Optional[str] = ""
+
+    color: Optional[str] = ""
+
+    fabric_supplier: Optional[str] = ""
+
+    fabric_name: Optional[str] = ""
+
+    fabric_code: Optional[str] = ""
+
+    fabric_color: Optional[str] = ""
+
+    fabric_width: Optional[str] = ""
+
+    cost_data: Dict[str, Any] = {}
+
+    kumas_total_tl: Optional[float] = 0.0
+
+    imalat_total_tl: Optional[float] = 0.0
+
+    unit_cost_tl: Optional[float] = 0.0
+
+    unit_price_target: Optional[float] = 0.0
+
+    target_currency: Optional[str] = "EUR"
+
+@app.get("/api/free-cost-studies")
+
+def api_get_free_cost_studies(q: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    
+
+    if q and q.strip():
+
+        term = f"%{q.strip().lower()}%"
+
+        c.execute("""
+
+        SELECT * FROM free_cost_studies
+
+        WHERE (company_id = ? OR company_id IS NULL)
+
+          AND (LOWER(season) LIKE ? OR LOWER(customer_name) LIKE ? OR LOWER(brand) LIKE ? OR LOWER(model_no) LIKE ? OR LOWER(color) LIKE ? OR LOWER(fabric_name) LIKE ? OR LOWER(fabric_supplier) LIKE ?)
+
+        ORDER BY id DESC
+
+        """, (company_id, term, term, term, term, term, term, term))
+
+    else:
+
+        c.execute("""
+
+        SELECT * FROM free_cost_studies
+
+        WHERE (company_id = ? OR company_id IS NULL)
+
+        ORDER BY id DESC
+
+        """, (company_id,))
+
+    
+
+    rows = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+
+    
+
+    for r in rows:
+
+        try:
+
+            r["cost_data"] = json.loads(r.get("cost_data_json") or "{}")
+
+        except:
+
+            r["cost_data"] = {}
+
+            
+
+    return {"status": "success", "studies": rows}
+
+@app.post("/api/free-cost-studies")
+
+def api_create_free_cost_study(req: FreeCostStudySaveRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    user_name = user.get("full_name") or user.get("username") or "Kullanıcı"
+
+    cost_str = json.dumps(req.cost_data)
+
+    c.execute("""
+
+    INSERT INTO free_cost_studies (
+
+        company_id, season, customer_name, brand, model_no, color,
+
+        fabric_supplier, fabric_name, fabric_code, fabric_color, fabric_width,
+
+        cost_data_json, kumas_total_tl, imalat_total_tl, unit_cost_tl, unit_price_target,
+
+        target_currency, created_by, created_at, updated_at
+
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+
+    """, (
+
+        company_id, req.season or "", req.customer_name or "", req.brand or "", req.model_no or "", req.color or "",
+
+        req.fabric_supplier or "", req.fabric_name or "", req.fabric_code or "", req.fabric_color or "", req.fabric_width or "",
+
+        cost_str, req.kumas_total_tl or 0.0, req.imalat_total_tl or 0.0, req.unit_cost_tl or 0.0, req.unit_price_target or 0.0,
+
+        req.target_currency or "EUR", user_name
+
+    ))
+
+    new_id = c.lastrowid
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": "Serbest maliyet çalışması başarıyla kaydedildi.", "id": new_id}
+
+@app.get("/api/free-cost-studies/export-list-excel")
+
+def api_export_free_cost_list_excel(q: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    if q and q.strip():
+
+        term = f"%{q.strip().lower()}%"
+
+        c.execute("""
+
+        SELECT * FROM free_cost_studies
+
+        WHERE (company_id = ? OR company_id IS NULL)
+
+          AND (LOWER(season) LIKE ? OR LOWER(customer_name) LIKE ? OR LOWER(brand) LIKE ? OR LOWER(model_no) LIKE ? OR LOWER(color) LIKE ? OR LOWER(fabric_name) LIKE ? OR LOWER(fabric_supplier) LIKE ?)
+
+        ORDER BY id DESC
+
+        """, (company_id, term, term, term, term, term, term, term))
+
+    else:
+
+        c.execute("""
+
+        SELECT * FROM free_cost_studies
+
+        WHERE (company_id = ? OR company_id IS NULL)
+
+        ORDER BY id DESC
+
+        """, (company_id,))
+
+    rows = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Serbest Maliyet Listesi"
+
+    ws.views.sheetView[0].showGridLines = True
+
+    # Stiller
+
+    f_title = Font(name="Segoe UI", size=13, bold=True, color="FFFFFF")
+
+    f_th = Font(name="Segoe UI", size=10, bold=True, color="000000")
+
+    f_td = Font(name="Segoe UI", size=9, color="1E293B")
+
+    f_td_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
+
+    f_theme = Font(name="Segoe UI", size=9, bold=True, color="0284C7")
+
+    f_green = Font(name="Segoe UI", size=10, bold=True, color="15803D")
+
+    fill_banner = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+
+    fill_th = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    bd_thin = Side(style="thin", color="CBD5E1")
+
+    cell_border = Border(left=bd_thin, right=bd_thin, top=bd_thin, bottom=bd_thin)
+
+    # Başlık Banner
+
+    ws.merge_cells("A1:Q1")
+
+    banner_cell = ws["A1"]
+
+    banner_cell.value = "TEXFLOW  |  SERBEST FİYAT ÇALIŞMALARI LİSTESİ"
+
+    banner_cell.font = f_title
+
+    banner_cell.fill = fill_banner
+
+    banner_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[1].height = 36
+
+    headers = [
+
+        ("No", 8),
+
+        ("Sezon", 12),
+
+        ("Müşteri", 20),
+
+        ("Marka", 16),
+
+        ("Model No", 16),
+
+        ("Renk", 14),
+
+        ("Kumaşçı", 18),
+
+        ("Kalite Adı", 20),
+
+        ("Kalite Kodu", 15),
+
+        ("Kumaş Rengi", 14),
+
+        ("Kumaş Eni", 12),
+
+        ("Kumaş Maliyeti (₺)", 18),
+
+        ("İmalat & Aks. (₺)", 18),
+
+        ("Birim Maliyet (₺)", 18),
+
+        ("Birim Satış Fiyatı", 18),
+
+        ("Para Birimi", 12),
+
+        ("Tarih", 14)
+
+    ]
+
+    ws.row_dimensions[2].height = 24
+
+    fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+    f_th_yellow = Font(name="Segoe UI", size=10, bold=True, color="000000")
+
+    for col_idx, (h_text, width) in enumerate(headers, start=1):
+
+        cell = ws.cell(row=2, column=col_idx, value=h_text)
+
+        cell.font = f_th_yellow
+
+        cell.fill = fill_yellow
+
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        cell.border = cell_border
+
+        col_letter = get_column_letter(col_idx)
+
+        ws.column_dimensions[col_letter].width = width
+
+    curr_row = 3
+
+    num_fmt_curr = "₺ #,##0.00"
+
+    num_fmt_2dec = "#,##0.00"
+
+    for idx, r in enumerate(rows):
+
+        r_fill = fill_zebra if idx % 2 == 1 else None
+
+        ws.row_dimensions[curr_row].height = 20
+
+        vals = [
+
+            (r.get("id"), "center", f_td),
+
+            (r.get("season") or "-", "center", f_td),
+
+            (r.get("customer_name") or "-", "left", f_theme),
+
+            (r.get("brand") or "-", "left", f_td),
+
+            (r.get("model_no") or "-", "left", f_td_bold),
+
+            (r.get("color") or "-", "left", f_td),
+
+            (r.get("fabric_supplier") or "-", "left", f_td),
+
+            (r.get("fabric_name") or "-", "left", f_td),
+
+            (r.get("fabric_code") or "-", "left", f_td),
+
+            (r.get("fabric_color") or "-", "left", f_td),
+
+            (r.get("fabric_width") or "-", "center", f_td),
+
+            (float(r.get("kumas_total_tl") or 0.0), "right", f_td, num_fmt_curr),
+
+            (float(r.get("imalat_total_tl") or 0.0), "right", f_td, num_fmt_curr),
+
+            (float(r.get("unit_cost_tl") or 0.0), "right", f_td_bold, num_fmt_curr),
+
+            (float(r.get("unit_price_target") or 0.0), "right", f_green, num_fmt_2dec),
+
+            (r.get("target_currency") or "EUR", "center", f_td_bold),
+
+            (str(r.get("created_at") or "")[:10], "center", f_td)
+
+        ]
+
+        for col_idx, item in enumerate(vals, start=1):
+
+            val = item[0]
+
+            align = item[1]
+
+            font = item[2]
+
+            c = ws.cell(row=curr_row, column=col_idx, value=val)
+
+            c.font = font
+
+            c.alignment = Alignment(horizontal=align, vertical="center")
+
+            c.border = cell_border
+
+            if len(item) > 3 and item[3]:
+
+                c.number_format = item[3]
+
+            if r_fill:
+
+                c.fill = r_fill
+
+        curr_row += 1
+
+    buf = io.BytesIO()
+
+    wb.save(buf)
+
+    val = buf.getvalue()
+
+    dStr = datetime.now().strftime('%Y%m%d')
+
+    filename = f"Serbest_Maliyet_Listesi_{dStr}.xlsx"
+
+    headers = {
+
+        "Content-Disposition": f'attachment; filename="{filename}"',
+
+        "Content-Length": str(len(val))
+
+    }
+
+    return Response(
+
+        content=val,
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers=headers
+
+    )
+
+@app.post("/api/free-cost-studies/export-study-excel")
+
+def api_export_free_cost_study_excel(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+
+    header = payload.get("header") or {}
+
+    form = payload.get("form") or {}
+
+    rates = form.get("rates") or {}
+
+    cur_rates = form.get("exchangeRates") or {"EUR": 56.0, "USD": 48.5, "GBP": 65.5, "TL": 1.0}
+
+    target_curr = form.get("targetCurrency") or "EUR"
+
+    totals = form.get("totals") or {}
+
+    fabrics = form.get("fabrics") or []
+
+    items = form.get("items") or []
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Maliyet Tablosu"
+
+    ws.views.sheetView[0].showGridLines = True
+
+    # Font ve Dolgu Stilleri
+
+    f_banner = Font(name="Segoe UI", size=13, bold=True, color="FFFFFF")
+
+    f_sec = Font(name="Segoe UI", size=10, bold=True, color="000000")
+
+    f_lbl = Font(name="Segoe UI", size=9, bold=True, color="475569")
+
+    f_val = Font(name="Segoe UI", size=9, bold=False, color="0F172A")
+
+    f_th = Font(name="Segoe UI", size=9, bold=True, color="000000")
+
+    f_td = Font(name="Segoe UI", size=9, color="1E293B")
+
+    f_td_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
+
+    f_total_lbl = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
+
+    f_grand = Font(name="Segoe UI", size=11, bold=True, color="15803D")
+
+    fill_banner = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+
+    fill_sec = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid") # #FFFF00 Sarı Başlık
+
+    fill_subth = PatternFill(start_color="FEF9C3", end_color="FEF9C3", fill_type="solid") # #FEF9C3 Açık Sarı Tablo Başlığı
+
+    fill_meta = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    fill_tot = PatternFill(start_color="FEF08A", end_color="FEF08A", fill_type="solid") # Sarımsı Ara Toplam
+
+    fill_grand = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+
+    bd_thin = Side(style="thin", color="CBD5E1")
+
+    bd_thick = Side(style="medium", color="475569")
+
+    bd_double = Side(style="double", color="1E293B")
+
+    cell_border = Border(left=bd_thin, right=bd_thin, top=bd_thin, bottom=bd_thin)
+
+    tot_border = Border(left=bd_thin, right=bd_thin, top=bd_thick, bottom=bd_double)
+
+    # 1. Başlık
+
+    ws.merge_cells("A1:G1")
+
+    b_cell = ws["A1"]
+
+    b_cell.value = "TEXFLOW  |  SERBEST FİYAT & BİRİM MALİYET HESAPLAMA FORMU"
+
+    b_cell.font = f_banner
+
+    b_cell.fill = fill_banner
+
+    b_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[1].height = 32
+
+    # 2. Model & Kumaş Künyesi
+
+    ws.merge_cells("A2:G2")
+
+    s1 = ws["A2"]
+
+    s1.value = "MODEL VE KUMAŞ KÜNYESİ"
+
+    s1.font = f_sec
+
+    s1.fill = fill_sec
+
+    s1.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[2].height = 20
+
+    meta_pairs = [
+
+        [("Müşteri", header.get("customer_name") or "-"), ("Marka", header.get("brand") or "-"), ("Sezon", header.get("season") or "-")],
+
+        [("Model No", header.get("model_no") or "-"), ("Model Rengi", header.get("color") or "-"), ("Döviz Kurları", f"EUR: {cur_rates.get('EUR', 56.0)} | USD: {cur_rates.get('USD', 48.5)} | GBP: {cur_rates.get('GBP', 65.5)}")],
+
+        [("Kumaşçı", header.get("fabric_supplier") or "-"), ("Kalite Adı", header.get("fabric_name") or "-"), ("Kalite Kodu", header.get("fabric_code") or "-")],
+
+        [("Kumaş Rengi", header.get("fabric_color") or "-"), ("Kumaş Eni", header.get("fabric_width") or "-"), ("Tarih", form.get("rates_snapshot_date") or datetime.now().strftime('%d.%m.%Y'))]
+
+    ]
+
+    r_idx = 3
+
+    for pair_row in meta_pairs:
+
+        ws.row_dimensions[r_idx].height = 19
+
+        c_lbl1 = ws.cell(row=r_idx, column=1, value=pair_row[0][0])
+
+        c_lbl1.font = f_lbl
+
+        c_lbl1.fill = fill_meta
+
+        c_lbl1.border = cell_border
+
+        
+
+        c_val1 = ws.cell(row=r_idx, column=2, value=pair_row[0][1])
+
+        c_val1.font = f_val
+
+        c_val1.border = cell_border
+
+        c_lbl2 = ws.cell(row=r_idx, column=3, value=pair_row[1][0])
+
+        c_lbl2.font = f_lbl
+
+        c_lbl2.fill = fill_meta
+
+        c_lbl2.border = cell_border
+
+        c_val2 = ws.cell(row=r_idx, column=4, value=pair_row[1][1])
+
+        c_val2.font = f_val
+
+        c_val2.border = cell_border
+
+        c_lbl3 = ws.cell(row=r_idx, column=5, value=pair_row[2][0])
+
+        c_lbl3.font = f_lbl
+
+        c_lbl3.fill = fill_meta
+
+        c_lbl3.border = cell_border
+
+        ws.merge_cells(start_row=r_idx, start_column=6, end_row=r_idx, end_column=7)
+
+        c_val3 = ws.cell(row=r_idx, column=6, value=pair_row[2][1])
+
+        c_val3.font = f_val
+
+        c_val3.border = cell_border
+
+        ws.cell(row=r_idx, column=7).border = cell_border
+
+        r_idx += 1
+
+    r_idx += 1
+
+    # 3. Kumaş Maliyetleri Tablosu
+
+    ws.merge_cells(f"A{r_idx}:G{r_idx}")
+
+    s2 = ws[f"A{r_idx}"]
+
+    s2.value = f"1. KUMAŞ MALİYETLERİ ({len(fabrics)} Kumaş)"
+
+    s2.font = f_sec
+
+    s2.fill = fill_sec
+
+    s2.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[r_idx].height = 20
+
+    r_idx += 1
+
+    fab_cols = [
+
+        ("Kumaş Tanımı", 26),
+
+        ("Kalite / Kod", 20),
+
+        ("Birim", 10),
+
+        ("Sarfiyat (M/Gr)", 15),
+
+        ("Birim Fiyat", 14),
+
+        ("Fire %", 10),
+
+        ("Tutar (₺)", 16)
+
+    ]
+
+    ws.row_dimensions[r_idx].height = 20
+
+    for col_i, (c_name, c_w) in enumerate(fab_cols, start=1):
+
+        c = ws.cell(row=r_idx, column=col_i, value=c_name)
+
+        c.font = f_th
+
+        c.fill = fill_subth
+
+        c.alignment = Alignment(horizontal="center" if col_i in (3,6) else ("right" if col_i in (4,5,7) else "left"), vertical="center")
+
+        c.border = cell_border
+
+    r_idx += 1
+
+    kumas_subtot = 0.0
+
+    for fb in fabrics:
+
+        ws.row_dimensions[r_idx].height = 19
+
+        title = fb.get("title") or "Kumaş"
+
+        desc = f"{fb.get('quality') or ''} {fb.get('code') or ''}".strip() or "-"
+
+        ut = fb.get("unit_type") or "M"
+
+        sarf = float(fb.get("grams") or 0.0) if ut == "KG" else float(fb.get("meters") or 0.0)
+
+        pr = float(fb.get("price") or 0.0)
+
+        curr = fb.get("currency") or "EUR"
+
+        wastage = float(fb.get("wastage_percent") or 0.0)
+
+        tot_tl = float(fb.get("total_tl") or 0.0)
+
+        kumas_subtot += tot_tl
+
+        ws.cell(row=r_idx, column=1, value=title).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=r_idx, column=2, value=desc).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=r_idx, column=3, value=ut).alignment = Alignment(horizontal="center", vertical="center")
+
+        
+
+        c4 = ws.cell(row=r_idx, column=4, value=sarf)
+
+        c4.number_format = "#,##0.00"
+
+        c4.alignment = Alignment(horizontal="right", vertical="center")
+
+        c5 = ws.cell(row=r_idx, column=5, value=f"{pr:.2f} {curr}")
+
+        c5.alignment = Alignment(horizontal="right", vertical="center")
+
+        c6 = ws.cell(row=r_idx, column=6, value=f"%{wastage:.0f}")
+
+        c6.alignment = Alignment(horizontal="center", vertical="center")
+
+        c7 = ws.cell(row=r_idx, column=7, value=tot_tl)
+
+        c7.number_format = "₺ #,##0.00"
+
+        c7.alignment = Alignment(horizontal="right", vertical="center")
+
+        c7.font = f_td_bold
+
+        for col_i in range(1, 8):
+
+            c_item = ws.cell(row=r_idx, column=col_i)
+
+            c_item.border = cell_border
+
+            if col_i != 7:
+
+                c_item.font = f_td
+
+        r_idx += 1
+
+    # Kumaş Ara Toplam
+
+    ws.row_dimensions[r_idx].height = 20
+
+    ws.merge_cells(start_row=r_idx, start_column=1, end_row=r_idx, end_column=6)
+
+    c_tot1 = ws.cell(row=r_idx, column=1, value="KUMAŞ ARA TOPLAMI (₺):")
+
+    c_tot1.font = f_total_lbl
+
+    c_tot1.alignment = Alignment(horizontal="right", vertical="center")
+
+    c_tot1.fill = fill_tot
+
+    c_tot1_v = ws.cell(row=r_idx, column=7, value=totals.get("toplam_kumas_tl") or kumas_subtot)
+
+    c_tot1_v.font = f_td_bold
+
+    c_tot1_v.number_format = "₺ #,##0.00"
+
+    c_tot1_v.alignment = Alignment(horizontal="right", vertical="center")
+
+    c_tot1_v.fill = fill_tot
+
+    for col_i in range(1, 8):
+
+        ws.cell(row=r_idx, column=col_i).border = tot_border
+
+    r_idx += 2
+
+    # 4. İmalat, Aksesuar ve Operasyon Kalemleri
+
+    ws.merge_cells(f"A{r_idx}:G{r_idx}")
+
+    s3 = ws[f"A{r_idx}"]
+
+    s3.value = f"2. İMALAT, AKSESUAR VE OPERASYON KALEMLERİ ({len(items)} Kalem)"
+
+    s3.font = f_sec
+
+    s3.fill = fill_sec
+
+    s3.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[r_idx].height = 20
+
+    r_idx += 1
+
+    item_cols = [
+
+        ("Kalem Adı", 26),
+
+        ("Miktar", 12),
+
+        ("Birim Fiyat", 14),
+
+        ("Para Birimi", 12),
+
+        ("Açıklama / Formül", 24),
+
+        ("Kur", 10),
+
+        ("Tutar (₺)", 16)
+
+    ]
+
+    ws.row_dimensions[r_idx].height = 20
+
+    for col_i, (c_name, c_w) in enumerate(item_cols, start=1):
+
+        c = ws.cell(row=r_idx, column=col_i, value=c_name)
+
+        c.font = f_th
+
+        c.fill = fill_subth
+
+        c.alignment = Alignment(horizontal="center" if col_i in (2,4,6) else ("right" if col_i in (3,7) else "left"), vertical="center")
+
+        c.border = cell_border
+
+    r_idx += 1
+
+    imalat_subtot = 0.0
+
+    for it in items:
+
+        ws.row_dimensions[r_idx].height = 19
+
+        name = it.get("name") or "Kalem"
+
+        qty = float(it.get("qty") or 1.0)
+
+        pr = float(it.get("price") or 0.0)
+
+        curr = it.get("currency") or "TL"
+
+        note = it.get("note") or ""
+
+        tot_tl = float(it.get("total_tl") or 0.0)
+
+        imalat_subtot += tot_tl
+
+        ws.cell(row=r_idx, column=1, value=name).alignment = Alignment(horizontal="left", vertical="center")
+
+        c_q = ws.cell(row=r_idx, column=2, value=qty)
+
+        c_q.alignment = Alignment(horizontal="center", vertical="center")
+
+        c_q.number_format = "#,##0.00"
+
+        c_p = ws.cell(row=r_idx, column=3, value=pr)
+
+        c_p.alignment = Alignment(horizontal="right", vertical="center")
+
+        c_p.number_format = "#,##0.00"
+
+        ws.cell(row=r_idx, column=4, value=curr).alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.cell(row=r_idx, column=5, value=note).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=r_idx, column=6, value=cur_rates.get(curr, 1.0)).alignment = Alignment(horizontal="center", vertical="center")
+
+        c_tot = ws.cell(row=r_idx, column=7, value=tot_tl)
+
+        c_tot.number_format = "₺ #,##0.00"
+
+        c_tot.alignment = Alignment(horizontal="right", vertical="center")
+
+        c_tot.font = f_td_bold
+
+        for col_i in range(1, 8):
+
+            c_item = ws.cell(row=r_idx, column=col_i)
+
+            c_item.border = cell_border
+
+            if col_i != 7:
+
+                c_item.font = f_td
+
+        r_idx += 1
+
+    # İmalat Ara Toplam & Fire
+
+    ws.row_dimensions[r_idx].height = 20
+
+    ws.merge_cells(start_row=r_idx, start_column=1, end_row=r_idx, end_column=6)
+
+    c_tot2 = ws.cell(row=r_idx, column=1, value=f"İMALAT & AKSESUAR TOPLAMI (+%{rates.get('imalat_fire', 5)} Fire Dahil) (₺):")
+
+    c_tot2.font = f_total_lbl
+
+    c_tot2.alignment = Alignment(horizontal="right", vertical="center")
+
+    c_tot2.fill = fill_tot
+
+    c_tot2_v = ws.cell(row=r_idx, column=7, value=totals.get("toplam_imalat_tl") or imalat_subtot)
+
+    c_tot2_v.font = f_td_bold
+
+    c_tot2_v.number_format = "₺ #,##0.00"
+
+    c_tot2_v.alignment = Alignment(horizontal="right", vertical="center")
+
+    c_tot2_v.fill = fill_tot
+
+    for col_i in range(1, 8):
+
+        ws.cell(row=r_idx, column=col_i).border = tot_border
+
+    r_idx += 2
+
+    # 5. Maliyet, Kâr, Komisyon ve Nihai Satış Fiyatı Matrisi
+
+    ws.merge_cells(f"A{r_idx}:G{r_idx}")
+
+    s4 = ws[f"A{r_idx}"]
+
+    s4.value = "3. ORANLAR, KÂR MARJI, KOMİSYON VE SATIŞ FİYATI"
+
+    s4.font = f_sec
+
+    s4.fill = fill_sec
+
+    s4.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[r_idx].height = 20
+
+    r_idx += 1
+
+    summary_rows = [
+
+        ("Maliyet 2 (Kumaş + Net İmalat)", totals.get("maliyet_2_tl") or 0.0, totals.get("maliyet_2_doviz") or 0.0),
+
+        (f"KDV (+%{rates.get('kdv', 10)})", totals.get("tkdv_tl") or 0.0, totals.get("tkdv_doviz") or 0.0),
+
+        ("Maliyet 1 (Maliyet 2 + KDV)", totals.get("maliyet_1_tl") or 0.0, totals.get("maliyet_1_doviz") or 0.0),
+
+        (f"Genel Gider (+%{rates.get('gg', 15)})", totals.get("gg_tl") or 0.0, totals.get("gg_doviz") or 0.0),
+
+        (f"Kâr Marjı / MUP (+%{rates.get('mup', 15)})", totals.get("mup_tl") or 0.0, totals.get("mup_doviz") or 0.0),
+
+        (f"Komisyon (+%{rates.get('komis', 0)})", totals.get("komis_tl") or 0.0, totals.get("komis_doviz") or 0.0),
+
+        ("BİRİM SATIŞ FİYATI", totals.get("toplam_satis_tl") or 0.0, totals.get("toplam_satis_doviz") or 0.0)
+
+    ]
+
+    for idx, (label, tl_val, doviz_val) in enumerate(summary_rows):
+
+        is_grand = idx == len(summary_rows) - 1
+
+        ws.row_dimensions[r_idx].height = 24 if is_grand else 20
+
+        ws.merge_cells(start_row=r_idx, start_column=1, end_row=r_idx, end_column=4)
+
+        c_l = ws.cell(row=r_idx, column=1, value=label)
+
+        c_l.font = f_grand if is_grand else f_total_lbl
+
+        c_l.alignment = Alignment(horizontal="right", vertical="center")
+
+        if is_grand:
+
+            c_l.fill = fill_grand
+
+        ws.cell(row=r_idx, column=5, value="TL:").alignment = Alignment(horizontal="right", vertical="center")
+
+        c_tl = ws.cell(row=r_idx, column=6, value=tl_val)
+
+        c_tl.number_format = "₺ #,##0.00"
+
+        c_tl.alignment = Alignment(horizontal="right", vertical="center")
+
+        c_tl.font = f_grand if is_grand else f_td_bold
+
+        if is_grand:
+
+            c_tl.fill = fill_grand
+
+        c_dov = ws.cell(row=r_idx, column=7, value=doviz_val)
+
+        c_dov.number_format = f"[{target_curr}] #,##0.00" if target_curr != "TL" else "₺ #,##0.00"
+
+        c_dov.alignment = Alignment(horizontal="right", vertical="center")
+
+        c_dov.font = f_grand if is_grand else f_td_bold
+
+        if is_grand:
+
+            c_dov.fill = fill_grand
+
+        for col_i in range(1, 8):
+
+            ws.cell(row=r_idx, column=col_i).border = tot_border if is_grand else cell_border
+
+        r_idx += 1
+
+    # Sütun Genişlikleri Ayarı
+
+    for col_i, (c_name, c_w) in enumerate(fab_cols, start=1):
+
+        col_letter = get_column_letter(col_i)
+
+        ws.column_dimensions[col_letter].width = max(c_w, 16)
+
+    buf = io.BytesIO()
+
+    wb.save(buf)
+
+    val = buf.getvalue()
+
+    m_no = (header.get("model_no") or "Model").replace(" ", "_")
+
+    c_name = (header.get("customer_name") or "Musteri").replace(" ", "_")
+
+    dStr = datetime.now().strftime('%Y%m%d')
+
+    filename = f"Maliyet_Tablosu_{c_name}_{m_no}_{dStr}.xlsx"
+
+    headers = {
+
+        "Content-Disposition": f'attachment; filename="{filename}"',
+
+        "Content-Length": str(len(val))
+
+    }
+
+    return Response(
+
+        content=val,
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers=headers
+
+    )
+
+@app.get("/api/free-cost-studies/{study_id}")
+
+def api_get_free_cost_study(study_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM free_cost_studies WHERE id = ?", (study_id,))
+
+    row = c.fetchone()
+
+    conn.close()
+
+    if not row:
+
+        raise HTTPException(status_code=404, detail="Maliyet çalışması bulunamadı.")
+
+    res = dict(row)
+
+    try:
+
+        res["cost_data"] = json.loads(res.get("cost_data_json") or "{}")
+
+    except:
+
+        res["cost_data"] = {}
+
+    return {"status": "success", "study": res}
+
+@app.put("/api/free-cost-studies/{study_id}")
+
+def api_update_free_cost_study(study_id: int, req: FreeCostStudySaveRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT id FROM free_cost_studies WHERE id = ?", (study_id,))
+
+    if not c.fetchone():
+
+        conn.close()
+
+        raise HTTPException(status_code=404, detail="Maliyet çalışması bulunamadı.")
+
+    
+
+    cost_str = json.dumps(req.cost_data)
+
+    c.execute("""
+
+    UPDATE free_cost_studies SET
+
+        season = ?, customer_name = ?, brand = ?, model_no = ?, color = ?,
+
+        fabric_supplier = ?, fabric_name = ?, fabric_code = ?, fabric_color = ?, fabric_width = ?,
+
+        cost_data_json = ?, kumas_total_tl = ?, imalat_total_tl = ?, unit_cost_tl = ?, unit_price_target = ?,
+
+        target_currency = ?, updated_at = CURRENT_TIMESTAMP
+
+    WHERE id = ?
+
+    """, (
+
+        req.season or "", req.customer_name or "", req.brand or "", req.model_no or "", req.color or "",
+
+        req.fabric_supplier or "", req.fabric_name or "", req.fabric_code or "", req.fabric_color or "", req.fabric_width or "",
+
+        cost_str, req.kumas_total_tl or 0.0, req.imalat_total_tl or 0.0, req.unit_cost_tl or 0.0, req.unit_price_target or 0.0,
+
+        req.target_currency or "EUR", study_id
+
+    ))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": "Serbest maliyet çalışması başarıyla güncellendi."}
+
+@app.delete("/api/free-cost-studies/{study_id}")
+
+def api_delete_free_cost_study(study_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("DELETE FROM free_cost_studies WHERE id = ?", (study_id,))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": "Maliyet çalışması silindi."}
+
+# ----------------- AUDIT LOGS -----------------
+
+@app.get("/api/audit-logs")
+
+def api_get_audit_logs(style_id: Optional[int] = Query(None), limit: int = 100, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    if style_id:
+
+        c.execute("""
+
+        SELECT a.*, s.style_no, s.color_name, o.po_number, o.customer_name, o.brand
+
+        FROM audit_logs a
+
+        JOIN styles s ON a.style_id = s.id
+
+        JOIN orders o ON s.order_id = o.id
+
+        WHERE a.style_id = ?
+
+        ORDER BY a.id DESC LIMIT ?
+
+        """, (style_id, limit))
+
+    else:
+
+        c.execute("""
+
+        SELECT a.*, s.style_no, s.color_name, o.po_number, o.customer_name, o.brand
+
+        FROM audit_logs a
+
+        JOIN styles s ON a.style_id = s.id
+
+        JOIN orders o ON s.order_id = o.id
+
+        WHERE s.company_id = ?
+
+        ORDER BY a.id DESC LIMIT ?
+
+        """, (company_id, limit))
+
+    logs = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+
+    return logs
+
+# ----------------- STATUS & MESSAGE LOGS -----------------
+
+@app.get("/api/styles/{style_id}/logs")
+
+def api_get_style_logs(style_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM production_status_logs WHERE style_id = ? ORDER BY id DESC", (style_id,))
+
+    logs = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+
+    return logs
+
+class NewLogRequest(BaseModel):
+
+    category: str = "Genel"
+
+    title: Optional[str] = "Durum Notu"
+
+    message: str
+
+@app.post("/api/styles/{style_id}/logs")
+
+def api_add_style_log(style_id: int, req: NewLogRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("""
+
+    INSERT INTO production_status_logs (style_id, user_id, user_name, category, title, message)
+
+    VALUES (?, ?, ?, ?, ?, ?)
+
+    """, (style_id, user.get("user_id"), user.get("full_name") or user.get("username"), req.category, req.title, req.message))
+
+    conn.commit()
+
+    conn.close()
+
+    return {"status": "success", "message": "Not eklendi"}
+
+# ----------------- UPLOAD & PARSER -----------------
+
+@app.post("/api/upload/parse-preview")
+
+async def api_upload_and_parse(request: Request, user: Dict[str, Any] = Depends(require_user)):
+
+    form = await request.form()
+
+    upload_list = []
+
+    
+
+    # Check 'files' first, then 'file' without combining both for the same upload
+
+    files_list = form.getlist("files")
+
+    if files_list:
+
+        upload_list = files_list
+
+    else:
+
+        file_single = form.getlist("file")
+
+        if file_single:
+
+            upload_list = file_single
+
+        else:
+
+            for v in form.values():
+
+                if hasattr(v, "filename") and v.filename:
+
+                    upload_list.append(v)
+
+    if not upload_list:
+
+        raise HTTPException(status_code=400, detail="Lütfen en az bir sipariş dosyası seçin.")
+
+    combined_data = []
+
+    file_info = []
+
+    first_type = "MULTI_UPLOAD"
+
+    for f_obj in upload_list:
+
+        if not hasattr(f_obj, "filename") or not f_obj.filename:
+
+            continue
+
+        saved_path = UPLOADS_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{f_obj.filename}"
+
+        with open(saved_path, "wb") as buffer:
+
+            shutil.copyfileobj(f_obj.file, buffer)
+
+        
+
+        try:
+
+            parsed_result = OrderParserEngine.auto_detect_and_parse(str(saved_path))
+
+            first_type = parsed_result.get("type", "UPLOAD")
+
+            items = parsed_result.get("data", [])
+
+            for it in items:
+
+                it["source_file"] = f_obj.filename
+
+                combined_data.append(it)
+
+            file_info.append(f_obj.filename)
+
+        except Exception as e:
+
+            print(f"Parsing error for {f_obj.filename}: {e}")
+
+    if not combined_data and upload_list:
+
+        raise HTTPException(status_code=400, detail="Seçilen dosyalardan sipariş ayrıştırılamadı.")
+
+    return {
+
+        "type": "MULTI_UPLOAD" if len(file_info) > 1 else first_type,
+
+        "count": len(combined_data),
+
+        "data": combined_data,
+
+        "filename": ", ".join(file_info),
+
+        "files_count": len(file_info)
+
+    }
+
+class ConfirmImportRequest(BaseModel):
+
+    file_path: Optional[str] = ""
+
+    filename: Optional[str] = ""
+
+    source_type: Optional[str] = "MULTI_UPLOAD"
+
+    items: List[Dict[str, Any]]
+
+@app.post("/api/upload/confirm-import")
+
+def api_confirm_import(req: ConfirmImportRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    
+
+    inserted_orders = 0
+
+    inserted_styles = 0
+
+    try:
+
+        # Group items by PO Number to attach to unique order parents or create individual ones
+
+        po_groups: Dict[str, List[Any]] = {}
+
+        for item in req.items:
+
+            po_num = str(item.get("po_number") or f"PO-{datetime.now().strftime('%Y%m%d')}").strip()
+
+            po_groups.setdefault(po_num, []).append(item)
+
+        for po_num, items_list in reversed(list(po_groups.items())):
+
+            first_item = items_list[0]
+
+            cust_name = first_item.get("customer_name") or "Müşteri"
+
+            brand = first_item.get("brand") or "Marka"
+
+            season = first_item.get("season") or "2026/2027"
+
+            order_date = first_item.get("order_date") or datetime.now().strftime("%d.%m.%Y")
+
+            delivery_date = first_item.get("delivery_date") or ""
+
+            delivery_terms = first_item.get("delivery_terms") or ""
+
+            payment_terms = first_item.get("payment_terms") or ""
+
+            currency = first_item.get("currency") or "EUR"
+
+            total_q = sum(int(it.get("total_quantity") or 0) for it in items_list)
+
+            total_a = sum(float(it.get("total_quantity") or 0) * float(it.get("unit_price") or 0.0) for it in items_list)
+
+            c.execute("""
+
+            INSERT INTO orders (
+
+                company_id, po_number, customer_name, brand, season, order_date, delivery_date,
+
+                delivery_terms, payment_terms, total_quantity, total_amount, currency, raw_file_name
+
+            )
+
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+            """, (
+
+                company_id, po_num, cust_name, brand, season, order_date, delivery_date,
+
+                delivery_terms, payment_terms, total_q, total_a, currency, req.filename
+
+            ))
+
+            order_id = c.lastrowid
+
+            inserted_orders += 1
+
+            for it in items_list:
+
+                style_no = str(it.get("style_no") or "STYLE-01").strip()
+
+                desc = it.get("description") or ""
+
+                comp = it.get("fabric_composition") or ""
+
+                article = it.get("fabric_article") or ""
+
+                ftype = it.get("fabric_type") or ""
+
+                color_code = str(it.get("color_code") or "").strip()
+
+                raw_color_name = str(it.get("color_name") or "").strip()
+
+                if color_code and not raw_color_name.startswith(color_code):
+
+                    color_name = f"{color_code} {raw_color_name}".strip()
+
+                else:
+
+                    color_name = raw_color_name or color_code
+
+                price = float(it.get("unit_price") or 0.0)
+
+                
+
+                sizes_dict = it.get("size_distribution") or {}
+
+                # Calculate real total from sizes if present
+
+                if sizes_dict and any(int(v or 0) > 0 for v in sizes_dict.values()):
+
+                    item_qty = sum(int(v or 0) for v in sizes_dict.values())
+
+                else:
+
+                    item_qty = int(it.get("total_quantity") or 0)
+
+                    
+
+                item_amt = item_qty * price
+
+                style_brand = str(it.get("brand") or brand or "").strip()
+
+                style_channel = str(it.get("channel") or "").strip()
+
+                if not style_channel:
+
+                    style_channel = OrderParserEngine.clean_channel_value(it.get("notes") or it.get("comments") or "")
+
+                c.execute("""
+
+                INSERT INTO styles (
+
+                    order_id, company_id, style_no, description, fabric_composition, fabric_article,
+
+                    fabric_type, color_code, color_name, unit_price, total_quantity, total_amount,
+
+                    currency, status, fabric_order_status, last_status_updated_by, last_status_updated_at,
+
+                    brand, channel
+
+                )
+
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Planlamada', ?, 'Sipariş Yükleme', datetime('now'), ?, ?)
+
+                """, (
+
+                    order_id, company_id, style_no, desc, comp, article,
+
+                    ftype, color_code, color_name, price, item_qty, item_amt,
+
+                    currency, it.get("fabric_order_status") or "",
+
+                    style_brand, style_channel
+
+                ))
+
+                style_id = c.lastrowid
+
+                inserted_styles += 1
+
+                for idx, (sz_name, sz_qty) in enumerate(sizes_dict.items()):
+
+                    if str(sz_name).strip():
+
+                        c.execute("""
+
+                        INSERT INTO size_distributions (style_id, size_name, quantity, sort_order)
+
+                        VALUES (?, ?, ?, ?)
+
+                        """, (style_id, str(sz_name).strip(), int(sz_qty or 0), idx + 1))
+
+                for log in it.get("status_logs", []):
+
+                    c.execute("""
+
+                    INSERT INTO production_status_logs (style_id, user_name, category, title, message)
+
+                    VALUES (?, ?, 'Sipariş Notu', ?, ?)
+
+                    """, (style_id, "Sipariş Yükleme", log.get("title") or "Not", log.get("message") or ""))
+
+        conn.commit()
+
+    except Exception as e:
+
+        conn.rollback()
+
+        conn.close()
+
+        raise HTTPException(status_code=500, detail=f"Kayıt hatası: {str(e)}")
+
+    conn.close()
+
+    return {
+
+        "status": "success",
+
+        "message": f"{inserted_orders} Sipariş ve {inserted_styles} Model başarıyla sisteme aktarıldı."
+
+    }
+
+# ----------------- MANUEL SİPARİŞ / MODEL EKLEME -----------------
+
+class CreateManualStyleRequest(BaseModel):
+
+    customer_name: Optional[str] = ""
+
+    brand: Optional[str] = ""
+
+    channel: Optional[str] = ""
+
+    po_number: Optional[str] = ""
+
+    style_no: Optional[str] = ""
+
+    description: Optional[str] = ""
+
+    color_name: Optional[str] = ""
+
+    color_code: Optional[str] = ""
+
+    fabric_article: Optional[str] = ""
+
+    fabric_composition: Optional[str] = ""
+
+    unit_price: Optional[float] = 0.0
+
+    currency: Optional[str] = "EUR"
+
+    unit_meters: Optional[str] = ""
+
+    unit_grams: Optional[str] = ""
+
+    fabric_wastage_percent: Optional[float] = 5.0
+
+    fabric_ordered_meters: Optional[float] = 0.0
+
+    fabric_order_unit: Optional[str] = "M"
+
+    order_date: Optional[str] = ""
+
+    delivery_date: Optional[str] = ""
+
+    status: Optional[str] = "Planlamada"
+
+    size_map: Optional[Dict[str, int]] = None
+
+@app.post("/api/styles/manual-create")
+
+def api_create_manual_style(req: CreateManualStyleRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    user_name = user.get("full_name") or user.get("username") or "Kullanıcı"
+
+    po = (req.po_number or "MANUEL-PO").strip()
+
+    cust = (req.customer_name or "").strip()
+
+    brand = (req.brand or "").strip()
+
+    channel = (req.channel or "").strip()
+
+    order_dt = req.order_date or datetime.now().strftime("%d.%m.%Y")
+
+    del_dt = req.delivery_date or ""
+
+    curr = req.currency or "EUR"
+
+    sizes_dict = req.size_map or {}
+
+    total_qty = sum(int(v or 0) for v in sizes_dict.values()) if sizes_dict else 0
+
+    unit_price = float(req.unit_price or 0.0)
+
+    total_amount = total_qty * unit_price
+
+    try:
+
+        c.execute("""
+
+        SELECT id FROM orders 
+
+        WHERE company_id = ? AND po_number = ? AND customer_name = ?
+
+        """, (company_id, po, cust))
+
+        row = c.fetchone()
+
+        if row:
+
+            order_id = row[0]
+
+            c.execute("""
+
+            UPDATE orders 
+
+            SET total_quantity = total_quantity + ?, total_amount = total_amount + ?, updated_at = CURRENT_TIMESTAMP
+
+            WHERE id = ?
+
+            """, (total_qty, total_amount, order_id))
+
+        else:
+
+            c.execute("""
+
+            INSERT INTO orders (
+
+                company_id, po_number, customer_name, brand, order_date, delivery_date,
+
+                total_quantity, total_amount, currency, status, raw_file_name
+
+            )
+
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Yeni', 'Manuel Giriş')
+
+            """, (company_id, po, cust, brand, order_dt, del_dt, total_qty, total_amount, curr))
+
+            order_id = c.lastrowid
+
+        style_no = (req.style_no or "STYLE-01").strip()
+
+        c.execute("""
+
+        INSERT INTO styles (
+
+            order_id, company_id, style_no, description, fabric_composition, fabric_article,
+
+            color_code, color_name, unit_price, currency, total_quantity, total_amount,
+
+            unit_meters, unit_grams, fabric_wastage_percent, fabric_ordered_meters, fabric_order_unit,
+
+            status, last_status_updated_by, last_status_updated_at, channel
+
+        )
+
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+
+        """, (
+
+            order_id, company_id, style_no, req.description or "", req.fabric_composition or "",
+
+            req.fabric_article or "", req.color_code or "", req.color_name or "", unit_price, curr,
+
+            total_qty, total_amount, req.unit_meters or "", req.unit_grams or "",
+
+            req.fabric_wastage_percent if req.fabric_wastage_percent is not None else 5.0, req.fabric_ordered_meters or 0.0, req.fabric_order_unit or "M",
+
+            req.status or "Planlamada", user_name, channel
+
+        ))
+
+        style_id = c.lastrowid
+
+        for idx, (sz_name, sz_qty) in enumerate(sizes_dict.items()):
+
+            if str(sz_name).strip():
+
+                c.execute("""
+
+                INSERT INTO size_distributions (style_id, size_name, quantity, sort_order)
+
+                VALUES (?, ?, ?, ?)
+
+                """, (style_id, str(sz_name).strip(), int(sz_qty or 0), idx + 1))
+
+        c.execute("""
+
+        INSERT INTO audit_logs (style_id, order_id, user_id, user_name, field_name, old_value, new_value, note)
+
+        VALUES (?, ?, ?, ?, 'manual_create', '', ?, 'Manuel Sipariş / Model Eklendi')
+
+        """, (style_id, order_id, user.get("user_id"), user_name, f"{style_no} - {req.color_name or ''} ({total_qty} Adet)"))
+
+        c.execute("""
+
+        INSERT INTO production_status_logs (style_id, user_name, category, title, message)
+
+        VALUES (?, ?, 'Sipariş Notu', 'Manuel Giriş Yapıldı', ?)
+
+        """, (style_id, user_name, f"Model {style_no} manuel olarak oluşturuldu."))
+
+        conn.commit()
+
+        conn.close()
+
+        return {"status": "success", "style_id": style_id, "order_id": order_id}
+
+    except Exception as e:
+
+        conn.rollback()
+
+        conn.close()
+
+        raise HTTPException(status_code=500, detail=f"Manuel sipariş kaydetme hatası: {str(e)}")
+
+# ----------------- FABRICTAG ENDPOINTS -----------------
+
+@app.get("/api/fabrictag/fabrics")
+
+def api_fabrictag_list(q: Optional[str] = Query(None), user: Dict[str, Any] = Depends(require_user)):
+
+    return FabricTagConnector.search_fabrics(q or "")
+
+class UpdateFabricReceivedRequest(BaseModel):
+
+    received_meters: Optional[str] = ""
+
+    received_date: Optional[str] = None
+
+@app.post("/api/fabrictag/fabrics/{fabric_id}/received")
+
+def api_fabrictag_update_received(fabric_id: int, req: UpdateFabricReceivedRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    from datetime import datetime
+
+    date_str = req.received_date
+
+    if not date_str and req.received_meters and req.received_meters.strip():
+
+        date_str = datetime.now().strftime("%d.%m.%Y")
+
+    ok = FabricTagConnector.update_received_meters(fabric_id, req.received_meters or "", date_str)
+
+    if not ok:
+
+        raise HTTPException(status_code=500, detail="Kumaş gelen miktarı güncellenemedi.")
+
+    return {"status": "success", "received_meters": req.received_meters, "received_date": date_str}
+
+class AddFabricBatchRequest(BaseModel):
+
+    amount: str
+
+    date: Optional[str] = None
+
+    note: Optional[str] = ""
+
+    unit_price: Optional[str] = ""
+
+    currency: Optional[str] = "EUR"
+
+    exchange_rate: Optional[str] = ""
+
+    vat_rate: Optional[float] = 10.0
+
+@app.post("/api/fabrictag/fabrics/{fabric_id}/batches")
+
+def api_fabrictag_add_batch(fabric_id: int, req: AddFabricBatchRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    res = FabricTagConnector.add_received_batch(
+
+        fabric_id, req.amount, req.date, req.note or "",
+
+        unit_price=req.unit_price or "",
+
+        currency=req.currency or "EUR",
+
+        exchange_rate=req.exchange_rate or "",
+
+        vat_rate=req.vat_rate if req.vat_rate is not None else 10.0
+
+    )
+
+    if not res:
+
+        raise HTTPException(status_code=500, detail="Parti eklenemedi.")
+
+    return {"status": "success", **res}
+
+class UpdateFabricBatchRequest(BaseModel):
+
+    amount: Optional[str] = None
+
+    date: Optional[str] = None
+
+    note: Optional[str] = None
+
+    unit_price: Optional[str] = None
+
+    currency: Optional[str] = None
+
+    exchange_rate: Optional[str] = None
+
+    vat_rate: Optional[float] = None
+
+@app.put("/api/fabrictag/fabrics/{fabric_id}/batches/{batch_id}")
+
+def api_fabrictag_update_batch(fabric_id: int, batch_id: int, req: UpdateFabricBatchRequest, user: Dict[str, Any] = Depends(require_user)):
+
+    res = FabricTagConnector.update_received_batch(fabric_id, batch_id, req.dict(exclude_unset=True))
+
+    if not res:
+
+        raise HTTPException(status_code=500, detail="Parti güncellenemedi.")
+
+    return {"status": "success", **res}
+
+@app.delete("/api/fabrictag/fabrics/{fabric_id}/batches/{batch_id}")
+
+def api_fabrictag_delete_batch(fabric_id: int, batch_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    res = FabricTagConnector.delete_received_batch(fabric_id, batch_id)
+
+    if not res:
+
+        raise HTTPException(status_code=500, detail="Parti silinemedi.")
+
+    return {"status": "success", **res}
+
+def parse_date_sort_key(dt_str: str):
+
+    """Robust date parsing for chronological sorting (earliest to latest)."""
+
+    if not dt_str:
+
+        return "0000-00-00 00:00"
+
+    s = str(dt_str).strip()
+
+    try:
+
+        # Check DD.MM.YYYY HH:MM or DD.MM.YYYY
+
+        if "." in s:
+
+            parts = s.split(" ")
+
+            dparts = parts[0].split(".")
+
+            if len(dparts) == 3:
+
+                day, month, year = dparts[0].zfill(2), dparts[1].zfill(2), dparts[2]
+
+                time_part = parts[1] if len(parts) > 1 else "00:00"
+
+                return f"{year}-{month}-{day} {time_part}"
+
+        # Check YYYY-MM-DD
+
+        if "-" in s:
+
+            return s
+
+    except Exception:
+
+        pass
+
+    return s
+
+def get_fabric_ledger_data(fabric_id: int, company_id: int = 1):
+
+    """Compiles chronological stock ledger with running balance, incoming purchases, and cutting consumption."""
+
+    ft_conn = FabricTagConnector.get_connection()
+
+    if not ft_conn:
+
+        return None
+
+    ft_c = ft_conn.cursor()
+
+    ft_c.execute("""
+
+        SELECT id, internal_code, company_name, quality_code, quality_name, 
+
+               design_code, color, width, weight, composition, received_meters, 
+
+               received_date, received_batches_json, barcode_or_qr
+
+        FROM fabrics WHERE id = ?
+
+    """, (fabric_id,))
+
+    frow = ft_c.fetchone()
+
+    ft_conn.close()
+
+    if not frow:
+
+        return None
+
+    fabric = dict(frow)
+
+    int_code = (fabric.get("internal_code") or "").strip().upper()
+
+    q_code = (fabric.get("quality_code") or "").strip().lower()
+
+    # 1. Gelen Kumaş Partileri
+
+    batches = []
+
+    b_json = fabric.get("received_batches_json")
+
+    if b_json:
+
+        try:
+
+            batches = json.loads(b_json)
+
+        except Exception:
+
+            batches = []
+
+    elif fabric.get("received_meters"):
+
+        batches = [{
+
+            "id": 1,
+
+            "amount": fabric.get("received_meters"),
+
+            "date": fabric.get("received_date") or "",
+
+            "note": "1. Giriş / Devir Stoku",
+
+            "unit_price": "",
+
+            "currency": "EUR",
+
+            "exchange_rate": "",
+
+            "vat_rate": 10.0
+
+        }]
+
+    movements = []
+
+    for b in batches:
+
+        try:
+
+            amt_raw = str(b.get("amount", 0)).replace(",", ".").replace("M", "").replace("m", "").replace("KG", "").replace("kg", "").strip()
+
+            amt = float(amt_raw)
+
+        except Exception:
+
+            amt = 0.0
+
+        if amt <= 0:
+
+            continue
+
+        b_id = b.get("id")
+
+        dt = b.get("date") or ""
+
+        note = b.get("note") or "Kumaş Girişi"
+
+        u_price_str = str(b.get("unit_price") or "").strip()
+
+        curr = str(b.get("currency") or "EUR").strip()
+
+        ex_rate_str = str(b.get("exchange_rate") or "").strip()
+
+        vat_r = float(b.get("vat_rate") if b.get("vat_rate") is not None else 10.0)
+
+        price_f = 0.0
+
+        try:
+
+            price_f = float(u_price_str.replace(",", ".")) if u_price_str else 0.0
+
+        except Exception:
+
+            price_f = 0.0
+
+        rate_f = 1.0
+
+        try:
+
+            if ex_rate_str:
+
+                rate_f = float(ex_rate_str.replace(",", "."))
+
+            elif curr in ["₺", "TL"]:
+
+                rate_f = 1.0
+
+        except Exception:
+
+            rate_f = 1.0
+
+        # Tutar formülü: Metraj * Birim Fiyat * Kur * (1 + KDV/100)
+
+        # Eğer kur veya fiyat girilmemişse tutar 0
+
+        base_amt = amt * price_f * rate_f
+
+        total_tl = base_amt * (1.0 + (vat_r / 100.0)) if price_f > 0 else 0.0
+
+        movements.append({
+
+            "type": "gelen",
+
+            "id": b_id,
+
+            "batch_id": b_id,
+
+            "date": dt,
+
+            "sort_key": parse_date_sort_key(dt),
+
+            "amount": amt,
+
+            "note": note,
+
+            "unit_price": u_price_str,
+
+            "currency": curr,
+
+            "exchange_rate": ex_rate_str,
+
+            "vat_rate": vat_r,
+
+            "total_amount": round(total_tl, 2)
+
+        })
+
+    # 2. Kesilen Kumaşlar (TexFlow styles tablosundan)
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("""
+
+        SELECT s.id, s.order_id, s.style_no, s.color_name, s.cut_meters, s.cutting_date,
+
+               s.created_at, s.fabric_article, s.fabric_article_2,
+
+               s.fabric_type, s.fabric_type_2,
+
+               o.po_number, o.customer_name, o.brand, o.order_date
+
+        FROM styles s
+
+        LEFT JOIN orders o ON s.order_id = o.id
+
+        WHERE s.cut_meters IS NOT NULL AND s.cut_meters != '' AND s.cut_meters != '0'
+
+    """)
+
+    all_cuts = [dict(r) for r in c.fetchall()]
+
+    # fabric_links tablosu
+
+    fl_map = {}
+
+    if all_cuts:
+
+        c.execute("SELECT style_id, fabrictag_id, fabric_code FROM fabric_links")
+
+        for fl in c.fetchall():
+
+            sid = fl["style_id"]
+
+            if sid not in fl_map:
+
+                fl_map[sid] = []
+
+            fl_map[sid].append(dict(fl))
+
+    for s in all_cuts:
+
+        try:
+
+            cut_val = float(str(s.get("cut_meters") or 0).replace(",", "."))
+
+        except Exception:
+
+            cut_val = 0.0
+
+        if cut_val <= 0:
+
+            continue
+
+        sid = s["id"]
+
+        links = fl_map.get(sid, [])
+
+        is_match = False
+
+        # 1. fabrictag_id match
+
+        for lk in links:
+
+            if lk.get("fabrictag_id") == fabric_id:
+
+                is_match = True
+
+                break
+
+            if int_code and str(lk.get("fabric_code") or "").strip().upper() == int_code:
+
+                is_match = True
+
+                break
+
+        # 2. internal_code in fabric fields
+
+        if not is_match and int_code:
+
+            fa1 = (s.get("fabric_article") or s.get("fabric_type") or "").upper()
+
+            fa2 = (s.get("fabric_article_2") or s.get("fabric_type_2") or "").upper()
+
+            if int_code in fa1 or int_code in fa2:
+
+                is_match = True
+
+        # 3. quality_code in fabric fields
+
+        if not is_match and q_code and len(q_code) >= 3 and q_code != "kodsuz":
+
+            fa1_low = (s.get("fabric_article") or s.get("fabric_type") or "").lower()
+
+            fa2_low = (s.get("fabric_article_2") or s.get("fabric_type_2") or "").lower()
+
+            if q_code in fa1_low or q_code in fa2_low:
+
+                is_match = True
+
+        if is_match:
+
+            c_date = s.get("cutting_date") or s.get("order_date") or (str(s.get("created_at") or "")[:10]) or ""
+
+            st_no = s.get("style_no") or ""
+
+            col_nm = s.get("color_name") or ""
+
+            po_num = s.get("po_number") or ""
+
+            cust_nm = s.get("customer_name") or s.get("brand") or ""
+
+            
+
+            note_parts = [f"Kesim: Model {st_no}"]
+
+            if col_nm:
+
+                note_parts.append(col_nm)
+
+            if po_num:
+
+                note_parts.append(f"PO: {po_num}")
+
+            if cust_nm:
+
+                note_parts.append(f"({cust_nm})")
+
+            movements.append({
+
+                "type": "kesilen",
+
+                "id": f"cut_{sid}",
+
+                "style_id": sid,
+
+                "date": c_date,
+
+                "sort_key": parse_date_sort_key(c_date),
+
+                "amount": cut_val,
+
+                "note": " - ".join(note_parts),
+
+                "unit_price": "",
+
+                "currency": "",
+
+                "exchange_rate": "",
+
+                "vat_rate": "",
+
+                "total_amount": 0.0
+
+            })
+
+    # 3. Kronolojik Sıralama: En eskiden en yeniye doğru
+
+    # Aynı tarihte gelenler önce, kesilenler sonra sıralansın
+
+    movements.sort(key=lambda m: (m["sort_key"], 0 if m["type"] == "gelen" else 1))
+
+    # 4. Yürüyen Bakiye Hesaplama
+
+    running_balance = 0.0
+
+    total_received = 0.0
+
+    total_cut = 0.0
+
+    total_spend_tl = 0.0
+
+    for m in movements:
+
+        if m["type"] == "gelen":
+
+            running_balance += m["amount"]
+
+            total_received += m["amount"]
+
+            total_spend_tl += m.get("total_amount", 0.0)
+
+            m["gelen"] = m["amount"]
+
+            m["kesilen"] = 0.0
+
+        else:
+
+            running_balance -= m["amount"]
+
+            total_cut += m["amount"]
+
+            m["gelen"] = 0.0
+
+            m["kesilen"] = m["amount"]
+
+        
+
+        m["balance"] = round(running_balance, 2)
+
+    return {
+
+        "fabric": fabric,
+
+        "movements": movements,
+
+        "summary": {
+
+            "total_received": round(total_received, 2),
+
+            "total_cut": round(total_cut, 2),
+
+            "remaining": round(running_balance, 2),
+
+            "total_spend_tl": round(total_spend_tl, 2)
+
+        }
+
+    }
+
+@app.get("/api/fabrictag/fabrics/{fabric_id}/ledger")
+
+def api_get_fabric_ledger(fabric_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    data = get_fabric_ledger_data(fabric_id, company_id=user.get("company_id", 1))
+
+    if not data:
+
+        raise HTTPException(status_code=404, detail="Kumaş kaydı bulunamadı.")
+
+    return {"status": "success", **data}
+
+@app.get("/api/reports/fabric-ledger-excel/{fabric_id}")
+
+def api_export_fabric_ledger_excel(fabric_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    data = get_fabric_ledger_data(fabric_id, company_id=user.get("company_id", 1))
+
+    if not data:
+
+        raise HTTPException(status_code=404, detail="Kumaş kaydı bulunamadı.")
+
+    fabric = data["fabric"]
+
+    movements = data["movements"]
+
+    summary = data["summary"]
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Stok Hareketleri"
+
+    ws.views.sheetView[0].showGridLines = True
+
+    # Font ve Stiller
+
+    f_title = Font(name="Segoe UI", size=14, bold=True, color="FFFFFF")
+
+    f_meta_label = Font(name="Segoe UI", size=9, bold=True, color="475569")
+
+    f_meta_val = Font(name="Segoe UI", size=9, bold=False, color="0F172A")
+
+    f_th = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
+
+    f_td = Font(name="Segoe UI", size=9, color="1E293B")
+
+    f_td_bold = Font(name="Segoe UI", size=9, bold=True, color="0F172A")
+
+    f_total = Font(name="Segoe UI", size=10, bold=True, color="0F172A")
+
+    fill_banner = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+
+    fill_th = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
+
+    fill_meta = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+
+    fill_zebra = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    fill_total = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
+
+    # KPI kutuları dolguları
+
+    fill_kpi_rec = PatternFill(start_color="E0F2FE", end_color="E0F2FE", fill_type="solid")   # Sky
+
+    fill_kpi_cut = PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid")   # Amber
+
+    fill_kpi_rem = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")   # Emerald
+
+    fill_kpi_ttr = PatternFill(start_color="EDE9FE", end_color="EDE9FE", fill_type="solid")   # Indigo
+
+    bd_thin = Side(style="thin", color="CBD5E1")
+
+    bd_thick = Side(style="medium", color="475569")
+
+    bd_double = Side(style="double", color="1E293B")
+
+    cell_border = Border(left=bd_thin, right=bd_thin, top=bd_thin, bottom=bd_thin)
+
+    total_border = Border(left=bd_thin, right=bd_thin, top=bd_thick, bottom=bd_double)
+
+    # 1. Başlık Banner (Row 2, A2:I2)
+
+    ws.merge_cells("A2:I2")
+
+    cell_b = ws["A2"]
+
+    cell_b.value = "TEXFLOW  |  KUMAŞ STOK HAREKETLERİ & DETAYLI EKSTRE"
+
+    cell_b.font = f_title
+
+    cell_b.fill = fill_banner
+
+    cell_b.alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[2].height = 36
+
+    # 2. Kumaş Künyesi (Row 4-5)
+
+    f_code = fabric.get("internal_code") or "-"
+
+    f_comp_name = fabric.get("company_name") or "-"
+
+    f_qcode = fabric.get("quality_code") or "-"
+
+    f_qname = fabric.get("quality_name") or "-"
+
+    f_col = fabric.get("color") or "-"
+
+    f_des = fabric.get("design_code") or "-"
+
+    f_comp = fabric.get("composition") or "-"
+
+    f_w = fabric.get("width") or "-"
+
+    f_g = fabric.get("weight") or "-"
+
+    meta_line1 = f"İç Kod: {f_code}  |  Firma: {f_comp_name}  |  Kalite Kodu: {f_qcode}  |  Kalite Adı: {f_qname}"
+
+    meta_line2 = f"Desen: {f_des}  |  Renk: {f_col}  |  Kompozisyon: {f_comp}  |  En: {f_w}  |  Gramaj: {f_g}  |  Rapor: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+
+    ws.merge_cells("A4:I4")
+
+    ws["A4"].value = meta_line1
+
+    ws["A4"].font = f_meta_label
+
+    ws["A4"].fill = fill_meta
+
+    ws["A4"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.merge_cells("A5:I5")
+
+    ws["A5"].value = meta_line2
+
+    ws["A5"].font = f_meta_val
+
+    ws["A5"].fill = fill_meta
+
+    ws["A5"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[4].height = 20
+
+    ws.row_dimensions[5].height = 20
+
+    # 3. KPI Özet Kutuları (Row 7)
+
+    # A7:B7 Toplam Gelen, C7:D7 Toplam Kesilen, E7:F7 Kalan Stok, G7:I7 Toplam Tutar
+
+    ws.merge_cells("A7:B7")
+
+    ws["A7"].value = f"Toplam Gelen: {summary['total_received']:,.2f} m".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    ws["A7"].font = Font(name="Segoe UI", size=10, bold=True, color="0369A1")
+
+    ws["A7"].fill = fill_kpi_rec
+
+    ws["A7"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells("C7:D7")
+
+    ws["C7"].value = f"Toplam Kesilen: {summary['total_cut']:,.2f} m".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    ws["C7"].font = Font(name="Segoe UI", size=10, bold=True, color="B45309")
+
+    ws["C7"].fill = fill_kpi_cut
+
+    ws["C7"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells("E7:F7")
+
+    ws["E7"].value = f"Kalan Stok: {summary['remaining']:,.2f} m".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    ws["E7"].font = Font(name="Segoe UI", size=10, bold=True, color="15803D" if summary['remaining'] >= 0 else "B91C1C")
+
+    ws["E7"].fill = fill_kpi_rem
+
+    ws["E7"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells("G7:I7")
+
+    ws["G7"].value = f"Toplam Alış: ₺ {summary['total_spend_tl']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    ws["G7"].font = Font(name="Segoe UI", size=10, bold=True, color="4338CA")
+
+    ws["G7"].fill = fill_kpi_ttr
+
+    ws["G7"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[7].height = 26
+
+    # 4. Tablo Başlıkları (Row 9)
+
+    headers = [
+
+        "Tarih",
+
+        "Hareket Türü / Açıklama",
+
+        "Gelen Kumaş (m)",
+
+        "Kesilen Kumaş (m)",
+
+        "Kalan Kumaş (m)",
+
+        "Birim Fiyat",
+
+        "Döviz Kuru",
+
+        "KDV (%)",
+
+        "Tutar (₺)"
+
+    ]
+
+    for col_idx, h_text in enumerate(headers, start=1):
+
+        cell = ws.cell(row=9, column=col_idx, value=h_text)
+
+        cell.font = f_th
+
+        cell.fill = fill_th
+
+        cell.alignment = Alignment(
+
+            horizontal="center" if col_idx in [1, 7, 8] else ("right" if col_idx in [3, 4, 5, 6, 9] else "left"),
+
+            vertical="center"
+
+        )
+
+        cell.border = cell_border
+
+    ws.row_dimensions[9].height = 24
+
+    # 5. Hareket Satırları
+
+    current_row = 10
+
+    num_fmt_meters = "#,##0.00"
+
+    num_fmt_curr = "₺ #,##0.00"
+
+    for idx, m in enumerate(movements):
+
+        r_fill = fill_zebra if idx % 2 == 1 else None
+
+        c1 = ws.cell(row=current_row, column=1, value=m.get("date") or "-")
+
+        c1.alignment = Alignment(horizontal="center", vertical="center")
+
+        c2 = ws.cell(row=current_row, column=2, value=m.get("note") or "-")
+
+        c2.alignment = Alignment(horizontal="left", vertical="center")
+
+        # Gelen (m)
+
+        c3 = ws.cell(row=current_row, column=3, value=m.get("gelen", 0.0) if m.get("gelen", 0.0) > 0 else "")
+
+        c3.number_format = num_fmt_meters
+
+        c3.alignment = Alignment(horizontal="right", vertical="center")
+
+        if m.get("gelen", 0.0) > 0:
+
+            c3.font = Font(name="Segoe UI", size=9, bold=True, color="0369A1")
+
+        # Kesilen (m)
+
+        c4 = ws.cell(row=current_row, column=4, value=m.get("kesilen", 0.0) if m.get("kesilen", 0.0) > 0 else "")
+
+        c4.number_format = num_fmt_meters
+
+        c4.alignment = Alignment(horizontal="right", vertical="center")
+
+        if m.get("kesilen", 0.0) > 0:
+
+            c4.font = Font(name="Segoe UI", size=9, bold=True, color="B45309")
+
+        # Kalan (m)
+
+        c5 = ws.cell(row=current_row, column=5, value=m.get("balance", 0.0))
+
+        c5.number_format = num_fmt_meters
+
+        c5.alignment = Alignment(horizontal="right", vertical="center")
+
+        bal_color = "15803D" if m.get("balance", 0.0) >= 0 else "B91C1C"
+
+        c5.font = Font(name="Segoe UI", size=9, bold=True, color=bal_color)
+
+        # Birim Fiyat & Kur
+
+        p_val = m.get("unit_price")
+
+        p_curr = m.get("currency") or ""
+
+        if p_val:
+
+            try:
+
+                c6_num = float(str(p_val).replace(",", "."))
+
+                c6 = ws.cell(row=current_row, column=6, value=f"{p_curr} {c6_num:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+            except Exception:
+
+                c6 = ws.cell(row=current_row, column=6, value=f"{p_curr} {p_val}")
+
+        else:
+
+            c6 = ws.cell(row=current_row, column=6, value="-")
+
+        c6.alignment = Alignment(horizontal="right", vertical="center")
+
+        # Kur
+
+        ex_val = m.get("exchange_rate")
+
+        if ex_val:
+
+            try:
+
+                c7_num = float(str(ex_val).replace(",", "."))
+
+                c7 = ws.cell(row=current_row, column=7, value=c7_num)
+
+                c7.number_format = num_fmt_meters
+
+            except Exception:
+
+                c7 = ws.cell(row=current_row, column=7, value=ex_val)
+
+        else:
+
+            c7 = ws.cell(row=current_row, column=7, value="1,00" if p_curr in ["₺", "TL"] else "-")
+
+        c7.alignment = Alignment(horizontal="center", vertical="center")
+
+        # KDV (%)
+
+        vat_val = m.get("vat_rate")
+
+        if vat_val is not None and vat_val != "" and m.get("type") == "gelen":
+
+            c8 = ws.cell(row=current_row, column=8, value=f"%{int(vat_val) if float(vat_val).is_integer() else vat_val}")
+
+        else:
+
+            c8 = ws.cell(row=current_row, column=8, value="-")
+
+        c8.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Tutar (₺)
+
+        tot_val = m.get("total_amount", 0.0)
+
+        c9 = ws.cell(row=current_row, column=9, value=tot_val if tot_val > 0 else "")
+
+        c9.number_format = num_fmt_curr
+
+        c9.alignment = Alignment(horizontal="right", vertical="center")
+
+        if tot_val > 0:
+
+            c9.font = Font(name="Segoe UI", size=9, bold=True, color="4338CA")
+
+        for col_i in range(1, 10):
+
+            c_item = ws.cell(row=current_row, column=col_i)
+
+            c_item.border = cell_border
+
+            if r_fill and not c_item.fill.start_color.rgb:
+
+                c_item.fill = r_fill
+
+        ws.row_dimensions[current_row].height = 20
+
+        current_row += 1
+
+    # 6. Alt Toplam Satırı (Total Row)
+
+    c_tot_label = ws.cell(row=current_row, column=1, value="GENEL TOPLAM")
+
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=2)
+
+    c_tot_label.font = f_total
+
+    c_tot_label.alignment = Alignment(horizontal="center", vertical="center")
+
+    c_tot_rec = ws.cell(row=current_row, column=3, value=summary["total_received"])
+
+    c_tot_rec.font = Font(name="Segoe UI", size=10, bold=True, color="0369A1")
+
+    c_tot_rec.number_format = num_fmt_meters
+
+    c_tot_rec.alignment = Alignment(horizontal="right", vertical="center")
+
+    c_tot_cut = ws.cell(row=current_row, column=4, value=summary["total_cut"])
+
+    c_tot_cut.font = Font(name="Segoe UI", size=10, bold=True, color="B45309")
+
+    c_tot_cut.number_format = num_fmt_meters
+
+    c_tot_cut.alignment = Alignment(horizontal="right", vertical="center")
+
+    c_tot_rem = ws.cell(row=current_row, column=5, value=summary["remaining"])
+
+    c_tot_rem.font = Font(name="Segoe UI", size=10, bold=True, color="15803D" if summary["remaining"] >= 0 else "B91C1C")
+
+    c_tot_rem.number_format = num_fmt_meters
+
+    c_tot_rem.alignment = Alignment(horizontal="right", vertical="center")
+
+    ws.cell(row=current_row, column=6, value="")
+
+    ws.cell(row=current_row, column=7, value="")
+
+    ws.cell(row=current_row, column=8, value="")
+
+    c_tot_spend = ws.cell(row=current_row, column=9, value=summary["total_spend_tl"])
+
+    c_tot_spend.font = Font(name="Segoe UI", size=10, bold=True, color="4338CA")
+
+    c_tot_spend.number_format = num_fmt_curr
+
+    c_tot_spend.alignment = Alignment(horizontal="right", vertical="center")
+
+    for col_i in range(1, 10):
+
+        cell_t = ws.cell(row=current_row, column=col_i)
+
+        cell_t.fill = fill_total
+
+        cell_t.border = total_border
+
+    ws.row_dimensions[current_row].height = 24
+
+    # Kolon genişlikleri
+
+    col_widths = {
+
+        1: 14,  # Tarih
+
+        2: 36,  # Açıklama / Belge / Model
+
+        3: 17,  # Gelen Kumaş (m)
+
+        4: 17,  # Kesilen Kumaş (m)
+
+        5: 17,  # Kalan Kumaş (m)
+
+        6: 15,  # Birim Fiyat
+
+        7: 13,  # Döviz Kuru
+
+        8: 11,  # KDV (%)
+
+        9: 20   # Tutar (₺)
+
+    }
+
+    for c_idx, width in col_widths.items():
+
+        col_letter = get_column_letter(c_idx)
+
+        ws.column_dimensions[col_letter].width = width
+
+    buf = io.BytesIO()
+
+    wb.save(buf)
+
+    val = buf.getvalue()
+
+    filename = f"Kumas_Stok_Ekstresi_{f_code or fabric_id}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+
+    headers = {
+
+        "Content-Disposition": f'attachment; filename="{filename}"',
+
+        "Content-Length": str(len(val))
+
+    }
+
+    return Response(
+
+        content=val,
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers=headers
+
+    )
+
+# ----------------- SUPERADMIN ENDPOINTS -----------------
+
+@app.get("/api/superadmin/companies")
+
+def api_superadmin_get_companies(user: Dict[str, Any] = Depends(require_superadmin)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("""
+
+    SELECT c.*, 
+
+           (SELECT COUNT(*) FROM users WHERE company_id = c.id) as user_count,
+
+           (SELECT COUNT(*) FROM orders WHERE company_id = c.id) as order_count
+
+    FROM companies c
+
+    ORDER BY c.id DESC
+
+    """)
+
+    rows = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+
+    return rows
+
+class CreateCompanyRequest(BaseModel):
+
+    name: str
+
+    code: str
+
+    license_key: str
+
+    license_expires_at: str
+
+    max_users: int = 10
+
+@app.post("/api/superadmin/companies")
+
+def api_superadmin_create_company(req: CreateCompanyRequest, user: Dict[str, Any] = Depends(require_superadmin)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    try:
+
+        c.execute("""
+
+        INSERT INTO companies (name, code, license_key, license_expires_at, is_active, max_users)
+
+        VALUES (?, ?, ?, ?, 1, ?)
+
+        """, (req.name, req.code, req.license_key, req.license_expires_at, req.max_users))
+
+        cid = c.lastrowid
+
+        
+
+        c.execute("SELECT menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json FROM dynamic_menus WHERE company_id = 1")
+
+        menus = c.fetchall()
+
+        for m in menus:
+
+            c.execute("""
+
+            INSERT INTO dynamic_menus (company_id, menu_key, title_tr, title_en, icon, path, sort_order, is_visible, allowed_roles_json)
+
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+            """, (cid, m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7]))
+
+            
+
+        conn.commit()
+
+    except Exception as e:
+
+        conn.rollback()
+
+        conn.close()
+
+        raise HTTPException(status_code=400, detail=f"Firma oluşturulamadı: {str(e)}")
+
+# ----------------- HAFTALIK PROGRAM EXCEL ENDPOINT -----------------
+
+@app.get("/api/reports/haftalik-program-excel")
+
+def api_haftalik_program_excel(
+
+    start_key: Optional[str] = Query(None),
+
+    end_key: Optional[str] = Query(None),
+
+    only_with_orders: bool = Query(True),
+
+    hide_headers: bool = Query(False),
+
+    show_images: bool = Query(True)
+
+):
+
+    """
+
+    Patron Takip Çıktısı için A4 Yatay 7'şer model sütunlu Haftalık Program Excel üreticisi
+
+    """
+
+    from datetime import timedelta
+
+    from collections import defaultdict
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("""
+
+        SELECT 
+
+            s.id, s.style_no, s.brand, s.description,
+
+            o.customer_name, o.brand as order_brand,
+
+            s.color_code, s.color_name, s.total_quantity,
+
+            o.delivery_date, s.image_url, s.image_url_2
+
+        FROM styles s
+
+        LEFT JOIN orders o ON s.order_id = o.id
+
+        WHERE o.delivery_date IS NOT NULL AND o.delivery_date != ''
+
+        ORDER BY o.delivery_date ASC, s.id ASC
+
+    """)
+
+    rows = c.fetchall()
+
+    conn.close()
+
+    tr_months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+
+    week_map = {}
+
+    for r in rows:
+
+        raw_date = str(r[9]).strip()
+
+        dt = None
+
+        for fmt in ('%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y'):
+
+            try:
+
+                dt = datetime.strptime(raw_date, fmt)
+
+                break
+
+            except Exception:
+
+                pass
+
+        if not dt:
+
+            continue
+
+        year, week, _ = dt.isocalendar()
+
+        key = f"{year}_{week:02d}"
+
+        if start_key and key < start_key:
+
+            continue
+
+        if end_key and key > end_key:
+
+            continue
+
+        if key not in week_map:
+
+            jan4 = datetime(year, 1, 4)
+
+            start_of_year = jan4 - timedelta(days=jan4.isoweekday() - 1)
+
+            monday = start_of_year + timedelta(weeks=week - 1)
+
+            sunday = monday + timedelta(days=6)
+
+            label = f"{monday.day} {tr_months[monday.month - 1]} - {sunday.day} {tr_months[sunday.month - 1]} {year}"
+
+            week_map[key] = {
+
+                'key': key,
+
+                'year': year,
+
+                'week': week,
+
+                'label': label,
+
+                'models': {}
+
+            }
+
+        style_no = (r[1] or 'Bilinmeyen').strip()
+
+        brand = (r[2] or r[5] or r[4] or '').strip()
+
+        color = (r[7] or r[6] or 'Standart').strip()
+
+        qty = int(r[8] or 0)
+
+        img = r[10] or r[11] or ''
+
+        w = week_map[key]
+
+        if style_no not in w['models']:
+
+            w['models'][style_no] = {
+
+                'style_no': style_no,
+
+                'brand': brand,
+
+                'image_url': img,
+
+                'colors': defaultdict(int),
+
+                'total_quantity': 0
+
+            }
+
+        m = w['models'][style_no]
+
+        if brand and not m['brand']:
+
+            m['brand'] = brand
+
+        if img and not m['image_url']:
+
+            m['image_url'] = img
+
+        m['colors'][color] += qty
+
+        m['total_quantity'] += qty
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = 'Haftalık Program'
+
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+
+    try:
+
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    except Exception:
+
+        pass
+
+    ws.page_setup.fitToWidth = 1
+
+    ws.page_setup.fitToHeight = 0
+
+    ws.page_margins.left = 0.25
+
+    ws.page_margins.right = 0.25
+
+    ws.page_margins.top = 0.35
+
+    ws.page_margins.bottom = 0.35
+
+    # Sol tarafta 55px boşluk (Sütun A: ~55px)
+
+    ws.column_dimensions['A'].width = 7.0
+
+    for c_idx in range(2, 16):
+
+        ws.column_dimensions[get_column_letter(c_idx)].width = 14.0
+
+    thin_black = Side(style='thin', color='000000')
+
+    thick_black = Side(style='medium', color='000000')
+
+    current_row = 1
+
+    sorted_weeks = sorted(week_map.values(), key=lambda x: x['key'])
+
+    for w in sorted_weeks:
+
+        models_list = list(w['models'].values())
+
+        if not models_list and only_with_orders:
+
+            continue
+
+        week_total_qty = sum(m['total_quantity'] for m in models_list)
+
+        week_total_models = len(models_list)
+
+        for chunk_idx in range(0, max(1, len(models_list)), 7):
+
+            chunk = models_list[chunk_idx:chunk_idx + 7]
+
+            if chunk_idx == 0 and not hide_headers:
+
+                ws.merge_cells(start_row=current_row, start_column=2, end_row=current_row, end_column=15)
+
+                h_cell = ws.cell(current_row, 2)
+
+                h_cell.value = f"{w['week']}. HAFTA ({w['label']})   •   Toplam {week_total_models} Model   •   {week_total_qty:,} Adet"
+
+                h_cell.font = Font(name='Calibri', size=12, bold=True, color='FFFFFF')
+
+                h_cell.fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+
+                h_cell.alignment = Alignment(horizontal='left', vertical='center', indent=1)
+
+                ws.row_dimensions[current_row].height = 26.0
+
+                current_row += 1
+
+            brand_row = current_row
+
+            model_row = current_row + 1
+
+            img_start_row = current_row + 2
+
+            img_end_row = current_row + 7
+
+            ws.row_dimensions[brand_row].height = 22.0
+
+            ws.row_dimensions[model_row].height = 22.0
+
+            for ir in range(img_start_row, img_end_row + 1):
+
+                ws.row_dimensions[ir].height = 20.0
+
+            max_colors = 2
+
+            for m in chunk:
+
+                max_colors = max(max_colors, len(m['colors']))
+
+            for slot_idx in range(7):
+
+                col_left = 2 + (slot_idx * 2)
+
+                col_right = col_left + 1
+
+                col_left_let = get_column_letter(col_left)
+
+                if slot_idx < len(chunk):
+
+                    model = chunk[slot_idx]
+
+                    # Brand row (12pt)
+
+                    ws.merge_cells(start_row=brand_row, start_column=col_left, end_row=brand_row, end_column=col_right)
+
+                    b_cell = ws.cell(brand_row, col_left)
+
+                    b_cell.value = (model['brand'] or '').upper()
+
+                    b_cell.font = Font(name='Calibri', size=12, bold=True, color='1E293B')
+
+                    b_cell.fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
+
+                    b_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+                    # Model row (12pt)
+
+                    ws.merge_cells(start_row=model_row, start_column=col_left, end_row=model_row, end_column=col_right)
+
+                    m_cell = ws.cell(model_row, col_left)
+
+                    m_cell.value = model['style_no']
+
+                    m_cell.font = Font(name='Calibri', size=12, bold=True, color='0F172A')
+
+                    m_cell.fill = PatternFill(start_color='E2E8F0', end_color='E2E8F0', fill_type='solid')
+
+                    m_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+                    # Image area
+
+                    ws.merge_cells(start_row=img_start_row, start_column=col_left, end_row=img_end_row, end_column=col_right)
+
+                    img_cell = ws.cell(img_start_row, col_left)
+
+                    img_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+                    if show_images and model['image_url']:
+
+                        img_path = UPLOADS_DIR / 'styles' / Path(model['image_url']).name
+
+                        if img_path.exists():
+
+                            try:
+
+                                pil_img = PILImage.open(img_path)
+
+                                orig_w, orig_h = pil_img.size
+
+                                if orig_w > 0 and orig_h > 0:
+
+                                    # Hücre kutusu: ~204px genişlik, ~120pt = 160px yükseklik
+
+                                    # En ve boydan hangisi sınırlandırıyorsa o oranda büyüt / sığdır
+
+                                    scale = min(184.0 / orig_w, 144.0 / orig_h)
+
+                                    new_w = max(1, int(orig_w * scale))
+
+                                    new_h = max(1, int(orig_h * scale))
+
+                                    openpyxl_img = OpenpyxlImage(str(img_path))
+
+                                    openpyxl_img.width = new_w
+
+                                    openpyxl_img.height = new_h
+
+                                    # Hem enden hem boydan tam ortala
+
+                                    offset_x_px = max(0, int((204 - new_w) / 2))
+
+                                    offset_y_px = max(0, int((160 - new_h) / 2))
+
+                                    marker = AnchorMarker(
+
+                                        col=col_left - 1,
+
+                                        colOff=pixels_to_EMU(offset_x_px),
+
+                                        row=img_start_row - 1,
+
+                                        rowOff=pixels_to_EMU(offset_y_px)
+
+                                    )
+
+                                    size = XDRPositiveSize2D(pixels_to_EMU(new_w), pixels_to_EMU(new_h))
+
+                                    openpyxl_img.anchor = OneCellAnchor(_from=marker, ext=size)
+
+                                    ws.add_image(openpyxl_img)
+
+                            except Exception:
+
+                                pass
+
+                    # Colors and quantities (12pt, ince siyah iç çizgiler)
+
+                    colors_list = list(model['colors'].items())
+
+                    for c_idx in range(max_colors):
+
+                        c_row = img_end_row + 1 + c_idx
+
+                        ws.row_dimensions[c_row].height = 20.0
+
+                        c_col_cell = ws.cell(c_row, col_left)
+
+                        c_qty_cell = ws.cell(c_row, col_right)
+
+                        if c_idx < len(colors_list):
+
+                            c_name, c_qty = colors_list[c_idx]
+
+                            c_col_cell.value = c_name
+
+                            c_col_cell.font = Font(name='Calibri', size=12, color='000000')
+
+                            c_col_cell.alignment = Alignment(horizontal='left', vertical='center', indent=1)
+
+                            c_qty_cell.value = c_qty
+
+                            c_qty_cell.font = Font(name='Calibri', size=12, bold=True, color='000000')
+
+                            c_qty_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+                        else:
+
+                            c_col_cell.value = ''
+
+                            c_qty_cell.value = ''
+
+                    # Total row (12pt)
+
+                    tot_row = img_end_row + 1 + max_colors
+
+                    ws.row_dimensions[tot_row].height = 22.0
+
+                    tot_label_cell = ws.cell(tot_row, col_left)
+
+                    tot_label_cell.value = 'TOPLAM'
+
+                    tot_label_cell.font = Font(name='Calibri', size=12, bold=True, color='047857')
+
+                    tot_label_cell.fill = PatternFill(start_color='ECFDF5', end_color='ECFDF5', fill_type='solid')
+
+                    tot_label_cell.alignment = Alignment(horizontal='left', vertical='center', indent=1)
+
+                    tot_val_cell = ws.cell(tot_row, col_right)
+
+                    tot_val_cell.value = model['total_quantity']
+
+                    tot_val_cell.font = Font(name='Calibri', size=12, bold=True, color='047857')
+
+                    tot_val_cell.fill = PatternFill(start_color='ECFDF5', end_color='ECFDF5', fill_type='solid')
+
+                    tot_val_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+                else:
+
+                    for r_i in range(brand_row, img_end_row + 1 + max_colors + 1):
+
+                        ws.cell(r_i, col_left).value = None
+
+                        ws.cell(r_i, col_right).value = None
+
+                slot_end_row = img_end_row + 1 + max_colors
+
+                tot_row = slot_end_row
+
+                for r_idx in range(brand_row, slot_end_row + 1):
+
+                    for cl in (col_left, col_right):
+
+                        top_s = thick_black if (r_idx == brand_row or r_idx == tot_row) else thin_black
+
+                        bot_s = thick_black if r_idx == slot_end_row else thin_black
+
+                        left_s = thick_black if cl == col_left else thin_black
+
+                        right_s = thick_black if cl == col_right else thin_black
+
+                        ws.cell(r_idx, cl).border = Border(top=top_s, bottom=bot_s, left=left_s, right=right_s)
+
+            current_row = img_end_row + 1 + max_colors + 2
+
+    output_stream = io.BytesIO()
+
+    wb.save(output_stream)
+
+    output_stream.seek(0)
+
+    filename = f"Haftalik_Program_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+
+    return Response(
+
+        content=output_stream.getvalue(),
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+
+    )
+
+@app.get("/api/samples/{sample_id}/export-talep-excel")
+
+def api_export_single_sample_talep_excel(sample_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    import openpyxl
+
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    from openpyxl.utils import get_column_letter
+
+    import re
+
+    import html
+
+    from urllib.parse import quote
+
+    from fabrictag_connector import FabricTagConnector
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id", 1)
+
+    c.execute("""
+
+        SELECT id, sample_type, season, customer_name, style_name, style_no, color_variant,
+
+               request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes, critique, image_url, fabrictag_id, company_id
+
+        FROM sample_items
+
+        WHERE id = ?
+
+    """, (sample_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        raise HTTPException(status_code=404, detail="Numune kaydı bulunamadı")
+
+    cols = [d[0] for d in c.description]
+
+    s = dict(zip(cols, row))
+
+    sample_cid = s.get("company_id")
+
+    if user.get("role") not in ["superadmin", "masterdeveloper"] and sample_cid and company_id and sample_cid != company_id:
+
+        raise HTTPException(status_code=403, detail="Bu numuneye erişim yetkiniz yok.")
+
+    # Fabric detail from FabricTag if linked
+
+    fabric_detail = {}
+
+    if s.get("fabrictag_id"):
+
+        try:
+
+            ft_conn = FabricTagConnector.get_connection()
+
+            if ft_conn:
+
+                ft_c = ft_conn.cursor()
+
+                ft_c.execute("SELECT id, company_name, quality_code, quality_name, design_code, color, width, weight, composition FROM fabrics WHERE id = ?", (s["fabrictag_id"],))
+
+                frow = ft_c.fetchone()
+
+                if frow:
+
+                    fabric_detail = dict(frow)
+
+                ft_conn.close()
+
+        except Exception:
+
+            pass
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Talep Formu"
+
+    # Sayfa ve Baskı Ayarları (A4 Dikey)
+
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    ws.page_setup.fitToWidth = 1
+
+    ws.page_setup.fitToHeight = 0
+
+    ws.page_margins.left = 0.4
+
+    ws.page_margins.right = 0.4
+
+    ws.page_margins.top = 0.4
+
+    ws.page_margins.bottom = 0.4
+
+    # Başlık hesaplama (Örn: "1.Proto" -> "PROTO TALEBİ", "2.PPS" -> "PPS TALEBİ")
+
+    raw_type = (s.get("sample_type") or "").strip()
+
+    clean_type = re.sub(r"^[\d.\-\s]+", "", raw_type).strip()
+
+    if not clean_type:
+
+        clean_type = "NUMUNE"
+
+    header_title = f"{clean_type.upper()} TALEBİ"
+
+    # Renkler ve Stiller
+
+    title_font = Font(name="Calibri", size=18, bold=True, color="FFFFFF")
+
+    title_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+
+    
+
+    sub_title_font = Font(name="Calibri", size=10, italic=True, color="475569")
+
+    
+
+    section_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+
+    section_fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
+
+    
+
+    label_font = Font(name="Calibri", size=10, bold=True, color="334155")
+
+    label_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+
+    
+
+    val_bold_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+
+    val_norm_font = Font(name="Calibri", size=10, bold=False, color="0F172A")
+
+    
+
+    thin_border = Border(
+
+        left=Side(style="thin", color="CBD5E1"),
+
+        right=Side(style="thin", color="CBD5E1"),
+
+        top=Side(style="thin", color="CBD5E1"),
+
+        bottom=Side(style="thin", color="CBD5E1")
+
+    )
+
+    # 6 Sütunlu Sayfa Düzeni (A, B, C, D, E, F)
+
+    col_widths = {"A": 16, "B": 22, "C": 16, "D": 22, "E": 16, "F": 22}
+
+    for col_letter, width in col_widths.items():
+
+        ws.column_dimensions[col_letter].width = width
+
+    # Satır 1: Şirket / Sistem Üst Bilgisi (ORTALI)
+
+    ws.merge_cells("A1:F1")
+
+    ws["A1"] = "TEXFLOW PRODUCTION & QUALITY SYSTEMS"
+
+    ws["A1"].font = Font(name="Calibri", size=9, bold=True, color="64748B")
+
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[1].height = 18
+
+    # Satır 2: Büyük Dinamik Başlık (EN ÜSTTE VE TAM ORTALI)
+
+    ws.merge_cells("A2:F2")
+
+    ws["A2"] = header_title
+
+    ws["A2"].font = title_font
+
+    ws["A2"].fill = title_fill
+
+    ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[2].height = 36
+
+    # Satır 3: Alt Başlık (ORTALI)
+
+    ws.merge_cells("A3:F3")
+
+    ws["A3"] = "Modelhane ve Numune Üretim Talep Formu"
+
+    ws["A3"].font = sub_title_font
+
+    ws["A3"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[3].height = 18
+
+    # Satır 4: Talep Kimlik / Meta Bilgileri Şeridi
+
+    ws.merge_cells("A4:B4")
+
+    ws["A4"] = f"Talep / Form No: SMP-{s.get('id')}"
+
+    ws["A4"].font = Font(name="Calibri", size=10, bold=True, color="475569")
+
+    ws["A4"].alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.merge_cells("C4:D4")
+
+    ws["C4"] = f"Tarih: {s.get('request_date') or datetime.now().strftime('%d.%m.%Y')}   |   Hedef Teslim: {s.get('delivery_date') or '-'}"
+
+    ws["C4"].font = Font(name="Calibri", size=10, bold=True, color="D97706" if s.get('delivery_date') else "475569")
+
+    ws["C4"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells("E4:F4")
+
+    ws["E4"] = f"Aşama: {s.get('stage') or 'Talep Oluşturuldu'}"
+
+    ws["E4"].font = Font(name="Calibri", size=10, bold=True, color="059669")
+
+    ws["E4"].alignment = Alignment(horizontal="right", vertical="center")
+
+    ws.row_dimensions[4].height = 22
+
+    # Satır 5: Model ve Talep Detayları Başlığı
+
+    ws.merge_cells("A5:F5")
+
+    ws["A5"] = "MODEL VE SİPARİŞ BİLGİLERİ"
+
+    ws["A5"].font = section_font
+
+    ws["A5"].fill = section_fill
+
+    ws["A5"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[5].height = 22
+
+    # Bilgi Satırları (Tablo formatında)
+
+    info_rows = [
+
+        ("Müşteri", s.get("customer_name") or "-", "Numune Türü", s.get("sample_type") or "-", "Talep Tarihi", s.get("request_date") or "-"),
+
+        ("Model Kodu", s.get("style_no") or "-", "Model Adı", s.get("style_name") or "-", "Sezon", s.get("season") or "-"),
+
+    ]
+
+    curr_row = 6
+
+    for r_data in info_rows:
+
+        ws.row_dimensions[curr_row].height = 22
+
+        # Col A-B
+
+        ws.cell(row=curr_row, column=1, value=r_data[0]).font = label_font
+
+        ws.cell(row=curr_row, column=1).fill = label_fill
+
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        ws.cell(row=curr_row, column=2, value=r_data[1]).font = val_bold_font
+
+        ws.cell(row=curr_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=2).border = thin_border
+
+        # Col C-D
+
+        ws.cell(row=curr_row, column=3, value=r_data[2]).font = label_font
+
+        ws.cell(row=curr_row, column=3).fill = label_fill
+
+        ws.cell(row=curr_row, column=3).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=3).border = thin_border
+
+        ws.cell(row=curr_row, column=4, value=r_data[3]).font = val_bold_font
+
+        ws.cell(row=curr_row, column=4).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=4).border = thin_border
+
+        # Col E-F
+
+        ws.cell(row=curr_row, column=5, value=r_data[4]).font = label_font
+
+        ws.cell(row=curr_row, column=5).fill = label_fill
+
+        ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=5).border = thin_border
+
+        ws.cell(row=curr_row, column=6, value=r_data[5]).font = val_bold_font
+
+        ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=6).border = thin_border
+
+        curr_row += 1
+
+    # Kumaş Bilgileri Satırı (Yan yana, aralarında boşluklar bırakarak)
+
+    fabric_parts = []
+
+    if fabric_detail:
+
+        q_name = (fabric_detail.get("quality_name") or "").strip()
+
+        q_code = (fabric_detail.get("quality_code") or "").strip()
+
+        comp = (fabric_detail.get("company_name") or "").strip()
+
+        var = (fabric_detail.get("design_code") or "").strip()
+
+        color = (fabric_detail.get("color") or "").strip()
+
+        qual_parts = []
+
+        if comp: qual_parts.append(comp)
+
+        qual_str = f"{q_name} ({q_code})".strip() if (q_name and q_code) else (q_name or q_code)
+
+        if qual_str: qual_parts.append(qual_str)
+
+        if var: qual_parts.append(var)
+
+        if color: qual_parts.append(color)
+
+        line1 = " - ".join(qual_parts)
+
+        if line1: fabric_parts.append(line1)
+
+        if fabric_detail.get("composition"):
+
+            fabric_parts.append(fabric_detail["composition"].strip())
+
+        dim_parts = []
+
+        if fabric_detail.get("width"): dim_parts.append(f"{fabric_detail['width']} CM")
+
+        if fabric_detail.get("weight"): dim_parts.append(f"{fabric_detail['weight']} GRM2")
+
+        if dim_parts: fabric_parts.append(" • ".join(dim_parts))
+
+    
+
+    fabric_text = "   •   ".join(fabric_parts) if fabric_parts else (s.get("fabric_info") or "-")
+
+    ws.row_dimensions[curr_row].height = 24
+
+    ws.cell(row=curr_row, column=1, value="Kumaş Bilgisi").font = label_font
+
+    ws.cell(row=curr_row, column=1).fill = label_fill
+
+    ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.cell(row=curr_row, column=1).border = thin_border
+
+    ws.merge_cells(f"B{curr_row}:D{curr_row}")
+
+    ws[f"B{curr_row}"] = fabric_text
+
+    ws[f"B{curr_row}"].font = val_bold_font
+
+    ws[f"B{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+
+    for cl in range(2, 5):
+
+        ws.cell(row=curr_row, column=cl).border = thin_border
+
+    ws.cell(row=curr_row, column=5, value="Birim Metraj").font = label_font
+
+    ws.cell(row=curr_row, column=5).fill = label_fill
+
+    ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.cell(row=curr_row, column=5).border = thin_border
+
+    ws.cell(row=curr_row, column=6, value=f"{s.get('unit_meters') or '-'} m").font = val_bold_font
+
+    ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.cell(row=curr_row, column=6).border = thin_border
+
+    curr_row += 1
+
+    # Satır Boşluk
+
+    curr_row += 1
+
+    # Beden & Adet Dağılımı Bölümü
+
+    ws.merge_cells(f"A{curr_row}:F{curr_row}")
+
+    ws[f"A{curr_row}"] = "ADET VE BEDEN DAĞILIMI"
+
+    ws[f"A{curr_row}"].font = section_font
+
+    ws[f"A{curr_row}"].fill = section_fill
+
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[curr_row].height = 22
+
+    curr_row += 1
+
+    # Parse sizes
+
+    qty_str = str(s.get("quantity_sizes") or "").strip()
+
+    size_pairs = []
+
+    total_qty = 0
+
+    if qty_str:
+
+        tokens = [t.strip() for t in re.split(r"[,;\n/]+", qty_str) if t.strip()]
+
+        for tok in tokens:
+
+            m1 = re.match(r"^([A-Za-z0-9\-_.]+)\s*[:=\-]\s*(\d+)$", tok)
+
+            m2 = re.match(r"^(\d+)\s*(?:x|adet|pcs)?\s*([A-Za-z0-9\-_.]+)$", tok, re.IGNORECASE)
+
+            if m1:
+
+                cnt = int(m1.group(2))
+
+                size_pairs.append((m1.group(1).upper(), cnt))
+
+                total_qty += cnt
+
+            elif m2:
+
+                cnt = int(m2.group(1))
+
+                size_pairs.append((m2.group(2).upper(), cnt))
+
+                total_qty += cnt
+
+            else:
+
+                num = re.match(r"^(\d+)$", tok)
+
+                if num:
+
+                    cnt = int(num.group(1))
+
+                    size_pairs.append(("Adet", cnt))
+
+                    total_qty += cnt
+
+    if size_pairs and len(size_pairs) <= 5:
+
+        # Header row (Bedenler)
+
+        ws.cell(row=curr_row, column=1, value="Beden").font = label_font
+
+        ws.cell(row=curr_row, column=1).fill = label_fill
+
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        for s_idx, (sz, cnt) in enumerate(size_pairs):
+
+            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=sz)
+
+            c_cell.font = label_font
+
+            c_cell.fill = label_fill
+
+            c_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            c_cell.border = thin_border
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2, value="TOPLAM").font = label_font
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).fill = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).border = thin_border
+
+        ws.row_dimensions[curr_row].height = 20
+
+        curr_row += 1
+
+        # Value row (Adetler)
+
+        ws.cell(row=curr_row, column=1, value="Miktar").font = label_font
+
+        ws.cell(row=curr_row, column=1).fill = label_fill
+
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        for s_idx, (sz, cnt) in enumerate(size_pairs):
+
+            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=cnt)
+
+            c_cell.font = val_bold_font
+
+            c_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            c_cell.border = thin_border
+
+        tot_cell = ws.cell(row=curr_row, column=len(size_pairs) + 2, value=f"{total_qty} Adet")
+
+        tot_cell.font = Font(name="Calibri", size=10, bold=True, color="059669")
+
+        tot_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+
+        tot_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        tot_cell.border = thin_border
+
+        ws.row_dimensions[curr_row].height = 22
+
+        curr_row += 1
+
+        if qty_str and (len(size_pairs) < len(tokens) or not str(total_qty) in qty_str):
+
+            ws.merge_cells(f"A{curr_row}:F{curr_row}")
+
+            ws[f"A{curr_row}"] = f"Not / Orijinal Giriş: {qty_str}"
+
+            ws[f"A{curr_row}"].font = Font(name="Calibri", size=9, italic=True, color="64748B")
+
+            ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+
+            curr_row += 1
+
+    else:
+
+        # Tek satır serbest metin gösterimi
+
+        ws.merge_cells(f"A{curr_row}:B{curr_row}")
+
+        ws[f"A{curr_row}"] = "Adet & Beden Bilgisi"
+
+        ws[f"A{curr_row}"].font = label_font
+
+        ws[f"A{curr_row}"].fill = label_fill
+
+        ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+        ws[f"A{curr_row}"].border = thin_border
+
+        ws.merge_cells(f"C{curr_row}:F{curr_row}")
+
+        ws[f"C{curr_row}"] = qty_str or "Adet ve beden belirtilmedi"
+
+        ws[f"C{curr_row}"].font = val_bold_font
+
+        ws[f"C{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+
+        ws[f"C{curr_row}"].border = thin_border
+
+        ws.row_dimensions[curr_row].height = 24
+
+        curr_row += 1
+
+    # Satır Boşluk
+
+    curr_row += 1
+
+    # Numune Kritiği ve Notlar Bölümü
+
+    ws.merge_cells(f"A{curr_row}:F{curr_row}")
+
+    ws[f"A{curr_row}"] = "NUMUNE KRİTİĞİ VE REVİZYON NOTLARI"
+
+    ws[f"A{curr_row}"].font = section_font
+
+    ws[f"A{curr_row}"].fill = section_fill
+
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[curr_row].height = 22
+
+    curr_row += 1
+
+    # HTML temizleme & metne dönüştürme
+
+    raw_critique = s.get("critique") or s.get("notes") or ""
+
+    clean_critique = html.unescape(raw_critique)
+
+    clean_critique = re.sub(r"<li>", "• ", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"</li>", "\n", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"<br\s*/?>", "\n", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"</p>", "\n\n", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"</div>", "\n", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"<[^>]+>", "", clean_critique)
+
+    clean_critique = re.sub(r"\n{3,}", "\n\n", clean_critique).strip()
+
+    critique_box_start = curr_row
+
+    critique_box_end = curr_row + 4
+
+    ws.merge_cells(f"A{critique_box_start}:F{critique_box_end}")
+
+    critique_cell = ws[f"A{critique_box_start}"]
+
+    critique_cell.value = clean_critique or "Herhangi bir numune kritiği veya revizyon notu girilmemiştir."
+
+    critique_cell.font = Font(name="Calibri", size=10, italic=(not clean_critique), color="0F172A" if clean_critique else "94A3B8")
+
+    critique_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    critique_cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+    for r in range(critique_box_start, critique_box_end + 1):
+
+        ws.row_dimensions[r].height = 20
+
+        for col_i in range(1, 7):
+
+            c_cell = ws.cell(row=r, column=col_i)
+
+            c_cell.border = thin_border
+
+            c_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    curr_row = critique_box_end + 2
+
+    # İmza ve Onay Alanları
+
+    ws.merge_cells(f"A{curr_row}:B{curr_row}")
+
+    ws[f"A{curr_row}"] = "TALEBİ HAZIRLAYAN"
+
+    ws[f"A{curr_row}"].font = label_font
+
+    ws[f"A{curr_row}"].fill = label_fill
+
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"A{curr_row}"].border = thin_border
+
+    ws.merge_cells(f"C{curr_row}:D{curr_row}")
+
+    ws[f"C{curr_row}"] = "MODELHANE / ATÖLYE ŞEFİ"
+
+    ws[f"C{curr_row}"].font = label_font
+
+    ws[f"C{curr_row}"].fill = label_fill
+
+    ws[f"C{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"C{curr_row}"].border = thin_border
+
+    ws.merge_cells(f"E{curr_row}:F{curr_row}")
+
+    ws[f"E{curr_row}"] = "MÜŞTERİ / SATIŞ ONAY"
+
+    ws[f"E{curr_row}"].font = label_font
+
+    ws[f"E{curr_row}"].fill = label_fill
+
+    ws[f"E{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"E{curr_row}"].border = thin_border
+
+    ws.row_dimensions[curr_row].height = 20
+
+    curr_row += 1
+
+    # İmza Kutuları
+
+    sig_start = curr_row
+
+    sig_end = curr_row + 2
+
+    for r in range(sig_start, sig_end + 1):
+
+        ws.row_dimensions[r].height = 22
+
+        for col_i in range(1, 7):
+
+            c_cell = ws.cell(row=r, column=col_i)
+
+            c_cell.border = thin_border
+
+    ws[f"A{sig_end}"] = "Ad Soyad / İmza / Tarih"
+
+    ws[f"A{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+
+    ws[f"A{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    ws[f"C{sig_end}"] = "Ad Soyad / İmza / Tarih"
+
+    ws[f"C{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+
+    ws[f"C{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    ws[f"E{sig_end}"] = "Ad Soyad / İmza / Tarih"
+
+    ws[f"E{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+
+    ws[f"E{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    output_stream = io.BytesIO()
+
+    wb.save(output_stream)
+
+    output_stream.seek(0)
+
+    clean_file_type = re.sub(r"[^A-Za-z0-9]", "_", clean_type)
+
+    clean_style_no = re.sub(r"[^A-Za-z0-9]", "_", str(s.get("style_no") or "Talep"))
+
+    filename = f"Numune_Talebi_{clean_file_type}_{clean_style_no}.xlsx"
+
+    encoded_filename = quote(filename)
+
+    return Response(
+
+        content=output_stream.getvalue(),
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers={
+
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}; filename=\"{filename.encode('ascii', 'ignore').decode()}\""
+
+        }
+
+    )
+
+# ----------------- NUMUNE & PPS TAKİBİ (SAMPLE & PPS TRACKING) -----------------
+
+SAMPLE_OPTIONS_FILE = Path("data") / "sample_options.json"
+
+DEFAULT_SAMPLE_OPTIONS = {
+
+    "sample_types": [
+
+        "1.Proto",
+
+        "2.Proto",
+
+        "Fit Sample",
+
+        "1.PPS",
+
+        "2.PPS",
+
+        "SMS",
+
+        "Size Set",
+
+        "Shipment Sample"
+
+    ],
+
+    "stages": [
+
+        "Talep Oluşturuldu",
+
+        "Kumaş Bekliyor",
+
+        "Dikim Sırada",
+
+        "Yıkama/Boya",
+
+        "Taş/Baskı",
+
+        "Çakım",
+
+        "Ütü/Paket"
+
+    ]
+
+}
+
+def get_saved_sample_options() -> Dict[str, Any]:
+
+    if SAMPLE_OPTIONS_FILE.exists():
+
+        try:
+
+            with open(SAMPLE_OPTIONS_FILE, "r", encoding="utf-8") as f:
+
+                saved = json.load(f)
+
+                return {
+
+                    "sample_types": saved.get("sample_types", DEFAULT_SAMPLE_OPTIONS["sample_types"]),
+
+                    "stages": saved.get("stages", DEFAULT_SAMPLE_OPTIONS["stages"])
+
+                }
+
+        except Exception as e:
+
+            print(f"[WARN] sample_options.json okunamadi: {e}")
+
+    return DEFAULT_SAMPLE_OPTIONS
+
+@app.get("/api/samples/options")
+
+def api_get_sample_options():
+
+    return get_saved_sample_options()
+
+@app.post("/api/samples/options")
+
+def api_save_sample_options(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+
+    try:
+
+        SAMPLE_OPTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+        current = get_saved_sample_options()
+
+        if "sample_types" in payload and isinstance(payload["sample_types"], list):
+
+            current["sample_types"] = [str(x).strip() for x in payload["sample_types"] if str(x).strip()]
+
+        if "stages" in payload and isinstance(payload["stages"], list):
+
+            current["stages"] = [str(x).strip() for x in payload["stages"] if str(x).strip()]
+
+        with open(SAMPLE_OPTIONS_FILE, "w", encoding="utf-8") as f:
+
+            json.dump(current, f, ensure_ascii=False, indent=2)
+
+        return {"status": "success", "options": current}
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/samples")
+
+def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    role = user.get("role")
+
+    
+
+    cols = [
+
+        "id", "company_id", "image_url", "image_url_2", "image_fit", "sample_type", "season", "customer_name",
+
+        "style_name", "style_no", "color_variant", "request_date", "delivery_date", "quantity_sizes",
+
+        "fabric_info", "fabric_info_2", "fabric_info_3", "unit_meters", "unit_meters_2", "unit_meters_3", "stage", "notes", "critique",
+
+        "fabrictag_id", "fabrictag_id_2", "fabrictag_id_3", "display_order", "created_by", "created_at", "updated_at"
+
+    ]
+
+    cols_sql = ", ".join(cols)
+
+    if role in ["superadmin", "masterdeveloper"]:
+
+        query = f"SELECT {cols_sql} FROM sample_items WHERE 1=1"
+
+        params = []
+
+    else:
+
+        query = f"SELECT {cols_sql} FROM sample_items WHERE (company_id = ? OR company_id IS NULL)"
+
+        params = [company_id]
+
+    
+
+    if search and search.strip():
+
+        q = f"%{search.strip().lower()}%"
+
+        query += """ AND (
+
+            LOWER(customer_name) LIKE ? OR
+
+            LOWER(style_no) LIKE ? OR
+
+            LOWER(style_name) LIKE ? OR
+
+            LOWER(COALESCE(color_variant, '')) LIKE ? OR
+
+            LOWER(sample_type) LIKE ? OR
+
+            LOWER(season) LIKE ? OR
+
+            LOWER(fabric_info) LIKE ? OR
+
+            LOWER(COALESCE(fabric_info_2, '')) LIKE ? OR
+
+            LOWER(COALESCE(fabric_info_3, '')) LIKE ? OR
+
+            LOWER(stage) LIKE ?
+
+        )"""
+
+        params.extend([q, q, q, q, q, q, q, q, q, q])
+
+        
+
+    query += " ORDER BY display_order ASC, id DESC"
+
+    c.execute(query, params)
+
+    rows = c.fetchall()
+
+    
+
+    samples = [dict(zip(cols, row)) for row in rows]
+
+    try:
+
+        from fabrictag_connector import FabricTagConnector
+
+        ft_conn = FabricTagConnector.get_connection()
+
+        if ft_conn:
+
+            ft_c = ft_conn.cursor()
+
+            for s in samples:
+
+                for slot_idx, slot_col in [(1, "fabrictag_id"), (2, "fabrictag_id_2"), (3, "fabrictag_id_3")]:
+
+                    fid = s.get(slot_col)
+
+                    if fid:
+
+                        ft_c.execute("SELECT id, company_name, quality_code, quality_name, design_code, color, width, weight, composition FROM fabrics WHERE id = ?", (fid,))
+
+                        frow = ft_c.fetchone()
+
+                        if frow:
+
+                            target_key = "fabric_detail" if slot_idx == 1 else f"fabric_detail_{slot_idx}"
+
+                            s[target_key] = dict(frow)
+
+            ft_conn.close()
+
+    except Exception:
+
+        pass
+
+    return samples
+
+@app.post("/api/samples")
+
+def api_create_sample(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    created_by = user.get("full_name") or user.get("username") or "Kullanıcı"
+
+    
+
+    sample_type = str(payload.get("sample_type") or "1.Proto").strip()
+
+    season = str(payload.get("season") or "").strip()
+
+    customer_name = str(payload.get("customer_name") or "").strip()
+
+    style_name = str(payload.get("style_name") or "").strip()
+
+    style_no = str(payload.get("style_no") or "").strip()
+
+    color_variant = str(payload.get("color_variant") or "").strip()
+
+    request_date = str(payload.get("request_date") or "").strip()
+
+    delivery_date = str(payload.get("delivery_date") or "").strip()
+
+    quantity_sizes = str(payload.get("quantity_sizes") or "").strip()
+
+    fabric_info = str(payload.get("fabric_info") or "").strip()
+
+    fabric_info_2 = str(payload.get("fabric_info_2") or "").strip()
+
+    fabric_info_3 = str(payload.get("fabric_info_3") or "").strip()
+
+    unit_meters = str(payload.get("unit_meters") or "").strip()
+
+    unit_meters_2 = str(payload.get("unit_meters_2") or "").strip()
+
+    unit_meters_3 = str(payload.get("unit_meters_3") or "").strip()
+
+    stage = str(payload.get("stage") or "Talep Oluşturuldu").strip()
+
+    notes = str(payload.get("notes") or "").strip()
+
+    critique = str(payload.get("critique") or "").strip()
+
+    image_fit = str(payload.get("image_fit") or "contain").strip()
+
+    display_order = int(payload.get("display_order") or 0)
+
+    
+
+    def parse_fid(val):
+
+        try:
+
+            return int(val) if val is not None and str(val).strip() != "" else None
+
+        except Exception:
+
+            return None
+
+    fabrictag_id = parse_fid(payload.get("fabrictag_id"))
+
+    fabrictag_id_2 = parse_fid(payload.get("fabrictag_id_2"))
+
+    fabrictag_id_3 = parse_fid(payload.get("fabrictag_id_3"))
+
+    
+
+    c.execute("""
+
+        INSERT INTO sample_items (
+
+            company_id, sample_type, season, customer_name, style_name, style_no, color_variant,
+
+            request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3,
+
+            fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters, unit_meters_2, unit_meters_3,
+
+            stage, notes, critique, image_fit, display_order, created_by
+
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+    """, (
+
+        company_id, sample_type, season, customer_name, style_name, style_no, color_variant,
+
+        request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3,
+
+        fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters, unit_meters_2, unit_meters_3,
+
+        stage, notes, critique, image_fit, display_order, created_by
+
+    ))
+
+    conn.commit()
+
+    new_id = c.lastrowid
+
+    
+
+    c.execute("SELECT * FROM sample_items WHERE id = ?", (new_id,))
+
+    row = c.fetchone()
+
+    col_names = [d[0] for d in c.description]
+
+    return dict(zip(col_names, row))
+
+@app.post("/api/samples/{sample_id}/update-cell")
+
+def api_update_sample_cell(sample_id: int, payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+
+    field = payload.get("field")
+
+    value = payload.get("value")
+
+    
+
+    allowed_fields = {
+
+        "sample_type", "season", "customer_name", "style_name", "style_no", "color_variant",
+
+        "request_date", "delivery_date", "quantity_sizes", "fabric_info",
+
+        "fabric_info_2", "fabric_info_3", "fabrictag_id", "fabrictag_id_2", "fabrictag_id_3",
+
+        "unit_meters", "unit_meters_2", "unit_meters_3", "stage", "notes", "critique", "image_fit", "display_order"
+
+    }
+
+    if field not in allowed_fields:
+
+        raise HTTPException(status_code=400, detail=f"Geçersiz alan: {field}")
+
+        
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute(f"UPDATE sample_items SET {field} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (value, sample_id))
+
+    conn.commit()
+
+    return {"status": "success", "field": field, "value": value}
+
+@app.post("/api/samples/reorder")
+
+def api_reorder_samples(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+
+    sample_ids = payload.get("sample_ids") or []
+
+    if not isinstance(sample_ids, list):
+
+        raise HTTPException(status_code=400, detail="sample_ids listesi gereklidir.")
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    for idx, sid in enumerate(sample_ids):
+
+        c.execute("UPDATE sample_items SET display_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (idx, int(sid)))
+
+    conn.commit()
+
+    return {"status": "success", "reordered_count": len(sample_ids)}
+
+@app.delete("/api/samples/{sample_id}")
+
+def api_delete_sample(sample_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute("DELETE FROM sample_items WHERE id = ?", (sample_id,))
+
+    conn.commit()
+
+    return {"status": "success", "message": "Numune kaydı silindi."}
+
+@app.post("/api/samples/{sample_id}/image")
+
+async def api_upload_sample_image(
+
+    sample_id: int, 
+
+    slot: int = Query(1),
+
+    file: UploadFile = File(...), 
+
+    user: Dict[str, Any] = Depends(require_user)
+
+):
+
+    raw_fname = file.filename or "image.png"
+
+    ext = Path(raw_fname).suffix.lower()
+
+    if not ext or ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+
+        c_type = (getattr(file, "content_type", "") or "").lower()
+
+        if "jpeg" in c_type or "jpg" in c_type:
+
+            ext = ".jpg"
+
+        elif "webp" in c_type:
+
+            ext = ".webp"
+
+        elif "gif" in c_type:
+
+            ext = ".gif"
+
+        else:
+
+            ext = ".png" 
+
+    
+
+    filename = f"sample_{sample_id}_s{slot}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+
+    dest_path = STYLE_IMAGES_DIR / filename
+
+    
+
+    with open(dest_path, "wb") as buffer:
+
+        shutil.copyfileobj(file.file, buffer)
+
+        
+
+    rel_url = f"/uploads/styles/{filename}"
+
+    col_name = "image_url_2" if slot == 2 else "image_url"
+
+    
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute(f"UPDATE sample_items SET {col_name} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (rel_url, sample_id))
+
+    conn.commit()
+
+    return {"status": "success", "image_url": rel_url, "slot": slot}
+
+@app.delete("/api/samples/{sample_id}/image/{slot}")
+
+def api_delete_sample_image(sample_id: int, slot: int, user: Dict[str, Any] = Depends(require_user)):
+
+    col_name = "image_url_2" if slot == 2 else "image_url"
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    c.execute(f"UPDATE sample_items SET {col_name} = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (sample_id,))
+
+    conn.commit()
+
+    return {"status": "success", "slot": slot}
+
+@app.get("/api/samples/export-excel")
+
+def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = Depends(require_user)):
+
+    import openpyxl
+
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    from openpyxl.drawing.image import Image as OpenpyxlImage
+
+    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+
+    from openpyxl.drawing.xdr import XDRPositiveSize2D
+
+    from openpyxl.utils.units import pixels_to_EMU
+
+    from openpyxl.utils import get_column_letter
+
+    from PIL import Image as PILImage
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id") or 1
+
+    role = user.get("role")
+
+    sql_cols = "id, image_url, sample_type, season, customer_name, style_name, style_no, color_variant, request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3, unit_meters, unit_meters_2, unit_meters_3, stage, notes, critique, fabrictag_id, fabrictag_id_2, fabrictag_id_3, display_order"
+
+    if role in ["superadmin", "masterdeveloper"]:
+
+        query = f"SELECT {sql_cols} FROM sample_items WHERE 1=1"
+
+        params = []
+
+    else:
+
+        query = f"SELECT {sql_cols} FROM sample_items WHERE (company_id = ? OR company_id IS NULL)"
+
+        params = [company_id]
+
+    if ids and ids.strip():
+
+        id_list = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
+
+        if id_list:
+
+            placeholders = ",".join(["?"] * len(id_list))
+
+            query += f" AND id IN ({placeholders})"
+
+            params.extend(id_list)
+
+    query += " ORDER BY display_order ASC, id DESC"
+
+    c.execute(query, params)
+
+    rows = c.fetchall()
+
+    # FabricTag'den kumaş detaylarını çek
+
+    fabric_details_map = {}
+
+    fab_ids = set()
+
+    for r in rows:
+
+        for fid_idx in [20, 21, 22]:
+
+            if len(r) > fid_idx and r[fid_idx]:
+
+                fab_ids.add(r[fid_idx])
+
+    fab_ids = list(fab_ids)
+
+    if fab_ids:
+
+        try:
+
+            from fabrictag_connector import FabricTagConnector
+
+            ft_conn = FabricTagConnector.get_connection()
+
+            if ft_conn:
+
+                ft_c = ft_conn.cursor()
+
+                ft_placeholders = ",".join(["?"] * len(fab_ids))
+
+                ft_c.execute(f"SELECT id, company_name, quality_code, quality_name, design_code, color FROM fabrics WHERE id IN ({ft_placeholders})", fab_ids)
+
+                for frow in ft_c.fetchall():
+
+                    fabric_details_map[frow[0]] = dict(frow)
+
+                ft_conn.close()
+
+        except Exception:
+
+            pass
+
+    def clean_fabric_text_excel(raw_text: str, fd: dict = None) -> str:
+
+        if fd:
+
+            comp = (fd.get("company_name") or "").strip()
+
+            q_name = (fd.get("quality_name") or "").strip()
+
+            q_code = (fd.get("quality_code") or "").strip()
+
+            var = (fd.get("design_code") or "").strip()
+
+            color = (fd.get("color") or "").strip()
+
+            qual = f"{q_name} ({q_code})".strip() if (q_name and q_code) else (q_name or q_code)
+
+            parts = []
+
+            if comp: parts.append(comp)
+
+            if qual: parts.append(qual)
+
+            if var and var not in qual: parts.append(var)
+
+            elif color and color not in qual: parts.append(color)
+
+            return " - ".join(parts) or comp or qual or "-"
+
+        
+
+        raw = (raw_text or "").strip()
+
+        if not raw:
+
+            return "-"
+
+        if "•" in raw:
+
+            return raw.split("•")[0].strip()
+
+        label_pattern = re.compile(r'(?:Kumaşçı|Kumaş|Kumasci|Kumas|Kalite\s*Adı|Kalite\s*Adi|Kalite|Varyant|Renk|En|Karışım|Karisim|Gramaj|Ağırlık|Agirlik)\s*:\s*', re.I)
+
+        matches = list(label_pattern.finditer(raw))
+
+        if matches:
+
+            dict_parts = {}
+
+            for i, m in enumerate(matches):
+
+                lbl = m.group(0).split(":")[0].strip().lower()
+
+                val_start = m.end()
+
+                val_end = matches[i+1].start() if i + 1 < len(matches) else len(raw)
+
+                dict_parts[lbl] = raw[val_start:val_end].strip()
+
+            supplier = dict_parts.get("kumaşçı") or dict_parts.get("kumaş") or dict_parts.get("kumasci") or dict_parts.get("kumas") or ""
+
+            quality = dict_parts.get("kalite adı") or dict_parts.get("kalite adi") or dict_parts.get("kalite") or ""
+
+            variant = dict_parts.get("varyant") or ""
+
+            color = dict_parts.get("renk") or ""
+
+            parts = []
+
+            if supplier: parts.append(supplier)
+
+            if quality: parts.append(quality)
+
+            if variant: parts.append(variant)
+
+            elif color: parts.append(color)
+
+            if parts:
+
+                return " - ".join(parts)
+
+        cleaned = re.sub(r'(?:Karışım|Karisim)\s*:\s*\S+', '', raw, flags=re.I)
+
+        cleaned = re.sub(r'(?:En|Ağırlık|Gramaj|Agirlik)\s*:\s*\S+', '', cleaned, flags=re.I)
+
+        cleaned = re.sub(r'(?:Kumaşçı|Kumasci|Kalite\s*Adı|Kalite\s*Adi|Kalite|Varyant|Renk|Kumaş|Kumas)\s*:\s*', '', cleaned, flags=re.I)
+
+        cleaned = re.sub(r'\d+\s*%\s*[A-ZÇĞİÖŞÜ]+', '', cleaned, flags=re.I)
+
+        cleaned = re.sub(r'\d+%\s*[A-Z]+', '', cleaned, flags=re.I)
+
+        cleaned = re.sub(r'\d+\s*CM', '', cleaned, flags=re.I)
+
+        cleaned = re.sub(r'\d+\s*GR(?:M2)?', '', cleaned, flags=re.I)
+
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+
+        return cleaned or "-"
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Numune Takip Listesi"
+
+    headers = [
+
+        "Sıra", "Görsel", "Numune Türü", "Sezon", "Müşteri", "Model Adı", "Model Kodu", "Renk / Varyant",
+
+        "Talep Tarihi", "Teslim Tarihi", "Adet ve Beden", "Kumaş 1", "Birim Kullanım 1", "Kumaş 2", "Birim Kullanım 2", "Kumaş 3", "Birim Kullanım 3", "İşlem Aşaması", "Kritik", "Notlar"
+
+    ]
+
+    last_col_letter = get_column_letter(len(headers))
+
+    ws.merge_cells(f"A1:{last_col_letter}1")
+
+    title_cell = ws["A1"]
+
+    title_cell.value = f"NUMUNE TAKİP LİSTESİ ({datetime.now().strftime('%d.%m.%Y %H:%M')})"
+
+    title_cell.font = Font(name="Calibri", size=13, bold=True, color="FFFFFF")
+
+    title_cell.fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[1].height = 32
+
+    ws.row_dimensions[2].height = 8
+
+    ws.append([])
+
+    ws.append(headers)
+
+    ws.row_dimensions[3].height = 26
+
+    header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+
+    header_fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
+
+    thin_border = Border(
+
+        left=Side(style="thin", color="CBD5E1"),
+
+        right=Side(style="thin", color="CBD5E1"),
+
+        top=Side(style="thin", color="CBD5E1"),
+
+        bottom=Side(style="thin", color="CBD5E1")
+
+    )
+
+    for col_idx in range(1, len(headers) + 1):
+
+        cell = ws.cell(row=3, column=col_idx)
+
+        cell.font = header_font
+
+        cell.fill = header_fill
+
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        cell.border = thin_border
+
+    import html as py_html
+
+    img_buffers = []
+
+    row_num = 4
+
+    for idx, r in enumerate(rows, 1):
+
+        def strip_html_clean(raw):
+
+            raw_s = str(raw or "").strip()
+
+            c = re.sub(r'<br\s*[\/]?>', ' ', raw_s, flags=re.I)
+
+            c = re.sub(r'<\/li>', ' • ', c, flags=re.I)
+
+            c = re.sub(r'<[^>]+>', ' ', c)
+
+            c = py_html.unescape(c)
+
+            c = re.sub(r'\s+', ' ', c).strip()
+
+            if c.startswith('• '): c = c[2:].strip()
+
+            return c
+
+        clean_critique = strip_html_clean(r[19]) # critique
+
+        clean_notes = strip_html_clean(r[18]) # notes
+
+        clean_fab_1 = clean_fabric_text_excel(r[11], fabric_details_map.get(r[20]))
+
+        clean_fab_2 = clean_fabric_text_excel(r[12], fabric_details_map.get(r[21]))
+
+        clean_fab_3 = clean_fabric_text_excel(r[13], fabric_details_map.get(r[22]))
+
+        row_data = [
+
+            idx,
+
+            "",  # Görsel sütunu (resim anchor ile hücreye ortalanacak)
+
+            r[2] or "",
+
+            r[3] or "",
+
+            r[4] or "",
+
+            r[5] or "",
+
+            r[6] or "",
+
+            r[7] or "",  # Renk / Varyant
+
+            r[8] or "",  # Talep Tarihi
+
+            r[9] or "",  # Teslim Tarihi
+
+            r[10] or "", # Adet ve Beden
+
+            clean_fab_1,
+
+            r[14] or "", # Birim Kullanım 1
+
+            clean_fab_2,
+
+            r[15] or "", # Birim Kullanım 2
+
+            clean_fab_3,
+
+            r[16] or "", # Birim Kullanım 3
+
+            r[17] or "", # İşlem Aşaması
+
+            clean_critique,
+
+            clean_notes
+
+        ]
+
+        ws.append(row_data)
+
+        ws.row_dimensions[row_num].height = 54
+
+        fill_color = "F8FAFC" if idx % 2 == 0 else "FFFFFF"
+
+        row_fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+
+        data_font = Font(name="Calibri", size=10, color="0F172A")
+
+        bold_data_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+
+        for c_idx in range(1, len(row_data) + 1):
+
+            cell = ws.cell(row=row_num, column=c_idx)
+
+            cell.fill = row_fill
+
+            cell.border = thin_border
+
+            cell.font = bold_data_font if c_idx in [5, 7] else data_font
+
+            if c_idx in [1, 2, 3, 4, 7, 8, 9, 12, 13]:
+
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            else:
+
+                cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=(c_idx in [10, 11, 14]))
+
+        # Fotoğrafı hücreye ortalayarak ekleme
+
+        img_url = r[1]
+
+        img_added = False
+
+        if img_url:
+
+            p = None
+
+            if img_url.startswith("/uploads/"):
+
+                rel = img_url[len("/uploads/"):]
+
+                cand = Path(UPLOADS_DIR) / rel
+
+                if cand.exists(): p = cand
+
+            elif img_url.startswith("uploads/"):
+
+                cand = Path(UPLOADS_DIR) / img_url[len("uploads/"):]
+
+                if cand.exists(): p = cand
+
+            else:
+
+                cand = Path(img_url)
+
+                if cand.exists(): p = cand
+
+            if p and p.exists():
+
+                try:
+
+                    with PILImage.open(str(p)) as pil_img:
+
+                        ow, oh = pil_img.size
+
+                        if ow > 0 and oh > 0:
+
+                            ratio = min(88.0 / ow, 54.0 / oh)
+
+                            nw = max(1, int(ow * ratio))
+
+                            nh = max(1, int(oh * ratio))
+
+                            buf = io.BytesIO()
+
+                            if pil_img.mode in ("RGBA", "LA") or (pil_img.mode == "P" and "transparency" in pil_img.info):
+
+                                pil_img.resize((nw, nh), PILImage.Resampling.LANCZOS).save(buf, format="PNG")
+
+                            else:
+
+                                pil_img.convert("RGB").resize((nw, nh), PILImage.Resampling.LANCZOS).save(buf, format="JPEG", quality=90)
+
+                            buf.seek(0)
+
+                            img_buffers.append(buf)
+
+                            xl_img = OpenpyxlImage(buf)
+
+                            xl_img.width = nw
+
+                            xl_img.height = nh
+
+                            col_w_px = 112  # Sütun B (Görsel) genişliği piksel karşılığı
+
+                            row_h_px = 72   # Satır yüksekliği (54pt) piksel karşılığı
+
+                            x_off = max(0, (col_w_px - nw) // 2)
+
+                            y_off = max(0, (row_h_px - nh) // 2)
+
+                            marker = AnchorMarker(col=1, colOff=pixels_to_EMU(x_off), row=row_num - 1, rowOff=pixels_to_EMU(y_off))
+
+                            size = XDRPositiveSize2D(pixels_to_EMU(nw), pixels_to_EMU(nh))
+
+                            xl_img.anchor = OneCellAnchor(_from=marker, ext=size)
+
+                            ws.add_image(xl_img)
+
+                            img_added = True
+
+                except Exception:
+
+                    pass
+
+        if not img_added:
+
+            c_cell = ws.cell(row=row_num, column=2)
+
+            c_cell.value = "-"
+
+            c_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            c_cell.font = Font(name="Calibri", size=9, color="94A3B8")
+
+        row_num += 1
+
+    col_widths = {
+
+        "A": 6,   # Sıra
+
+        "B": 15,  # Görsel
+
+        "C": 13,  # Numune Türü
+
+        "D": 10,  # Sezon
+
+        "E": 14,  # Müşteri
+
+        "F": 16,  # Model Adı
+
+        "G": 13,  # Model Kodu
+
+        "H": 14,  # Renk / Varyant
+
+        "I": 13,  # Talep Tarihi
+
+        "J": 13,  # Teslim Tarihi
+
+        "K": 14,  # Adet ve Beden
+
+        "L": 30,  # Kumaş 1
+
+        "M": 14,  # Birim Kullanım 1
+
+        "N": 30,  # Kumaş 2
+
+        "O": 14,  # Birim Kullanım 2
+
+        "P": 30,  # Kumaş 3
+
+        "Q": 14,  # Birim Kullanım 3
+
+        "R": 16,  # İşlem Aşaması
+
+        "S": 26,  # Kritik
+
+        "T": 26   # Notlar
+
+    }
+
+    for col_let, w in col_widths.items():
+
+        ws.column_dimensions[col_let].width = w
+
+    output_stream = io.BytesIO()
+
+    wb.save(output_stream)
+
+    output_stream.seek(0)
+
+    filename = f"Numune_PPS_Takip_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+
+    return Response(
+
+        content=output_stream.getvalue(),
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+
+    )
+
+@app.get("/api/samples/{sample_id}/export-talep-excel")
+
+def api_export_single_sample_talep_excel(sample_id: int, user: Dict[str, Any] = Depends(require_user)):
+
+    import openpyxl
+
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    from openpyxl.utils import get_column_letter
+
+    import re
+
+    import html
+
+    from urllib.parse import quote
+
+    from fabrictag_connector import FabricTagConnector
+
+    conn = get_db()
+
+    c = conn.cursor()
+
+    company_id = user.get("company_id", 1)
+
+    c.execute("""
+
+        SELECT id, sample_type, season, customer_name, style_name, style_no, color_variant,
+
+               request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes, critique, image_url, fabrictag_id, company_id
+
+        FROM sample_items
+
+        WHERE id = ?
+
+    """, (sample_id,))
+
+    row = c.fetchone()
+
+    if not row:
+
+        raise HTTPException(status_code=404, detail="Numune kaydı bulunamadı")
+
+    cols = [d[0] for d in c.description]
+
+    s = dict(zip(cols, row))
+
+    sample_cid = s.get("company_id")
+
+    if user.get("role") not in ["superadmin", "masterdeveloper"] and sample_cid and company_id and sample_cid != company_id:
+
+        raise HTTPException(status_code=403, detail="Bu numuneye erişim yetkiniz yok.")
+
+    # Fabric detail from FabricTag if linked
+
+    fabric_detail = {}
+
+    if s.get("fabrictag_id"):
+
+        try:
+
+            ft_conn = FabricTagConnector.get_connection()
+
+            if ft_conn:
+
+                ft_c = ft_conn.cursor()
+
+                ft_c.execute("SELECT id, company_name, quality_code, quality_name, design_code, color, width, weight, composition FROM fabrics WHERE id = ?", (s["fabrictag_id"],))
+
+                frow = ft_c.fetchone()
+
+                if frow:
+
+                    fabric_detail = dict(frow)
+
+                ft_conn.close()
+
+        except Exception:
+
+            pass
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Talep Formu"
+
+    # Sayfa ve Baskı Ayarları (A4 Dikey)
+
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    ws.page_setup.fitToWidth = 1
+
+    ws.page_setup.fitToHeight = 0
+
+    ws.page_margins.left = 0.4
+
+    ws.page_margins.right = 0.4
+
+    ws.page_margins.top = 0.4
+
+    ws.page_margins.bottom = 0.4
+
+    # Başlık hesaplama (Örn: "1.Proto" -> "PROTO TALEBİ", "2.PPS" -> "PPS TALEBİ")
+
+    raw_type = (s.get("sample_type") or "").strip()
+
+    clean_type = re.sub(r"^[\d.\-\s]+", "", raw_type).strip()
+
+    if not clean_type:
+
+        clean_type = "NUMUNE"
+
+    header_title = f"{clean_type.upper()} TALEBİ"
+
+    # Renkler ve Stiller
+
+    title_font = Font(name="Calibri", size=18, bold=True, color="FFFFFF")
+
+    title_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+
+    
+
+    sub_title_font = Font(name="Calibri", size=10, italic=True, color="475569")
+
+    
+
+    section_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+
+    section_fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
+
+    
+
+    label_font = Font(name="Calibri", size=10, bold=True, color="334155")
+
+    label_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+
+    
+
+    val_bold_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+
+    val_norm_font = Font(name="Calibri", size=10, bold=False, color="0F172A")
+
+    
+
+    thin_border = Border(
+
+        left=Side(style="thin", color="CBD5E1"),
+
+        right=Side(style="thin", color="CBD5E1"),
+
+        top=Side(style="thin", color="CBD5E1"),
+
+        bottom=Side(style="thin", color="CBD5E1")
+
+    )
+
+    # 6 Sütunlu Sayfa Düzeni (A, B, C, D, E, F)
+
+    col_widths = {"A": 16, "B": 22, "C": 16, "D": 22, "E": 16, "F": 22}
+
+    for col_letter, width in col_widths.items():
+
+        ws.column_dimensions[col_letter].width = width
+
+    # Satır 1: Şirket / Sistem Üst Bilgisi (ORTALI)
+
+    ws.merge_cells("A1:F1")
+
+    ws["A1"] = "TEXFLOW PRODUCTION & QUALITY SYSTEMS"
+
+    ws["A1"].font = Font(name="Calibri", size=9, bold=True, color="64748B")
+
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[1].height = 18
+
+    # Satır 2: Büyük Dinamik Başlık (EN ÜSTTE VE TAM ORTALI)
+
+    ws.merge_cells("A2:F2")
+
+    ws["A2"] = header_title
+
+    ws["A2"].font = title_font
+
+    ws["A2"].fill = title_fill
+
+    ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[2].height = 36
+
+    # Satır 3: Alt Başlık (ORTALI)
+
+    ws.merge_cells("A3:F3")
+
+    ws["A3"] = "Modelhane ve Numune Üretim Talep Formu"
+
+    ws["A3"].font = sub_title_font
+
+    ws["A3"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.row_dimensions[3].height = 18
+
+    # Satır 4: Talep Kimlik / Meta Bilgileri Şeridi
+
+    ws.merge_cells("A4:B4")
+
+    ws["A4"] = f"Talep / Form No: SMP-{s.get('id')}"
+
+    ws["A4"].font = Font(name="Calibri", size=10, bold=True, color="475569")
+
+    ws["A4"].alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.merge_cells("C4:D4")
+
+    ws["C4"] = f"Tarih: {s.get('request_date') or datetime.now().strftime('%d.%m.%Y')}   |   Hedef Teslim: {s.get('delivery_date') or '-'}"
+
+    ws["C4"].font = Font(name="Calibri", size=10, bold=True, color="D97706" if s.get('delivery_date') else "475569")
+
+    ws["C4"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells("E4:F4")
+
+    ws["E4"] = f"Aşama: {s.get('stage') or 'Talep Oluşturuldu'}"
+
+    ws["E4"].font = Font(name="Calibri", size=10, bold=True, color="059669")
+
+    ws["E4"].alignment = Alignment(horizontal="right", vertical="center")
+
+    ws.row_dimensions[4].height = 22
+
+    # Satır 5: Model ve Talep Detayları Başlığı
+
+    ws.merge_cells("A5:F5")
+
+    ws["A5"] = "MODEL VE SİPARİŞ BİLGİLERİ"
+
+    ws["A5"].font = section_font
+
+    ws["A5"].fill = section_fill
+
+    ws["A5"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[5].height = 22
+
+    # Bilgi Satırları (Tablo formatında)
+
+    info_rows = [
+
+        ("Müşteri", s.get("customer_name") or "-", "Numune Türü", s.get("sample_type") or "-", "Talep Tarihi", s.get("request_date") or "-"),
+
+        ("Model Kodu", s.get("style_no") or "-", "Model Adı", s.get("style_name") or "-", "Sezon", s.get("season") or "-"),
+
+    ]
+
+    curr_row = 6
+
+    for r_data in info_rows:
+
+        ws.row_dimensions[curr_row].height = 22
+
+        # Col A-B
+
+        ws.cell(row=curr_row, column=1, value=r_data[0]).font = label_font
+
+        ws.cell(row=curr_row, column=1).fill = label_fill
+
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        ws.cell(row=curr_row, column=2, value=r_data[1]).font = val_bold_font
+
+        ws.cell(row=curr_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=2).border = thin_border
+
+        # Col C-D
+
+        ws.cell(row=curr_row, column=3, value=r_data[2]).font = label_font
+
+        ws.cell(row=curr_row, column=3).fill = label_fill
+
+        ws.cell(row=curr_row, column=3).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=3).border = thin_border
+
+        ws.cell(row=curr_row, column=4, value=r_data[3]).font = val_bold_font
+
+        ws.cell(row=curr_row, column=4).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=4).border = thin_border
+
+        # Col E-F
+
+        ws.cell(row=curr_row, column=5, value=r_data[4]).font = label_font
+
+        ws.cell(row=curr_row, column=5).fill = label_fill
+
+        ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=5).border = thin_border
+
+        ws.cell(row=curr_row, column=6, value=r_data[5]).font = val_bold_font
+
+        ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.cell(row=curr_row, column=6).border = thin_border
+
+        curr_row += 1
+
+    # Kumaş Bilgileri Satırı (Yan yana, aralarında boşluklar bırakarak)
+
+    fabric_parts = []
+
+    if fabric_detail:
+
+        q_name = (fabric_detail.get("quality_name") or "").strip()
+
+        q_code = (fabric_detail.get("quality_code") or "").strip()
+
+        comp = (fabric_detail.get("company_name") or "").strip()
+
+        var = (fabric_detail.get("design_code") or "").strip()
+
+        color = (fabric_detail.get("color") or "").strip()
+
+        qual_parts = []
+
+        if comp: qual_parts.append(comp)
+
+        qual_str = f"{q_name} ({q_code})".strip() if (q_name and q_code) else (q_name or q_code)
+
+        if qual_str: qual_parts.append(qual_str)
+
+        if var: qual_parts.append(var)
+
+        if color: qual_parts.append(color)
+
+        line1 = " - ".join(qual_parts)
+
+        if line1: fabric_parts.append(line1)
+
+        if fabric_detail.get("composition"):
+
+            fabric_parts.append(fabric_detail["composition"].strip())
+
+        dim_parts = []
+
+        if fabric_detail.get("width"): dim_parts.append(f"{fabric_detail['width']} CM")
+
+        if fabric_detail.get("weight"): dim_parts.append(f"{fabric_detail['weight']} GRM2")
+
+        if dim_parts: fabric_parts.append(" • ".join(dim_parts))
+
+    
+
+    fabric_text = "   •   ".join(fabric_parts) if fabric_parts else (s.get("fabric_info") or "-")
+
+    ws.row_dimensions[curr_row].height = 24
+
+    ws.cell(row=curr_row, column=1, value="Kumaş Bilgisi").font = label_font
+
+    ws.cell(row=curr_row, column=1).fill = label_fill
+
+    ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.cell(row=curr_row, column=1).border = thin_border
+
+    ws.merge_cells(f"B{curr_row}:D{curr_row}")
+
+    ws[f"B{curr_row}"] = fabric_text
+
+    ws[f"B{curr_row}"].font = val_bold_font
+
+    ws[f"B{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+
+    for cl in range(2, 5):
+
+        ws.cell(row=curr_row, column=cl).border = thin_border
+
+    ws.cell(row=curr_row, column=5, value="Birim Metraj").font = label_font
+
+    ws.cell(row=curr_row, column=5).fill = label_fill
+
+    ws.cell(row=curr_row, column=5).alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.cell(row=curr_row, column=5).border = thin_border
+
+    ws.cell(row=curr_row, column=6, value=f"{s.get('unit_meters') or '-'} m").font = val_bold_font
+
+    ws.cell(row=curr_row, column=6).alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.cell(row=curr_row, column=6).border = thin_border
+
+    curr_row += 1
+
+    # Satır Boşluk
+
+    curr_row += 1
+
+    # Beden & Adet Dağılımı Bölümü
+
+    ws.merge_cells(f"A{curr_row}:F{curr_row}")
+
+    ws[f"A{curr_row}"] = "ADET VE BEDEN DAĞILIMI"
+
+    ws[f"A{curr_row}"].font = section_font
+
+    ws[f"A{curr_row}"].fill = section_fill
+
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[curr_row].height = 22
+
+    curr_row += 1
+
+    # Parse sizes
+
+    qty_str = str(s.get("quantity_sizes") or "").strip()
+
+    size_pairs = []
+
+    total_qty = 0
+
+    if qty_str:
+
+        tokens = [t.strip() for t in re.split(r"[,;\n/]+", qty_str) if t.strip()]
+
+        for tok in tokens:
+
+            m1 = re.match(r"^([A-Za-z0-9\-_.]+)\s*[:=\-]\s*(\d+)$", tok)
+
+            m2 = re.match(r"^(\d+)\s*(?:x|adet|pcs)?\s*([A-Za-z0-9\-_.]+)$", tok, re.IGNORECASE)
+
+            if m1:
+
+                cnt = int(m1.group(2))
+
+                size_pairs.append((m1.group(1).upper(), cnt))
+
+                total_qty += cnt
+
+            elif m2:
+
+                cnt = int(m2.group(1))
+
+                size_pairs.append((m2.group(2).upper(), cnt))
+
+                total_qty += cnt
+
+            else:
+
+                num = re.match(r"^(\d+)$", tok)
+
+                if num:
+
+                    cnt = int(num.group(1))
+
+                    size_pairs.append(("Adet", cnt))
+
+                    total_qty += cnt
+
+    if size_pairs and len(size_pairs) <= 5:
+
+        # Header row (Bedenler)
+
+        ws.cell(row=curr_row, column=1, value="Beden").font = label_font
+
+        ws.cell(row=curr_row, column=1).fill = label_fill
+
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        for s_idx, (sz, cnt) in enumerate(size_pairs):
+
+            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=sz)
+
+            c_cell.font = label_font
+
+            c_cell.fill = label_fill
+
+            c_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            c_cell.border = thin_border
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2, value="TOPLAM").font = label_font
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).fill = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.cell(row=curr_row, column=len(size_pairs) + 2).border = thin_border
+
+        ws.row_dimensions[curr_row].height = 20
+
+        curr_row += 1
+
+        # Value row (Adetler)
+
+        ws.cell(row=curr_row, column=1, value="Miktar").font = label_font
+
+        ws.cell(row=curr_row, column=1).fill = label_fill
+
+        ws.cell(row=curr_row, column=1).alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.cell(row=curr_row, column=1).border = thin_border
+
+        for s_idx, (sz, cnt) in enumerate(size_pairs):
+
+            c_cell = ws.cell(row=curr_row, column=s_idx + 2, value=cnt)
+
+            c_cell.font = val_bold_font
+
+            c_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            c_cell.border = thin_border
+
+        tot_cell = ws.cell(row=curr_row, column=len(size_pairs) + 2, value=f"{total_qty} Adet")
+
+        tot_cell.font = Font(name="Calibri", size=10, bold=True, color="059669")
+
+        tot_cell.fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+
+        tot_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        tot_cell.border = thin_border
+
+        ws.row_dimensions[curr_row].height = 22
+
+        curr_row += 1
+
+        if qty_str and (len(size_pairs) < len(tokens) or not str(total_qty) in qty_str):
+
+            ws.merge_cells(f"A{curr_row}:F{curr_row}")
+
+            ws[f"A{curr_row}"] = f"Not / Orijinal Giriş: {qty_str}"
+
+            ws[f"A{curr_row}"].font = Font(name="Calibri", size=9, italic=True, color="64748B")
+
+            ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+
+            curr_row += 1
+
+    else:
+
+        # Tek satır serbest metin gösterimi
+
+        ws.merge_cells(f"A{curr_row}:B{curr_row}")
+
+        ws[f"A{curr_row}"] = "Adet & Beden Bilgisi"
+
+        ws[f"A{curr_row}"].font = label_font
+
+        ws[f"A{curr_row}"].fill = label_fill
+
+        ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+        ws[f"A{curr_row}"].border = thin_border
+
+        ws.merge_cells(f"C{curr_row}:F{curr_row}")
+
+        ws[f"C{curr_row}"] = qty_str or "Adet ve beden belirtilmedi"
+
+        ws[f"C{curr_row}"].font = val_bold_font
+
+        ws[f"C{curr_row}"].alignment = Alignment(horizontal="left", vertical="center")
+
+        ws[f"C{curr_row}"].border = thin_border
+
+        ws.row_dimensions[curr_row].height = 24
+
+        curr_row += 1
+
+    # Satır Boşluk
+
+    curr_row += 1
+
+    # Numune Kritiği ve Notlar Bölümü
+
+    ws.merge_cells(f"A{curr_row}:F{curr_row}")
+
+    ws[f"A{curr_row}"] = "NUMUNE KRİTİĞİ VE REVİZYON NOTLARI"
+
+    ws[f"A{curr_row}"].font = section_font
+
+    ws[f"A{curr_row}"].fill = section_fill
+
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+    ws.row_dimensions[curr_row].height = 22
+
+    curr_row += 1
+
+    # HTML temizleme & metne dönüştürme
+
+    raw_critique = s.get("critique") or s.get("notes") or ""
+
+    clean_critique = html.unescape(raw_critique)
+
+    clean_critique = re.sub(r"<li>", "• ", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"</li>", "\n", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"<br\s*/?>", "\n", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"</p>", "\n\n", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"</div>", "\n", clean_critique, flags=re.IGNORECASE)
+
+    clean_critique = re.sub(r"<[^>]+>", "", clean_critique)
+
+    clean_critique = re.sub(r"\n{3,}", "\n\n", clean_critique).strip()
+
+    critique_box_start = curr_row
+
+    critique_box_end = curr_row + 4
+
+    ws.merge_cells(f"A{critique_box_start}:F{critique_box_end}")
+
+    critique_cell = ws[f"A{critique_box_start}"]
+
+    critique_cell.value = clean_critique or "Herhangi bir numune kritiği veya revizyon notu girilmemiştir."
+
+    critique_cell.font = Font(name="Calibri", size=10, italic=(not clean_critique), color="0F172A" if clean_critique else "94A3B8")
+
+    critique_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    critique_cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+    for r in range(critique_box_start, critique_box_end + 1):
+
+        ws.row_dimensions[r].height = 20
+
+        for col_i in range(1, 7):
+
+            c_cell = ws.cell(row=r, column=col_i)
+
+            c_cell.border = thin_border
+
+            c_cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    curr_row = critique_box_end + 2
+
+    # İmza ve Onay Alanları
+
+    ws.merge_cells(f"A{curr_row}:B{curr_row}")
+
+    ws[f"A{curr_row}"] = "TALEBİ HAZIRLAYAN"
+
+    ws[f"A{curr_row}"].font = label_font
+
+    ws[f"A{curr_row}"].fill = label_fill
+
+    ws[f"A{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"A{curr_row}"].border = thin_border
+
+    ws.merge_cells(f"C{curr_row}:D{curr_row}")
+
+    ws[f"C{curr_row}"] = "MODELHANE / ATÖLYE ŞEFİ"
+
+    ws[f"C{curr_row}"].font = label_font
+
+    ws[f"C{curr_row}"].fill = label_fill
+
+    ws[f"C{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"C{curr_row}"].border = thin_border
+
+    ws.merge_cells(f"E{curr_row}:F{curr_row}")
+
+    ws[f"E{curr_row}"] = "MÜŞTERİ / SATIŞ ONAY"
+
+    ws[f"E{curr_row}"].font = label_font
+
+    ws[f"E{curr_row}"].fill = label_fill
+
+    ws[f"E{curr_row}"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws[f"E{curr_row}"].border = thin_border
+
+    ws.row_dimensions[curr_row].height = 20
+
+    curr_row += 1
+
+    # İmza Kutuları
+
+    sig_start = curr_row
+
+    sig_end = curr_row + 2
+
+    for r in range(sig_start, sig_end + 1):
+
+        ws.row_dimensions[r].height = 22
+
+        for col_i in range(1, 7):
+
+            c_cell = ws.cell(row=r, column=col_i)
+
+            c_cell.border = thin_border
+
+    ws[f"A{sig_end}"] = "Ad Soyad / İmza / Tarih"
+
+    ws[f"A{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+
+    ws[f"A{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    ws[f"C{sig_end}"] = "Ad Soyad / İmza / Tarih"
+
+    ws[f"C{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+
+    ws[f"C{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    ws[f"E{sig_end}"] = "Ad Soyad / İmza / Tarih"
+
+    ws[f"E{sig_end}"].font = Font(name="Calibri", size=8, italic=True, color="94A3B8")
+
+    ws[f"E{sig_end}"].alignment = Alignment(horizontal="center", vertical="bottom")
+
+    output_stream = io.BytesIO()
+
+    wb.save(output_stream)
+
+    output_stream.seek(0)
+
+    clean_file_type = re.sub(r"[^A-Za-z0-9]", "_", clean_type)
+
+    clean_style_no = re.sub(r"[^A-Za-z0-9]", "_", str(s.get("style_no") or "Talep"))
+
+    filename = f"Numune_Talebi_{clean_file_type}_{clean_style_no}.xlsx"
+
+    encoded_filename = quote(filename)
+
+    return Response(
+
+        content=output_stream.getvalue(),
+
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        headers={
+
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}; filename=\"{filename.encode('ascii', 'ignore').decode()}\""
+
+        }
+
+    )
+
+# ----------------- VARSAYILAN SİSTEM AYARLARI (CUSTOM DEFAULTS) -----------------
+
+CUSTOM_DEFAULTS_FILE = Path("data") / "custom_defaults.json"
+
+DEFAULT_CUSTOM_SETTINGS = {
+
+    # Maliyet Çalışması Varsayılan Oranları
+
+    "default_fabric_wastage": 5.0,
+
+    "default_manufacturing_wastage": 5.0,
+
+    "default_overhead_rate": 15.0,
+
+    "default_mup_rate": 15.0,
+
+    "default_commission_rate": 0.0,
+
+    # Çarşaf Listesi Termin ve Kumaş Uyarı Renkleri
+
+    "alerts_enabled": True,
+
+    # Sipariş Termin Uyarısı
+
+    "order_alert_days_1": 10,
+
+    "order_alert_color_1": "#fed7aa",
+
+    "order_alert_days_2": 3,
+
+    "order_alert_color_2": "#f87171",
+
+    # Kumaş Termin Uyarısı
+
+    "fabric_alert_days_1": 7,
+
+    "fabric_alert_color_1": "#fef08a",
+
+    "fabric_alert_days_2": 3,
+
+    "fabric_alert_color_2": "#f87171",
+
+    # Gelen Kumaş Metrajı Sapma (%) Uyarı Renkleri
+
+    "fabric_received_threshold_1": 1.0,
+
+    "fabric_received_color_1": "",
+
+    "fabric_received_threshold_2": 5.0,
+
+    "fabric_received_color_2": "#fef08a",
+
+    "fabric_received_color_3": "#f87171"
+
+}
+
+@app.get("/api/custom-defaults")
+
+def api_get_custom_defaults():
+
+    if CUSTOM_DEFAULTS_FILE.exists():
+
+        try:
+
+            with open(CUSTOM_DEFAULTS_FILE, "r", encoding="utf-8") as f:
+
+                saved = json.load(f)
+
+                merged = {**DEFAULT_CUSTOM_SETTINGS, **saved}
+
+                return merged
+
+        except Exception as e:
+
+            print(f"[WARN] custom_defaults.json okunamadi: {e}")
+
+    return DEFAULT_CUSTOM_SETTINGS
+
+@app.post("/api/custom-defaults")
+
+def api_save_custom_defaults(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+
+    try:
+
+        CUSTOM_DEFAULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+        current = api_get_custom_defaults()
+
+        for k, v in payload.items():
+
+            if k in DEFAULT_CUSTOM_SETTINGS:
+
+                current[k] = v
+
+        with open(CUSTOM_DEFAULTS_FILE, "w", encoding="utf-8") as f:
+
+            json.dump(current, f, ensure_ascii=False, indent=2)
+
+        return {"status": "success", "message": "Varsayılan ayarlar başarıyla kaydedildi.", "defaults": current}
+
+    except Exception as e:
+
+        print(f"[ERROR] custom_defaults kaydetme hatasi: {e}")
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ----------------- TAM SİSTEM YEDEKLEME & RESTORE (BACKUP) -----------------
+
+import backup_manager
+
+@app.get("/api/backup/config")
+
+def api_get_backup_config(user: Dict[str, Any] = Depends(require_user)):
+
+    return backup_manager.get_backup_config()
+
+@app.post("/api/backup/config")
+
+def api_save_backup_config(cfg: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+
+    clean_times = []
+
+    for t in cfg.get("times", []):
+
+        t_str = str(t).strip()
+
+        if re.match(r"^([01]?\d|2[0-3]):[0-5]\d$", t_str):
+
+            clean_times.append(t_str)
+
+    
+
+    clean_cfg = {
+
+        "enabled": bool(cfg.get("enabled", True)),
+
+        "times": sorted(list(set(clean_times))),
+
+        "retention_count": max(1, min(100, int(cfg.get("retention_count", 30)))),
+
+        "include_uploads": bool(cfg.get("include_uploads", True)),
+
+        "last_backup_time": backup_manager.get_backup_config().get("last_backup_time"),
+
+        "destination_type": str(cfg.get("destination_type", "default")),
+
+        "custom_destination_path": str(cfg.get("custom_destination_path", "")).strip()
+
+    }
+
+    backup_manager.save_backup_config(clean_cfg)
+
+    return {"status": "success", "message": "Yedekleme ayarları kaydedildi.", "config": clean_cfg}
+
+@app.get("/api/backup/list")
+
+def api_list_backups(user: Dict[str, Any] = Depends(require_user)):
+
+    return {
+
+        "status": "success",
+
+        "backups": backup_manager.list_backups(),
+
+        "config": backup_manager.get_backup_config()
+
+    }
+
+@app.post("/api/backup/create")
+
+def api_create_backup(user: Dict[str, Any] = Depends(require_user)):
+
+    try:
+
+        username = user.get("username", "Kullanıcı")
+
+        res = backup_manager.create_full_backup(backup_type="manual", note=f"{username} tarafından manuel yedek alındı.")
+
+        return res
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"Yedekleme oluşturulamadı: {str(e)}")
+
+@app.get("/api/backup/download/{filename}")
+
+def api_download_backup(filename: str, user: Dict[str, Any] = Depends(require_user)):
+
+    safe_name = Path(filename).name
+
+    target = backup_manager.BACKUPS_DIR / safe_name
+
+    if not target.exists() or not target.is_file():
+
+        raise HTTPException(status_code=404, detail="Yedek dosyası bulunamadı.")
+
+    return FileResponse(
+
+        str(target),
+
+        media_type="application/zip",
+
+        filename=safe_name,
+
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'}
+
+    )
+
+@app.post("/api/backup/restore/{filename}")
+
+def api_restore_backup(filename: str, user: Dict[str, Any] = Depends(require_user)):
+
+    role = user.get("role", "")
+
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+
+        raise HTTPException(status_code=403, detail="Yedekten geri yükleme yetkiniz bulunmamaktadır.")
+
+    
+
+    safe_name = Path(filename).name
+
+    try:
+
+        res = backup_manager.restore_backup(safe_name)
+
+        return res
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"Geri yükleme hatası: {str(e)}")
+
+@app.delete("/api/backup/{filename}")
+
+def api_delete_backup(filename: str, user: Dict[str, Any] = Depends(require_user)):
+
+    safe_name = Path(filename).name
+
+    target = backup_manager.BACKUPS_DIR / safe_name
+
+    if target.exists() and target.is_file():
+
+        try:
+
+            target.unlink()
+
+            return {"status": "success", "message": f"{safe_name} yedeği silindi."}
+
+        except Exception as e:
+
+            raise HTTPException(status_code=500, detail=f"Dosya silinemedi: {e}")
+
+    raise HTTPException(status_code=404, detail="Yedek dosyası bulunamadı.")
+
+@app.post("/api/backup/upload-restore")
+
+async def api_upload_and_restore(request: Request, user: Dict[str, Any] = Depends(require_user)):
+
+    role = user.get("role", "")
+
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+
+        raise HTTPException(status_code=403, detail="Yedek yükleme yetkiniz bulunmamaktadır.")
+
+    form = await request.form()
+
+    f_obj = form.get("file")
+
+    if not f_obj or not hasattr(f_obj, "filename") or not f_obj.filename:
+
+        raise HTTPException(status_code=400, detail="Lütfen bir yedek ZIP dosyası seçin.")
+
+    safe_name = f"Uploaded_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{Path(f_obj.filename).name}"
+
+    save_dest = backup_manager.BACKUPS_DIR / safe_name
+
+    with open(save_dest, "wb") as buffer:
+
+        shutil.copyfileobj(f_obj.file, buffer)
+
+    try:
+
+        res = backup_manager.restore_backup(safe_name)
+
+        return res
+
+    except Exception as e:
+
+        if save_dest.exists():
+
+            save_dest.unlink()
+
+        raise HTTPException(status_code=500, detail=f"Yüklenen yedek açılamadı: {e}")
+
+# Start background backup scheduler
+
+try:
+
+    backup_manager.start_backup_scheduler()
+
+except Exception as e:
+
+    print(f"Failed to start backup scheduler: {e}")
+
+# ----------------- OTOMATİK SİSTEM GÜNCELLEME (UPDATE MANAGER) -----------------
+
+import update_manager
+
+@app.get("/api/system/version")
+
+def api_get_system_version(user: Dict[str, Any] = Depends(require_user)):
+
+    cfg = update_manager.get_system_config()
+
+    git_info = update_manager.get_git_info()
+
+    return {
+
+        "status": "success",
+
+        "version": cfg.get("version", "v2.9.2"),
+
+        "channel": cfg.get("channel", "stable"),
+
+        "restart_required": cfg.get("restart_required", False),
+
+        "last_check_time": cfg.get("last_check_time"),
+
+        "last_update_time": cfg.get("last_update_time"),
+
+        "git": git_info
+
+    }
+
+@app.get("/api/system/check-updates")
+
+def api_check_system_updates(user: Dict[str, Any] = Depends(require_user)):
+
+    try:
+
+        res = update_manager.check_for_updates()
+
+        return res
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"Güncelleme denetleme hatası: {str(e)}")
+
+@app.post("/api/system/apply-updates")
+
+def api_apply_system_updates(user: Dict[str, Any] = Depends(require_user)):
+
+    role = user.get("role", "")
+
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+
+        raise HTTPException(status_code=403, detail="Sistemi güncelleme yetkiniz bulunmamaktadır.")
+
+    try:
+
+        res = update_manager.apply_update()
+
+        return res
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"Güncelleme hatası: {str(e)}")
+
+@app.post("/api/system/restart")
+
+def api_restart_system(user: Dict[str, Any] = Depends(require_user)):
+
+    role = user.get("role", "")
+
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+
+        raise HTTPException(status_code=403, detail="Sistemi yeniden başlatma yetkiniz bulunmamaktadır.")
+
+    try:
+
+        res = update_manager.trigger_server_restart()
+
+        return res
+
+    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"Yeniden başlatma tetiklenemedi: {str(e)}")
+
+@app.post("/api/system/set-channel")
+
+def api_set_system_channel(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+
+    role = user.get("role", "")
+
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+
+        raise HTTPException(status_code=403, detail="Kanal değiştirme yetkiniz bulunmamaktadır.")
+
+    new_channel = payload.get("channel", "stable")
+
+    if new_channel not in ["stable", "dev"]:
+
+        raise HTTPException(status_code=400, detail="Geçersiz kanal. Yalnızca 'stable' veya 'dev' seçilebilir.")
+
+    cfg = update_manager.get_system_config()
+
+    cfg["channel"] = new_channel
+
+    update_manager.save_system_config(cfg)
+
+    return {"status": "success", "channel": new_channel, "message": f"Güncelleme kanalı '{new_channel}' olarak ayarlandı."}
+
+# ----------------- SPA ROOT -----------------
+
+@app.get("/")
+
+def serve_index():
+
+    index_path = STATIC_DIR / "index.html"
+
+    if index_path.exists():
+
+        return FileResponse(
+
+            str(index_path),
+
+            headers={
+
+                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+
+                "Pragma": "no-cache",
+
+                "Expires": "0"
+
+            }
+
+        )
+
+    return HTMLResponse("<h1>TexFlow API is running.</h1>")
+
+if __name__ == "__main__":
+
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8050)
+
