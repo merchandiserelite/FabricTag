@@ -8749,6 +8749,14 @@
                                                        class="w-full bg-transparent border-0 outline-none text-xs font-semibold hover:bg-slate-500/10 focus:bg-slate-500/10 rounded px-1.5 py-1 transition truncate">
                                             </template>
 
+                                            <!-- RENK / VARYANT -->
+                                            <template v-else-if="col.key === 'color_variant'">
+                                                <input :value="sample.color_variant"
+                                                       @change="updateSampleCell(sample, 'color_variant', $event.target.value)"
+                                                       placeholder="Renk / Varyant..."
+                                                       class="w-full bg-transparent border-0 outline-none text-xs font-medium hover:bg-slate-500/10 focus:bg-slate-500/10 rounded px-1.5 py-1 transition truncate">
+                                            </template>
+
                                             <!-- 7. NUMUNE TALEP TARİHİ (Akıllı Metin + Açılır Takvim) -->
                                             <template v-else-if="col.key === 'request_date'">
                                                 <div class="relative flex items-center justify-center group/date w-full">
@@ -9349,6 +9357,10 @@
                                                 <span>Model Adı</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('style_name', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
+                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.color_variant || 8) + '%' }">
+                                                <span>Renk / Varyant</span>
+                                                <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('color_variant', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
+                                            </th>
                                             <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.request_date || 7) + '%' }">
                                                 <span>Talep T.</span>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('request_date', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
@@ -9426,6 +9438,7 @@
                                             <td class="p-1 border-r border-slate-300 font-bold">{{ s.customer_name || '-' }}</td>
                                             <td class="p-1 border-r border-slate-300 font-mono font-bold">{{ s.style_no || '-' }}</td>
                                             <td class="p-1 border-r border-slate-300 font-semibold">{{ s.style_name || '-' }}</td>
+                                            <td class="p-1 border-r border-slate-300 font-medium">{{ s.color_variant || '-' }}</td>
                                             <td class="p-1 border-r border-slate-300 text-center font-mono">{{ s.request_date || '-' }}</td>
                                             <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.delivery_date || '-' }}</td>
                                             <td class="p-1 border-r border-slate-300 font-medium">{{ s.quantity_sizes || '-' }}</td>

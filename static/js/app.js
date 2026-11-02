@@ -12868,6 +12868,7 @@ window.__texflowApp = createApp({
             { key: 'customer_name', title: 'Müşteri', width: 135, sortable: true, filterable: true, align: 'left' },
             { key: 'style_name', title: 'Model Adı', width: 145, sortable: true, filterable: true, align: 'left' },
             { key: 'style_no', title: 'Model Kodu', width: 125, sortable: true, filterable: true, align: 'left' },
+            { key: 'color_variant', title: 'Renk / Varyant', width: 125, sortable: true, filterable: true, align: 'left' },
             { key: 'request_date', title: 'Talep Tarihi', width: 105, sortable: true, filterable: true, align: 'center' },
             { key: 'delivery_date', title: 'Teslim Tarihi', width: 115, sortable: true, filterable: true, align: 'center' },
             { key: 'quantity_sizes', title: 'Adet ve Beden', width: 155, sortable: false, filterable: true, align: 'left' },
@@ -13011,6 +13012,11 @@ window.__texflowApp = createApp({
                         if (!filtered.includes('notes')) {
                             const crIdx = filtered.indexOf('critique');
                             if (crIdx !== -1) filtered.splice(crIdx + 1, 0, 'notes');
+                        }
+                        if (!filtered.includes('color_variant')) {
+                            const sIdx = filtered.indexOf('style_no');
+                            if (sIdx !== -1) filtered.splice(sIdx + 1, 0, 'color_variant');
+                            else filtered.push('color_variant');
                         }
                         validKeys.forEach(k => {
                             if (!filtered.includes(k)) {
@@ -13991,6 +13997,7 @@ window.__texflowApp = createApp({
                     customer_name: '',
                     style_name: '',
                     style_no: '',
+                    color_variant: '',
                     request_date: today,
                     delivery_date: '',
                     quantity_sizes: '',
@@ -14309,6 +14316,7 @@ window.__texflowApp = createApp({
                         (s.customer_name && s.customer_name.toLowerCase().includes(q)) ||
                         (s.style_no && s.style_no.toLowerCase().includes(q)) ||
                         (s.style_name && s.style_name.toLowerCase().includes(q)) ||
+                        (s.color_variant && s.color_variant.toLowerCase().includes(q)) ||
                         (s.sample_type && s.sample_type.toLowerCase().includes(q)) ||
                         (s.season && s.season.toLowerCase().includes(q)) ||
                         (s.fabric_info && s.fabric_info.toLowerCase().includes(q)) ||
@@ -14433,6 +14441,7 @@ window.__texflowApp = createApp({
             customer_name: 9,
             style_no: 8,
             style_name: 10,
+            color_variant: 8,
             request_date: 6,
             delivery_date: 6,
             quantity_sizes: 8,
@@ -14473,6 +14482,7 @@ window.__texflowApp = createApp({
                 customer_name: 'Müşteri',
                 style_no: 'Model Kodu',
                 style_name: 'Model Adı',
+                color_variant: 'Renk / Varyant',
                 request_date: 'Talep T.',
                 delivery_date: 'Teslim T.',
                 quantity_sizes: 'Adet & Beden',

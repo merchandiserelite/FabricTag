@@ -462,6 +462,7 @@ def init_db():
         customer_name TEXT,
         style_name TEXT,
         style_no TEXT,
+        color_variant TEXT,
         request_date TEXT,
         delivery_date TEXT,
         quantity_sizes TEXT,
@@ -503,6 +504,8 @@ def init_db():
         cursor.execute("ALTER TABLE sample_items ADD COLUMN unit_meters_2 TEXT")
     if "unit_meters_3" not in existing_sample_cols:
         cursor.execute("ALTER TABLE sample_items ADD COLUMN unit_meters_3 TEXT")
+    if "color_variant" not in existing_sample_cols:
+        cursor.execute("ALTER TABLE sample_items ADD COLUMN color_variant TEXT")
     if "image_fit" not in existing_sample_cols:
         cursor.execute("ALTER TABLE sample_items ADD COLUMN image_fit TEXT DEFAULT 'contain'")
     if "display_order" not in existing_sample_cols:

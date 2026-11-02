@@ -6188,7 +6188,7 @@ def api_export_single_sample_talep_excel(sample_id: int, user: Dict[str, Any] = 
     company_id = user.get("company_id", 1)
 
     c.execute("""
-        SELECT id, sample_type, season, customer_name, style_name, style_no,
+        SELECT id, sample_type, season, customer_name, style_name, style_no, color_variant,
                request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes, critique, image_url, fabrictag_id, company_id
         FROM sample_items
         WHERE id = ?
@@ -6673,7 +6673,7 @@ def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends
     
     cols = [
         "id", "company_id", "image_url", "image_url_2", "image_fit", "sample_type", "season", "customer_name",
-        "style_name", "style_no", "request_date", "delivery_date", "quantity_sizes",
+        "style_name", "style_no", "color_variant", "request_date", "delivery_date", "quantity_sizes",
         "fabric_info", "fabric_info_2", "fabric_info_3", "unit_meters", "unit_meters_2", "unit_meters_3", "stage", "notes", "critique",
         "fabrictag_id", "fabrictag_id_2", "fabrictag_id_3", "display_order", "created_by", "created_at", "updated_at"
     ]
@@ -6692,6 +6692,7 @@ def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends
             LOWER(customer_name) LIKE ? OR
             LOWER(style_no) LIKE ? OR
             LOWER(style_name) LIKE ? OR
+            LOWER(COALESCE(color_variant, '')) LIKE ? OR
             LOWER(sample_type) LIKE ? OR
             LOWER(season) LIKE ? OR
             LOWER(fabric_info) LIKE ? OR
@@ -6699,7 +6700,7 @@ def api_get_samples(search: Optional[str] = None, user: Dict[str, Any] = Depends
             LOWER(COALESCE(fabric_info_3, '')) LIKE ? OR
             LOWER(stage) LIKE ?
         )"""
-        params.extend([q, q, q, q, q, q, q, q, q])
+        params.extend([q, q, q, q, q, q, q, q, q, q])
         
     query += " ORDER BY display_order ASC, id DESC"
     c.execute(query, params)
@@ -6737,6 +6738,7 @@ def api_create_sample(payload: Dict[str, Any], user: Dict[str, Any] = Depends(re
     customer_name = str(payload.get("customer_name") or "").strip()
     style_name = str(payload.get("style_name") or "").strip()
     style_no = str(payload.get("style_no") or "").strip()
+    color_variant = str(payload.get("color_variant") or "").strip()
     request_date = str(payload.get("request_date") or "").strip()
     delivery_date = str(payload.get("delivery_date") or "").strip()
     quantity_sizes = str(payload.get("quantity_sizes") or "").strip()
@@ -6764,13 +6766,13 @@ def api_create_sample(payload: Dict[str, Any], user: Dict[str, Any] = Depends(re
     
     c.execute("""
         INSERT INTO sample_items (
-            company_id, sample_type, season, customer_name, style_name, style_no,
+            company_id, sample_type, season, customer_name, style_name, style_no, color_variant,
             request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3,
             fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters, unit_meters_2, unit_meters_3,
             stage, notes, critique, image_fit, display_order, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        company_id, sample_type, season, customer_name, style_name, style_no,
+        company_id, sample_type, season, customer_name, style_name, style_no, color_variant,
         request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3,
         fabrictag_id, fabrictag_id_2, fabrictag_id_3, unit_meters, unit_meters_2, unit_meters_3,
         stage, notes, critique, image_fit, display_order, created_by
@@ -6789,7 +6791,7 @@ def api_update_sample_cell(sample_id: int, payload: Dict[str, Any], user: Dict[s
     value = payload.get("value")
     
     allowed_fields = {
-        "sample_type", "season", "customer_name", "style_name", "style_no",
+        "sample_type", "season", "customer_name", "style_name", "style_no", "color_variant",
         "request_date", "delivery_date", "quantity_sizes", "fabric_info",
         "fabric_info_2", "fabric_info_3", "fabrictag_id", "fabrictag_id_2", "fabrictag_id_3",
         "unit_meters", "unit_meters_2", "unit_meters_3", "stage", "notes", "critique", "image_fit", "display_order"
@@ -6883,7 +6885,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
     company_id = user.get("company_id") or 1
     role = user.get("role")
 
-    sql_cols = "id, image_url, sample_type, season, customer_name, style_name, style_no, request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3, unit_meters, unit_meters_2, unit_meters_3, stage, notes, critique, fabrictag_id, fabrictag_id_2, fabrictag_id_3, display_order"
+    sql_cols = "id, image_url, sample_type, season, customer_name, style_name, style_no, color_variant, request_date, delivery_date, quantity_sizes, fabric_info, fabric_info_2, fabric_info_3, unit_meters, unit_meters_2, unit_meters_3, stage, notes, critique, fabrictag_id, fabrictag_id_2, fabrictag_id_3, display_order"
 
     if role in ["superadmin", "masterdeveloper"]:
         query = f"SELECT {sql_cols} FROM sample_items WHERE 1=1"
@@ -6906,7 +6908,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
     fabric_details_map = {}
     fab_ids = set()
     for r in rows:
-        for fid_idx in [19, 20, 21]:
+        for fid_idx in [20, 21, 22]:
             if len(r) > fid_idx and r[fid_idx]:
                 fab_ids.add(r[fid_idx])
     fab_ids = list(fab_ids)
@@ -6986,7 +6988,7 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
     ws.title = "Numune Takip Listesi"
 
     headers = [
-        "Sıra", "Görsel", "Numune Türü", "Sezon", "Müşteri", "Model Adı", "Model Kodu",
+        "Sıra", "Görsel", "Numune Türü", "Sezon", "Müşteri", "Model Adı", "Model Kodu", "Renk / Varyant",
         "Talep Tarihi", "Teslim Tarihi", "Adet ve Beden", "Kumaş 1", "Birim Kullanım 1", "Kumaş 2", "Birim Kullanım 2", "Kumaş 3", "Birim Kullanım 3", "İşlem Aşaması", "Kritik", "Notlar"
     ]
 
@@ -7034,12 +7036,12 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
             if c.startswith('• '): c = c[2:].strip()
             return c
 
-        clean_critique = strip_html_clean(r[18]) # critique
-        clean_notes = strip_html_clean(r[17]) # notes
+        clean_critique = strip_html_clean(r[19]) # critique
+        clean_notes = strip_html_clean(r[18]) # notes
 
-        clean_fab_1 = clean_fabric_text_excel(r[10], fabric_details_map.get(r[17]))
-        clean_fab_2 = clean_fabric_text_excel(r[11], fabric_details_map.get(r[18]))
-        clean_fab_3 = clean_fabric_text_excel(r[12], fabric_details_map.get(r[19]))
+        clean_fab_1 = clean_fabric_text_excel(r[11], fabric_details_map.get(r[20]))
+        clean_fab_2 = clean_fabric_text_excel(r[12], fabric_details_map.get(r[21]))
+        clean_fab_3 = clean_fabric_text_excel(r[13], fabric_details_map.get(r[22]))
 
         row_data = [
             idx,
@@ -7049,16 +7051,17 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
             r[4] or "",
             r[5] or "",
             r[6] or "",
-            r[7] or "",
-            r[8] or "",
-            r[9] or "",
+            r[7] or "",  # Renk / Varyant
+            r[8] or "",  # Talep Tarihi
+            r[9] or "",  # Teslim Tarihi
+            r[10] or "", # Adet ve Beden
             clean_fab_1,
-            r[13] or "",
+            r[14] or "", # Birim Kullanım 1
             clean_fab_2,
-            r[14] or "",
+            r[15] or "", # Birim Kullanım 2
             clean_fab_3,
-            r[15] or "",
-            r[16] or "",
+            r[16] or "", # Birim Kullanım 3
+            r[17] or "", # İşlem Aşaması
             clean_critique,
             clean_notes
         ]
@@ -7145,13 +7148,19 @@ def api_export_samples_excel(ids: Optional[str] = None, user: Dict[str, Any] = D
         "E": 14,  # Müşteri
         "F": 16,  # Model Adı
         "G": 13,  # Model Kodu
-        "H": 13,  # Talep Tarihi
-        "I": 13,  # Teslim Tarihi
-        "J": 14,  # Adet ve Beden
-        "K": 36,  # Kumaşı
-        "L": 14,  # Birim Metraj (m)
-        "M": 16,  # İşlem Aşaması
-        "N": 30   # Kritik / Notlar
+        "H": 14,  # Renk / Varyant
+        "I": 13,  # Talep Tarihi
+        "J": 13,  # Teslim Tarihi
+        "K": 14,  # Adet ve Beden
+        "L": 30,  # Kumaş 1
+        "M": 14,  # Birim Kullanım 1
+        "N": 30,  # Kumaş 2
+        "O": 14,  # Birim Kullanım 2
+        "P": 30,  # Kumaş 3
+        "Q": 14,  # Birim Kullanım 3
+        "R": 16,  # İşlem Aşaması
+        "S": 26,  # Kritik
+        "T": 26   # Notlar
     }
     for col_let, w in col_widths.items():
         ws.column_dimensions[col_let].width = w
@@ -7182,7 +7191,7 @@ def api_export_single_sample_talep_excel(sample_id: int, user: Dict[str, Any] = 
     company_id = user.get("company_id", 1)
 
     c.execute("""
-        SELECT id, sample_type, season, customer_name, style_name, style_no,
+        SELECT id, sample_type, season, customer_name, style_name, style_no, color_variant,
                request_date, delivery_date, quantity_sizes, fabric_info, unit_meters, stage, notes, critique, image_url, fabrictag_id, company_id
         FROM sample_items
         WHERE id = ?
