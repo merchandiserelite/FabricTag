@@ -13279,8 +13279,10 @@ window.__texflowApp = createApp({
         };
 
         const clearSampleFabricLink = async (sample, slot = 1) => {
+            const infoField = slot === 3 ? 'fabric_info_3' : (slot === 2 ? 'fabric_info_2' : 'fabric_info');
             const idField = slot === 3 ? 'fabrictag_id_3' : (slot === 2 ? 'fabrictag_id_2' : 'fabrictag_id');
             const detailField = slot === 3 ? 'fabric_detail_3' : (slot === 2 ? 'fabric_detail_2' : 'fabric_detail');
+            sample[infoField] = '';
             sample[idField] = null;
             sample[detailField] = null;
             sample._fabCache = null;
@@ -13289,7 +13291,11 @@ window.__texflowApp = createApp({
                     method: 'POST',
                     body: JSON.stringify({ field: idField, value: null })
                 });
-                showToast(`FabricTag Kumaş ${slot} bağlantısı kaldırıldı.`, 'info');
+                await apiFetch(`/api/samples/${sample.id}/update-cell`, {
+                    method: 'POST',
+                    body: JSON.stringify({ field: infoField, value: '' })
+                });
+                showToast(`Kumaş ${slot} bağlantısı ve bilgisi temizlendi.`, 'info');
             } catch (err) {}
             refreshIcons();
         };
@@ -14514,8 +14520,29 @@ window.__texflowApp = createApp({
             localStorage.setItem('sample_print_col_widths', JSON.stringify(samplePrintColWidths.value));
         };
 
+        const samplePrintHiddenCols = ref([]);
+
+        const removeSamplePrintCol = (colKey) => {
+            if (!samplePrintHiddenCols.value.includes(colKey)) {
+                samplePrintHiddenCols.value.push(colKey);
+                distributeSamplePrintColWidths();
+                showToast(`"${getSamplePrintColTitle(colKey)}" sütunu yazdırma sayfasından kaldırıldı.`, 'info');
+            }
+        };
+
+        const restoreSamplePrintCol = (colKey) => {
+            samplePrintHiddenCols.value = samplePrintHiddenCols.value.filter(k => k !== colKey);
+            distributeSamplePrintColWidths();
+        };
+
+        const restoreAllSamplePrintCols = () => {
+            samplePrintHiddenCols.value = [];
+            distributeSamplePrintColWidths();
+            showToast('Tüm sütunlar yazdırma sayfasına geri getirildi.', 'info');
+        };
+
         const distributeSamplePrintColWidths = () => {
-            const keys = Object.keys(samplePrintColWidths.value);
+            const keys = Object.keys(samplePrintColWidths.value).filter(k => !samplePrintHiddenCols.value.includes(k));
             const total = keys.reduce((sum, k) => sum + (parseFloat(samplePrintColWidths.value[k]) || 0), 0);
             if (total <= 0) return;
             const factor = 100 / total;
@@ -14581,6 +14608,7 @@ window.__texflowApp = createApp({
         };
 
         const resetSamplePrintColWidths = () => {
+            samplePrintHiddenCols.value = [];
             samplePrintColWidths.value = { ...defaultSamplePrintColWidths };
             localStorage.removeItem('sample_print_col_widths');
             showToast('Yazdırma sütun genişlikleri varsayılana sıfırlandı.', 'info');
@@ -14809,6 +14837,7 @@ window.__texflowApp = createApp({
         };
 
         const openSamplePrintModal = () => {
+            samplePrintHiddenCols.value = [];
             const savedOrient = localStorage.getItem('sample_print_orientation');
             if (savedOrient) samplePrintOrientation.value = savedOrient;
             const savedScale = localStorage.getItem('sample_print_scale');
@@ -15210,6 +15239,10 @@ return {
             samplePrintOrientation,
             samplePrintScale,
             samplePrintColWidths,
+            samplePrintHiddenCols,
+            removeSamplePrintCol,
+            restoreSamplePrintCol,
+            restoreAllSamplePrintCols,
             samplePrintRows,
             openSamplePrintModal,
             setSamplePrintOrientation,

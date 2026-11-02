@@ -8681,18 +8681,18 @@
                                                         </div>
                                                         
                                                         <!-- Hızlı Sığdırma Seçenekleri (Hover Butonları) -->
-                                                        <div v-if="sample.image_url" class="absolute top-0.5 left-0.5 hidden group-hover:flex items-center gap-0.5 bg-black/85 rounded p-0.5 z-10 shadow">
+                                                        <div v-if="sample.image_url" class="absolute top-0.5 left-0.5 hidden group-hover:flex items-center gap-0.5 bg-black/90 rounded p-0.5 z-10 shadow border border-white/20 select-none">
                                                             <button type="button"
                                                                     @click.stop="setSampleImageFit(sample, 'cover')"
-                                                                    class="px-1 py-0.5 rounded text-[7.5px] font-bold leading-none transition cursor-pointer"
-                                                                    :class="sample.image_fit === 'cover' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-700'"
+                                                                    class="px-1.5 py-0.5 rounded text-[8px] font-extrabold leading-none transition cursor-pointer text-white !text-white"
+                                                                    :class="sample.image_fit === 'cover' ? 'bg-emerald-600 shadow-sm' : 'bg-transparent hover:bg-white/20 text-white/90 hover:text-white'"
                                                                     title="Enden Sığdır (Genişlik doldur)">
                                                                 En
                                                             </button>
                                                             <button type="button"
                                                                     @click.stop="setSampleImageFit(sample, 'contain')"
-                                                                    class="px-1 py-0.5 rounded text-[7.5px] font-bold leading-none transition cursor-pointer"
-                                                                    :class="(sample.image_fit || 'contain') === 'contain' ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-700'"
+                                                                    class="px-1.5 py-0.5 rounded text-[8px] font-extrabold leading-none transition cursor-pointer text-white !text-white"
+                                                                    :class="(sample.image_fit || 'contain') === 'contain' ? 'bg-indigo-600 shadow-sm' : 'bg-transparent hover:bg-white/20 text-white/90 hover:text-white'"
                                                                     title="Boydan Sığdır (Tam orantılı göster)">
                                                                 Boy
                                                             </button>
@@ -8814,7 +8814,7 @@
                                             <template v-else-if="col.key === 'fabric_info' || col.key === 'fabric_info_2' || col.key === 'fabric_info_3'">
                                                 <!-- Dolu Kumaş Gösterimi: Çok satırlı temiz layout -->
                                                 <div v-if="(getSampleFabricRaw(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) || getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) || getSampleFabricDetail(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))) && !sample['_editingManualFabric_' + col.key]"
-                                                     class="flex items-center justify-between gap-1 overflow-hidden py-0.5 w-full group/fab">
+                                                     class="flex items-center justify-between gap-1 overflow-hidden py-0.5 w-full group/fab pr-1">
                                                     <div class="truncate leading-tight flex-1 min-w-0 cursor-pointer"
                                                          @dblclick="sample['_editingManualFabric_' + col.key] = true"
                                                          :title="getSampleFabricTooltip(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))">
@@ -8834,7 +8834,14 @@
                                                             {{ getSampleFabricLine3(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) }}
                                                         </div>
                                                     </div>
-                                                    <div class="flex items-center gap-0.5 shrink-0">
+                                                    <div class="flex items-center gap-1 shrink-0 ml-1">
+                                                        <button v-if="getSampleFabricRaw(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) || getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
+                                                                @click.stop="clearSampleFabricLink(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
+                                                                type="button"
+                                                                class="w-5 h-5 rounded flex items-center justify-center shrink-0 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer opacity-0 pointer-events-none group-hover/fab:opacity-100 group-hover/fab:pointer-events-auto transition-opacity"
+                                                                title="Kumaş Bağlantısını Kaldır / Temizle">
+                                                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                                        </button>
                                                         <button @click.stop="openSampleFabricModal(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
                                                                 type="button"
                                                                 class="w-6 h-6 rounded flex items-center justify-center hover:bg-emerald-600 text-slate-400 hover:text-white shrink-0 cursor-pointer transition-colors"
@@ -8842,31 +8849,26 @@
                                                                 :title="getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) ? 'FabricTag ile Bağlı (Kartela ID: #' + getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) + ') - Değiştirmek için tıklayın' : 'FabricTag Kumaş Deposundan Seç & Ata'">
                                                             <i data-lucide="layers" class="w-3.5 h-3.5" :class="getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1)) ? 'text-emerald-500 hover:text-white' : ''"></i>
                                                         </button>
-                                                        <button v-if="getSampleFabricId(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
-                                                                @click.stop="clearSampleFabricLink(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
-                                                                type="button"
-                                                                class="w-5 h-5 rounded flex items-center justify-center shrink-0 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer opacity-0 pointer-events-none group-hover/fab:opacity-100 group-hover/fab:pointer-events-auto transition-opacity"
-                                                                title="FabricTag Bağlantısını Kaldır">
-                                                            <i data-lucide="x" class="w-3 h-3"></i>
-                                                        </button>
                                                     </div>
                                                 </div>
 
                                                 <!-- Boş veya Düzenleme Modu -->
-                                                <div v-else class="flex items-center justify-between gap-1 w-full group/fab">
+                                                <div v-else class="flex items-center justify-between gap-1 w-full group/fab pr-1">
                                                     <input :value="sample[col.key]"
                                                            @blur="sample['_editingManualFabric_' + col.key] = false"
                                                            @keyup.enter="$event.target.blur()"
                                                            @change="updateSampleCell(sample, col.key, $event.target.value)"
                                                            :placeholder="col.title + ' bilgisi / FT...'"
                                                            class="flex-1 min-w-0 bg-transparent border-0 outline-none text-xs font-medium hover:bg-slate-500/10 focus:bg-slate-500/10 rounded px-1.5 py-1 transition truncate">
-                                                    <button @click.stop="openSampleFabricModal(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
-                                                            type="button"
-                                                            class="w-6 h-6 rounded flex items-center justify-center hover:bg-emerald-600 text-slate-400 hover:text-white shrink-0 cursor-pointer transition-colors"
-                                                            :class="isDarkMode ? 'bg-slate-800' : 'bg-slate-200'"
-                                                            title="FabricTag Kumaş Deposundan Seç & Ata">
-                                                        <i data-lucide="layers" class="w-3.5 h-3.5"></i>
-                                                    </button>
+                                                    <div class="flex items-center gap-1 shrink-0 ml-1">
+                                                        <button @click.stop="openSampleFabricModal(sample, col.key === 'fabric_info_3' ? 3 : (col.key === 'fabric_info_2' ? 2 : 1))"
+                                                                type="button"
+                                                                class="w-6 h-6 rounded flex items-center justify-center hover:bg-emerald-600 text-slate-400 hover:text-white shrink-0 cursor-pointer transition-colors"
+                                                                :class="isDarkMode ? 'bg-slate-800' : 'bg-slate-200'"
+                                                                title="FabricTag Kumaş Deposundan Seç & Ata">
+                                                            <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </template>
 
@@ -9270,6 +9272,29 @@
                                     </div>
                                 </div>
 
+                                <!-- Kaldırılan Sütunları Geri Getirme Çubuğu -->
+                                <div v-if="samplePrintHiddenCols.length > 0"
+                                     class="flex items-center gap-1.5 bg-slate-900 border border-slate-700 px-3 py-1 rounded-xl text-xs text-slate-200 shadow-inner">
+                                    <span class="text-[11px] text-amber-400 font-bold flex items-center gap-1">
+                                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        Gizlenen ({{ samplePrintHiddenCols.length }}):
+                                    </span>
+                                    <div class="flex items-center gap-1 flex-wrap">
+                                        <button v-for="cKey in samplePrintHiddenCols" :key="cKey"
+                                                @click="restoreSamplePrintCol(cKey)"
+                                                type="button"
+                                                class="bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white text-[10px] font-bold px-2 py-0.5 rounded-lg border border-slate-700 hover:border-emerald-500 transition cursor-pointer flex items-center gap-1"
+                                                :title="'Yazdırma sayfasına geri ekle: ' + getSamplePrintColTitle(cKey)">
+                                            <span>+ {{ getSamplePrintColTitle(cKey) }}</span>
+                                        </button>
+                                        <button @click="restoreAllSamplePrintCols"
+                                                type="button"
+                                                class="text-[10px] text-emerald-400 hover:text-emerald-300 hover:underline font-bold ml-1 cursor-pointer">
+                                            Tümünü Geri Getir
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <!-- Excel İndir -->
                                 <button @click="exportSamplesExcel"
                                         type="button"
@@ -9329,98 +9354,158 @@
                                        class="w-full text-left border-collapse border border-slate-400 text-xs">
                                     <thead>
                                         <tr class="bg-slate-100 border-b border-slate-400 text-[10px] font-black uppercase text-slate-800">
-                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.index || 3) + '%' }">
-                                                <span>Sıra</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('index')" class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.index || 3) + '%' }">
+                                                <div class="flex items-center justify-center gap-0.5">
+                                                    <span>Sıra</span>
+                                                    <button @click.stop="removeSamplePrintCol('index')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Sıra sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('index', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.image || 7) + '%' }">
-                                                <span>Görsel</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('image')" class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.image || 7) + '%' }">
+                                                <div class="flex items-center justify-center gap-0.5">
+                                                    <span>Görsel</span>
+                                                    <button @click.stop="removeSamplePrintCol('image')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Görsel sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('image', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.sample_type || 7) + '%' }">
-                                                <span>Numune Türü</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('sample_type')" class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.sample_type || 7) + '%' }">
+                                                <div class="flex items-center justify-center gap-0.5">
+                                                    <span>Numune Türü</span>
+                                                    <button @click.stop="removeSamplePrintCol('sample_type')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Numune Türü sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('sample_type', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.season || 7) + '%' }">
-                                                <span>Sezon</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('season')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.season || 7) + '%' }">
+                                                <div class="flex items-center justify-between gap-0.5">
+                                                    <span>Sezon</span>
+                                                    <button @click.stop="removeSamplePrintCol('season')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Sezon sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('season', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.customer_name || 10) + '%' }">
-                                                <span>Müşteri</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('customer_name')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.customer_name || 10) + '%' }">
+                                                <div class="flex items-center justify-between gap-0.5">
+                                                    <span>Müşteri</span>
+                                                    <button @click.stop="removeSamplePrintCol('customer_name')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Müşteri sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('customer_name', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_no || 8) + '%' }">
-                                                <span>Model Kodu</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('style_no')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_no || 8) + '%' }">
+                                                <div class="flex items-center justify-between gap-0.5">
+                                                    <span>Model Kodu</span>
+                                                    <button @click.stop="removeSamplePrintCol('style_no')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Model Kodu sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('style_no', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_name || 11) + '%' }">
-                                                <span>Model Adı</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('style_name')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.style_name || 11) + '%' }">
+                                                <div class="flex items-center justify-between gap-0.5">
+                                                    <span>Model Adı</span>
+                                                    <button @click.stop="removeSamplePrintCol('style_name')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Model Adı sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('style_name', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.color_variant || 8) + '%' }">
-                                                <span>Renk / Varyant</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('color_variant')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.color_variant || 8) + '%' }">
+                                                <div class="flex items-center justify-between gap-0.5">
+                                                    <span>Renk / Varyant</span>
+                                                    <button @click.stop="removeSamplePrintCol('color_variant')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Renk / Varyant sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('color_variant', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.request_date || 7) + '%' }">
-                                                <span>Talep T.</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('request_date')" class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.request_date || 7) + '%' }">
+                                                <div class="flex items-center justify-center gap-0.5">
+                                                    <span>Talep T.</span>
+                                                    <button @click.stop="removeSamplePrintCol('request_date')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Talep Tarihi sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('request_date', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.delivery_date || 7) + '%' }">
-                                                <span>Teslim T.</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('delivery_date')" class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.delivery_date || 7) + '%' }">
+                                                <div class="flex items-center justify-center gap-0.5">
+                                                    <span>Teslim T.</span>
+                                                    <button @click.stop="removeSamplePrintCol('delivery_date')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Teslim Tarihi sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('delivery_date', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.quantity_sizes || 8) + '%' }">
-                                                <span>Adet & Beden</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('quantity_sizes')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.quantity_sizes || 8) + '%' }">
+                                                <div class="flex items-center justify-between gap-0.5">
+                                                    <span>Adet & Beden</span>
+                                                    <button @click.stop="removeSamplePrintCol('quantity_sizes')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Adet & Beden sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('quantity_sizes', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info || 10) + '%' }">
-                                                <span>Kumaş 1</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('fabric_info')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info || 10) + '%' }">
+                                                <div class="flex items-center justify-between gap-0.5">
+                                                    <span>Kumaş 1</span>
+                                                    <button @click.stop="removeSamplePrintCol('fabric_info')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Kumaş 1 sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('fabric_info', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters || 4) + '%' }">
-                                                <span>Birim Kul. 1</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('unit_meters')" class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters || 4) + '%' }">
+                                                <div class="flex items-center justify-center gap-0.5">
+                                                    <span>Birim Kul. 1</span>
+                                                    <button @click.stop="removeSamplePrintCol('unit_meters')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Birim Kullanım 1 sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('unit_meters', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
                                             <template v-if="sampleActiveFabricCount >= 2">
-                                                <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info_2 || 9) + '%' }">
-                                                    <span>Kumaş 2</span>
+                                                <th v-if="!samplePrintHiddenCols.includes('fabric_info_2')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info_2 || 9) + '%' }">
+                                                    <div class="flex items-center justify-between gap-0.5">
+                                                        <span>Kumaş 2</span>
+                                                        <button @click.stop="removeSamplePrintCol('fabric_info_2')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Kumaş 2 sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                    </div>
                                                     <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('fabric_info_2', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                                 </th>
-                                                <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters_2 || 4) + '%' }">
-                                                    <span>Birim Kul. 2</span>
+                                                <th v-if="!samplePrintHiddenCols.includes('unit_meters_2')" class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters_2 || 4) + '%' }">
+                                                    <div class="flex items-center justify-center gap-0.5">
+                                                        <span>Birim Kul. 2</span>
+                                                        <button @click.stop="removeSamplePrintCol('unit_meters_2')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Birim Kullanım 2 sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                    </div>
                                                     <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('unit_meters_2', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                                 </th>
                                             </template>
                                             <template v-if="sampleActiveFabricCount >= 3">
-                                                <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info_3 || 9) + '%' }">
-                                                    <span>Kumaş 3</span>
+                                                <th v-if="!samplePrintHiddenCols.includes('fabric_info_3')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.fabric_info_3 || 9) + '%' }">
+                                                    <div class="flex items-center justify-between gap-0.5">
+                                                        <span>Kumaş 3</span>
+                                                        <button @click.stop="removeSamplePrintCol('fabric_info_3')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Kumaş 3 sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                    </div>
                                                     <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('fabric_info_3', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                                 </th>
-                                                <th class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters_3 || 4) + '%' }">
-                                                    <span>Birim Kul. 3</span>
+                                                <th v-if="!samplePrintHiddenCols.includes('unit_meters_3')" class="p-1 border-r border-slate-400 text-center relative select-none" :style="{ width: (samplePrintColWidths.unit_meters_3 || 4) + '%' }">
+                                                    <div class="flex items-center justify-center gap-0.5">
+                                                        <span>Birim Kul. 3</span>
+                                                        <button @click.stop="removeSamplePrintCol('unit_meters_3')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Birim Kullanım 3 sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                    </div>
                                                     <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('unit_meters_3', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                                 </th>
                                             </template>
-                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.critique || 8) + '%' }">
-                                                <span>Kritik</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('critique')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.critique || 8) + '%' }">
+                                                <div class="flex items-center justify-between gap-0.5">
+                                                    <span>Kritik</span>
+                                                    <button @click.stop="removeSamplePrintCol('critique')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Kritik sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('critique', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.notes || 8) + '%' }">
-                                                <span>Notlar</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('notes')" class="p-1 border-r border-slate-400 relative select-none" :style="{ width: (samplePrintColWidths.notes || 8) + '%' }">
+                                                <div class="flex items-center justify-between gap-0.5">
+                                                    <span>Notlar</span>
+                                                    <button @click.stop="removeSamplePrintCol('notes')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Notlar sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('notes', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
-                                            <th class="p-1 text-center relative select-none" :style="{ width: (samplePrintColWidths.stage || 6) + '%' }">
-                                                <span>Aşama</span>
+                                            <th v-if="!samplePrintHiddenCols.includes('stage')" class="p-1 text-center relative select-none" :style="{ width: (samplePrintColWidths.stage || 6) + '%' }">
+                                                <div class="flex items-center justify-center gap-0.5">
+                                                    <span>Aşama</span>
+                                                    <button @click.stop="removeSamplePrintCol('stage')" type="button" class="no-print opacity-40 hover:opacity-100 text-slate-400 hover:text-rose-600 rounded p-0.5 transition cursor-pointer" title="Aşama sütununu bu yazdırmadan kaldır"><svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                                                </div>
                                                 <div class="resizer no-print" @mousedown.stop.prevent="startSamplePrintColResize('stage', $event)" title="Sütun genişliğini ayarlamak için sürükleyin"></div>
                                             </th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-300">
                                         <tr v-for="(s, rowIdx) in pageRows" :key="'pr-'+s.id" class="text-[10px] leading-tight">
-                                            <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">
+                                            <td v-if="!samplePrintHiddenCols.includes('index')" class="p-1 border-r border-slate-300 text-center font-mono font-bold">
                                                 {{ (pageIdx * (samplePrintRowsPerPage || pageRows.length)) + rowIdx + 1 }}
                                             </td>
-                                            <td class="p-1 border-r border-slate-300 text-center align-middle overflow-hidden">
+                                            <td v-if="!samplePrintHiddenCols.includes('image')" class="p-1 border-r border-slate-300 text-center align-middle overflow-hidden">
                                                 <div class="w-full flex items-center justify-center">
                                                     <img v-if="s.image_url" 
                                                          :src="s.image_url" 
@@ -9433,42 +9518,42 @@
                                                     <span v-else class="text-[8px] text-slate-400 font-bold">-</span>
                                                 </div>
                                             </td>
-                                            <td class="p-1 border-r border-slate-300 text-center font-bold">{{ s.sample_type || '-' }}</td>
-                                            <td class="p-1 border-r border-slate-300 font-medium">{{ s.season || '-' }}</td>
-                                            <td class="p-1 border-r border-slate-300 font-bold">{{ s.customer_name || '-' }}</td>
-                                            <td class="p-1 border-r border-slate-300 font-mono font-bold">{{ s.style_no || '-' }}</td>
-                                            <td class="p-1 border-r border-slate-300 font-semibold">{{ s.style_name || '-' }}</td>
-                                            <td class="p-1 border-r border-slate-300 font-medium">{{ s.color_variant || '-' }}</td>
-                                            <td class="p-1 border-r border-slate-300 text-center font-mono">{{ s.request_date || '-' }}</td>
-                                            <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.delivery_date || '-' }}</td>
-                                            <td class="p-1 border-r border-slate-300 font-medium">{{ s.quantity_sizes || '-' }}</td>
-                                            <td class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
+                                            <td v-if="!samplePrintHiddenCols.includes('sample_type')" class="p-1 border-r border-slate-300 text-center font-bold">{{ s.sample_type || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('season')" class="p-1 border-r border-slate-300 font-medium">{{ s.season || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('customer_name')" class="p-1 border-r border-slate-300 font-bold">{{ s.customer_name || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('style_no')" class="p-1 border-r border-slate-300 font-mono font-bold">{{ s.style_no || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('style_name')" class="p-1 border-r border-slate-300 font-semibold">{{ s.style_name || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('color_variant')" class="p-1 border-r border-slate-300 font-medium">{{ s.color_variant || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('request_date')" class="p-1 border-r border-slate-300 text-center font-mono">{{ s.request_date || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('delivery_date')" class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.delivery_date || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('quantity_sizes')" class="p-1 border-r border-slate-300 font-medium">{{ s.quantity_sizes || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('fabric_info')" class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
                                                 {{ getSamplePrintFabric(s, 1) }}
                                             </td>
-                                            <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters || '-' }}</td>
+                                            <td v-if="!samplePrintHiddenCols.includes('unit_meters')" class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters || '-' }}</td>
                                             <template v-if="sampleActiveFabricCount >= 2">
-                                                <td class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
+                                                <td v-if="!samplePrintHiddenCols.includes('fabric_info_2')" class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
                                                     {{ getSamplePrintFabric(s, 2) }}
                                                 </td>
-                                                <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters_2 || '-' }}</td>
+                                                <td v-if="!samplePrintHiddenCols.includes('unit_meters_2')" class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters_2 || '-' }}</td>
                                             </template>
                                             <template v-if="sampleActiveFabricCount >= 3">
-                                                <td class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
+                                                <td v-if="!samplePrintHiddenCols.includes('fabric_info_3')" class="p-1 border-r border-slate-300 text-[9.5px] font-medium text-slate-800 leading-tight">
                                                     {{ getSamplePrintFabric(s, 3) }}
                                                 </td>
-                                                <td class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters_3 || '-' }}</td>
+                                                <td v-if="!samplePrintHiddenCols.includes('unit_meters_3')" class="p-1 border-r border-slate-300 text-center font-mono font-bold">{{ s.unit_meters_3 || '-' }}</td>
                                             </template>
-                                            <td class="p-1 border-r border-slate-300 text-[9px] overflow-hidden" :title="getCleanCritique(s.critique)">
+                                            <td v-if="!samplePrintHiddenCols.includes('critique')" class="p-1 border-r border-slate-300 text-[9px] overflow-hidden" :title="getCleanCritique(s.critique)">
                                                 <div class="line-clamp-2 w-full block font-normal leading-tight text-slate-800">
                                                     {{ getCleanCritique(s.critique) || '-' }}
                                                 </div>
                                             </td>
-                                            <td class="p-1 border-r border-slate-300 text-[9px] overflow-hidden" :title="getCleanCritique(s.notes)">
+                                            <td v-if="!samplePrintHiddenCols.includes('notes')" class="p-1 border-r border-slate-300 text-[9px] overflow-hidden" :title="getCleanCritique(s.notes)">
                                                 <div class="line-clamp-2 w-full block font-normal leading-tight text-slate-800">
                                                     {{ getCleanCritique(s.notes) || '-' }}
                                                 </div>
                                             </td>
-                                            <td class="p-1 text-center font-semibold text-slate-900">
+                                            <td v-if="!samplePrintHiddenCols.includes('stage')" class="p-1 text-center font-semibold text-slate-900">
                                                 <span>{{ s.stage || '-' }}</span>
                                             </td>
                                         </tr>
@@ -17209,7 +17294,7 @@
 <!-- SheetJS for Native .xlsx generation -->
 <script src="/static/js/xlsx.full.min.js"></script>
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20261101_sidebar_btn_v1"></script>
+<script src="/static/js/app.js?v=20261102_numune_print_v2"></script>
 
 </body>
 </html>
