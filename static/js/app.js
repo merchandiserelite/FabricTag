@@ -11382,6 +11382,11 @@ window.__texflowApp = createApp({
             setTimeout(() => scrollToCurrentWeek(false), 300);
             refreshIcons();
 
+            // Arka planda sessizce yeni surum guncelleme denetimi (Antigravity modeli)
+            setTimeout(() => {
+                checkSystemUpdates(false);
+            }, 3500);
+
             // Dismiss Instant Splash Screen
             const splashEl = document.getElementById('texflow-splash');
             if (splashEl) {
@@ -14881,7 +14886,101 @@ window.__texflowApp = createApp({
         };
 
 
+        // ----------------- OTOMATİK SİSTEM GÜNCELLEME (UPDATE MANAGER) -----------------
+        const systemVersion = ref('v2.9.2');
+        const systemUpdateInfo = ref({
+            update_available: false,
+            restart_required: false,
+            commits_behind: 0,
+            channel: 'stable',
+            current_commit: '',
+            remote_commit: '',
+            remote_commit_message: '',
+            remote_commit_date: '',
+            last_checked: null,
+            isChecking: false,
+            isUpdating: false,
+            isRestarting: false
+        });
+
+        const checkSystemUpdates = async (showToastNotice = false) => {
+            if (systemUpdateInfo.value.isChecking) return;
+            systemUpdateInfo.value.isChecking = true;
+            try {
+                const res = await apiFetch('/api/system/check-updates');
+                if (res) {
+                    systemUpdateInfo.value.update_available = !!res.update_available;
+                    systemUpdateInfo.value.restart_required = !!res.restart_required;
+                    systemUpdateInfo.value.commits_behind = res.commits_behind || 0;
+                    systemUpdateInfo.value.channel = res.channel || 'stable';
+                    systemUpdateInfo.value.current_commit = res.current_commit || '';
+                    systemUpdateInfo.value.remote_commit = res.remote_commit || '';
+                    systemUpdateInfo.value.remote_commit_message = res.remote_commit_message || '';
+                    systemUpdateInfo.value.remote_commit_date = res.remote_commit_date || '';
+                    systemUpdateInfo.value.last_checked = res.last_checked || new Date().toLocaleTimeString();
+                    if (res.current_version) {
+                        systemVersion.value = res.current_version;
+                    }
+
+                    if (showToastNotice) {
+                        if (res.update_available) {
+                            showToast(`Yeni güncelleme mevcut! (${res.commits_behind || 1} yeni geliştirme)`, 'info');
+                        } else {
+                            showToast('Sisteminiz güncel. Herhangi bir yeni güncelleme bulunmuyor.', 'success');
+                        }
+                    }
+                }
+            } catch (err) {
+                if (showToastNotice) {
+                    showToast('Güncelleme denetlenirken sunucuya ulaşılamadı.', 'error');
+                }
+            } finally {
+                systemUpdateInfo.value.isChecking = false;
+                refreshIcons();
+            }
+        };
+
+        const applySystemUpdate = async () => {
+            if (systemUpdateInfo.value.isUpdating) return;
+            systemUpdateInfo.value.isUpdating = true;
+            showToast('Güncelleme indiriliyor ve güvenli yedek alınıyor...', 'info');
+            try {
+                const res = await apiFetch('/api/system/apply-updates', { method: 'POST' });
+                if (res && res.status === 'success') {
+                    systemUpdateInfo.value.update_available = false;
+                    systemUpdateInfo.value.restart_required = true;
+                    showToast(res.message || 'Güncelleme başarıyla yüklendi! Sistemi yeniden başlatabilirsiniz.', 'success');
+                } else {
+                    showToast(res?.message || 'Güncelleme uygulanamadı.', 'error');
+                }
+            } catch (err) {
+                showToast('Güncelleme yüklenirken bir hata oluştu: ' + (err.message || err), 'error');
+            } finally {
+                systemUpdateInfo.value.isUpdating = false;
+                refreshIcons();
+            }
+        };
+
+        const restartSystemServer = async () => {
+            if (systemUpdateInfo.value.isRestarting) return;
+            systemUpdateInfo.value.isRestarting = true;
+            showToast('Sunucu yeniden başlatılıyor, lütfen bekleyin...', 'info');
+            try {
+                await apiFetch('/api/system/restart', { method: 'POST' });
+            } catch (e) {
+                // Sunucu yeniden baslarken baglanti kopmasi dogaldir
+            }
+            setTimeout(() => {
+                window.location.reload();
+            }, 4500);
+        };
+
 return {
+            systemVersion,
+            systemUpdateInfo,
+            checkSystemUpdates,
+            applySystemUpdate,
+            restartSystemServer,
             currentUser,
             token,
             loading,

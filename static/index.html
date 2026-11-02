@@ -1613,7 +1613,7 @@
                     <img src="/static/texflow_logo.png" alt="TexFlow Logo" class="w-9 h-9 rounded-xl object-cover shadow-sm border border-emerald-500/30">
                     <div>
                         <div class="font-extrabold text-sm flex items-center gap-1.5" :class="isDarkMode ? 'text-white' : 'text-slate-900'">
-                            TexFlow <span class="text-[10px] bg-theme-light text-theme px-1.5 py-0.2 rounded font-mono">v2.9</span>
+                            TexFlow <span class="text-[10px] bg-theme-light text-theme px-1.5 py-0.2 rounded font-mono">{{ systemVersion || 'v2.9.2' }}</span>
                         </div>
                         <div class="text-[11px] text-slate-400 truncate max-w-[140px]">{{ currentUser.company_name }}</div>
                     </div>
@@ -1629,6 +1629,45 @@
             </div>
 
 
+
+            <!-- İNCE KİBAR GÜNCELLEME BİLDİRİM BARI (ANTIGRAVITY TARZI) -->
+            <div v-if="systemUpdateInfo.update_available || systemUpdateInfo.restart_required"
+                 class="mx-3 mt-2 mb-1 p-2 rounded-xl border transition-all duration-300 shadow-sm shrink-0"
+                 :class="systemUpdateInfo.restart_required 
+                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-300' 
+                    : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'">
+                <div class="flex items-center justify-between gap-1.5">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="w-2 h-2 rounded-full shrink-0"
+                              :class="systemUpdateInfo.restart_required ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400 animate-ping'"></span>
+                        <div class="min-w-0">
+                            <div class="text-[10.5px] font-bold truncate flex items-center gap-1">
+                                <span v-if="systemUpdateInfo.restart_required">Yeniden Başlatın</span>
+                                <span v-else>Yeni Güncelleme!</span>
+                            </div>
+                            <div class="text-[9px] text-slate-400 truncate max-w-[130px]" :title="systemUpdateInfo.remote_commit_message || ''">
+                                {{ systemUpdateInfo.restart_required ? 'Değişiklikleri aktifleştirin' : (systemUpdateInfo.remote_commit_message || 'Yeni sürüm hazır') }}
+                            </div>
+                        </div>
+                    </div>
+                    <button v-if="systemUpdateInfo.restart_required"
+                            @click="restartSystemServer"
+                            :disabled="systemUpdateInfo.isRestarting"
+                            type="button"
+                            class="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[9.5px] font-extrabold shadow transition shrink-0 cursor-pointer flex items-center gap-1">
+                        <i v-if="systemUpdateInfo.isRestarting" data-lucide="loader-2" class="w-2.5 h-2.5 animate-spin"></i>
+                        <span>{{ systemUpdateInfo.isRestarting ? '...' : 'Yeniden Başlat' }}</span>
+                    </button>
+                    <button v-else
+                            @click="applySystemUpdate"
+                            :disabled="systemUpdateInfo.isUpdating"
+                            type="button"
+                            class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[9.5px] font-extrabold shadow transition shrink-0 cursor-pointer flex items-center gap-1">
+                        <i v-if="systemUpdateInfo.isUpdating" data-lucide="loader-2" class="w-2.5 h-2.5 animate-spin"></i>
+                        <span>{{ systemUpdateInfo.isUpdating ? 'Yükleniyor' : 'Güncellemeleri Yükle' }}</span>
+                    </button>
+                </div>
+            </div>
             <!-- Dynamic Menus -->
             <div class="flex-1 overflow-y-auto px-3 py-4 space-y-1 custom-scrollbar">
                 <div class="text-[10px] font-bold uppercase text-slate-400 px-3 mb-2 tracking-wider">Modüller</div>
@@ -1652,6 +1691,35 @@
                 <span class="text-[10px] bg-theme-light text-theme px-2 py-0.5 rounded font-mono font-bold">Bağlı</span>
             </div>
 
+
+            <!-- Güncellemeleri Denetle & Sürüm Bilgisi (Menülerin En Altı) -->
+            <div class="px-3 pt-2 pb-1.5 mx-1 border-t shrink-0"
+                 :class="isDarkMode ? 'border-slate-800/80' : 'border-slate-200'">
+                <button @click="checkSystemUpdates(true)"
+                        :disabled="systemUpdateInfo.isChecking"
+                        type="button"
+                        class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition group cursor-pointer select-none"
+                        :class="isDarkMode ? 'text-slate-300 hover:bg-slate-800/80 hover:text-white' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'"
+                        title="GitHub üzerinden yeni sürüm denetimi yap">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <i data-lucide="refresh-cw" 
+                           class="w-3.5 h-3.5 shrink-0 transition-transform duration-500 text-slate-400 group-hover:text-theme"
+                           :class="{'animate-spin text-theme': systemUpdateInfo.isChecking}"></i>
+                        <span class="truncate">Güncellemeleri Denetle</span>
+                    </div>
+                    <span class="text-[9.5px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0"
+                          :class="isDarkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-700 border border-slate-200'">
+                        {{ systemVersion || 'v2.9.2' }}
+                    </span>
+                </button>
+                <div class="text-[9px] text-slate-400 px-3 py-0.5 flex items-center justify-between font-mono">
+                    <span class="truncate">{{ systemUpdateInfo.last_checked ? 'Son kontrol: ' + systemUpdateInfo.last_checked.split(' ')[1] : 'Otomatik denetim aktif' }}</span>
+                    <span class="text-[8.5px] uppercase px-1 rounded font-bold"
+                          :class="systemUpdateInfo.channel === 'dev' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/20 text-emerald-400'">
+                        {{ systemUpdateInfo.channel === 'dev' ? 'GELİŞTİRİCİ' : 'KARARLI' }}
+                    </span>
+                </div>
+            </div>
             <!-- User Info Bar -->
             <div class="p-3 border-t flex items-center justify-between shrink-0"
                  :class="isDarkMode ? 'border-slate-800 bg-slate-900/80' : 'border-slate-200 bg-slate-50'">
@@ -17305,7 +17373,7 @@
 <!-- SheetJS for Native .xlsx generation -->
 <script src="/static/js/xlsx.full.min.js"></script>
 <!-- Application JS -->
-<script src="/static/js/app.js?v=20261102_enboy_white_v3"></script>
+<script src="/static/js/app.js?v=20261102_system_updater_v4"></script>
 
 </body>
 </html>

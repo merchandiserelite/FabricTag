@@ -7778,6 +7778,66 @@ try:
 except Exception as e:
     print(f"Failed to start backup scheduler: {e}")
 
+# ----------------- OTOMATİK SİSTEM GÜNCELLEME (UPDATE MANAGER) -----------------
+import update_manager
+
+@app.get("/api/system/version")
+def api_get_system_version(user: Dict[str, Any] = Depends(require_user)):
+    cfg = update_manager.get_system_config()
+    git_info = update_manager.get_git_info()
+    return {
+        "status": "success",
+        "version": cfg.get("version", "v2.9.2"),
+        "channel": cfg.get("channel", "stable"),
+        "restart_required": cfg.get("restart_required", False),
+        "last_check_time": cfg.get("last_check_time"),
+        "last_update_time": cfg.get("last_update_time"),
+        "git": git_info
+    }
+
+@app.get("/api/system/check-updates")
+def api_check_system_updates(user: Dict[str, Any] = Depends(require_user)):
+    try:
+        res = update_manager.check_for_updates()
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Güncelleme denetleme hatası: {str(e)}")
+
+@app.post("/api/system/apply-updates")
+def api_apply_system_updates(user: Dict[str, Any] = Depends(require_user)):
+    role = user.get("role", "")
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+        raise HTTPException(status_code=403, detail="Sistemi güncelleme yetkiniz bulunmamaktadır.")
+    try:
+        res = update_manager.apply_update()
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Güncelleme hatası: {str(e)}")
+
+@app.post("/api/system/restart")
+def api_restart_system(user: Dict[str, Any] = Depends(require_user)):
+    role = user.get("role", "")
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+        raise HTTPException(status_code=403, detail="Sistemi yeniden başlatma yetkiniz bulunmamaktadır.")
+    try:
+        res = update_manager.trigger_server_restart()
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Yeniden başlatma tetiklenemedi: {str(e)}")
+
+@app.post("/api/system/set-channel")
+def api_set_system_channel(payload: Dict[str, Any], user: Dict[str, Any] = Depends(require_user)):
+    role = user.get("role", "")
+    if role not in ["admin", "superadmin", "masterdeveloper", "yonetici"]:
+        raise HTTPException(status_code=403, detail="Kanal değiştirme yetkiniz bulunmamaktadır.")
+    new_channel = payload.get("channel", "stable")
+    if new_channel not in ["stable", "dev"]:
+        raise HTTPException(status_code=400, detail="Geçersiz kanal. Yalnızca 'stable' veya 'dev' seçilebilir.")
+    cfg = update_manager.get_system_config()
+    cfg["channel"] = new_channel
+    update_manager.save_system_config(cfg)
+    return {"status": "success", "channel": new_channel, "message": f"Güncelleme kanalı '{new_channel}' olarak ayarlandı."}
+
 # ----------------- SPA ROOT -----------------
 
 @app.get("/")
