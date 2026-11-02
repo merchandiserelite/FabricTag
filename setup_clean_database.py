@@ -56,6 +56,29 @@ def clean_texflow():
     # Carton Label şablonlarındaki demo firma isimlerini standartlaştır
     try:
         c.execute("UPDATE carton_label_templates SET customer_name = 'Standart / Genel' WHERE customer_name != 'Standart / Genel'")
+        c.execute("UPDATE carton_label_templates SET template_name = 'Müşteri 1 A4 Yatay (x2 Çiftli)' WHERE id = 1")
+        c.execute("UPDATE carton_label_templates SET template_name = 'Müşteri 2 A4 Koli Üstü Şablonu (Yatay)' WHERE id = 4")
+        
+        # Şablon JSON içerisindeki müşteri ve adres bilgilerini güncelle
+        c.execute("SELECT id, layout_json FROM carton_label_templates WHERE id IN (1, 4)")
+        for tid, ljson in c.fetchall():
+            if ljson:
+                try:
+                    cfg = json.loads(ljson)
+                    if tid == 1:
+                        cfg['header_title'] = 'Müşteri 1'
+                        cfg['address_line1'] = 'Sanayi Mah. 100. Yıl Cad.'
+                        cfg['address_line2'] = 'No: 12/A Nilüfer'
+                        cfg['address_line3'] = 'Bursa / Türkiye'
+                        cfg['brand'] = 'MARKA: ÖRNEK 1'
+                    elif tid == 4:
+                        cfg['header_title'] = 'Müşteri 2'
+                        cfg['address_line1'] = 'Organize Sanayi Bölgesi 2. Cad.'
+                        cfg['address_line2'] = 'No: 4 Osmangazi'
+                        cfg['address_line3'] = 'Bursa / Türkiye'
+                    c.execute("UPDATE carton_label_templates SET layout_json = ? WHERE id = ?", (json.dumps(cfg, ensure_ascii=False), tid))
+                except Exception:
+                    pass
         print("  [+] Koli üstü şablonları genel formata uyarlandı.")
     except Exception as e:
         print(f"  [!] Koli şablonu temizleme uyarısı: {e}")
