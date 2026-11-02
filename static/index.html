@@ -10961,6 +10961,74 @@
                                     <input type="checkbox" v-model="backupConfig.include_uploads" @change="saveBackupSettings"
                                            class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
                                 </div>
+
+                                <!-- YEDEKLEME DEPOLAMA HEDEFİ (HARDDİSK / BULUT SENKRONİZASYON) -->
+                                <div class="p-3.5 rounded-xl border space-y-3"
+                                     :class="isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'">
+                                    <div>
+                                        <div class="text-xs font-bold" :class="isDarkMode ? 'text-slate-200' : 'text-slate-800'">Yedekleme Depolama Hedefi</div>
+                                        <div class="text-[10.5px] text-slate-400">Yedeklerinizin nerede saklanacağını belirleyin. Dilediğiniz zaman değiştirebilirsiniz.</div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                        <!-- Secenek 1: Varsayilan Sabit Disk -->
+                                        <label class="flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition select-none"
+                                               :class="(!backupConfig.destination_type || backupConfig.destination_type === 'default') 
+                                                  ? (isDarkMode ? 'bg-indigo-500/10 border-indigo-500 text-indigo-300' : 'bg-indigo-50 border-indigo-500 text-indigo-900') 
+                                                  : (isDarkMode ? 'bg-slate-900/50 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-600')">
+                                            <input type="radio" v-model="backupConfig.destination_type" value="default" @change="saveBackupSettings" class="mt-0.5 accent-indigo-600">
+                                            <div class="min-w-0">
+                                                <div class="text-[11px] font-bold">Varsayılan Disk</div>
+                                                <div class="text-[9.5px] opacity-75">data/backups/ klasörü</div>
+                                            </div>
+                                        </label>
+
+                                        <!-- Secenek 2: Harici Harddisk / Ozel Klasor -->
+                                        <label class="flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition select-none"
+                                               :class="backupConfig.destination_type === 'custom' 
+                                                  ? (isDarkMode ? 'bg-indigo-500/10 border-indigo-500 text-indigo-300' : 'bg-indigo-50 border-indigo-500 text-indigo-900') 
+                                                  : (isDarkMode ? 'bg-slate-900/50 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-600')">
+                                            <input type="radio" v-model="backupConfig.destination_type" value="custom" @change="saveBackupSettings" class="mt-0.5 accent-indigo-600">
+                                            <div class="min-w-0">
+                                                <div class="text-[11px] font-bold">Harici Disk / Sürücü</div>
+                                                <div class="text-[9.5px] opacity-75">Örn: D:\TexFlow_Yedekler</div>
+                                            </div>
+                                        </label>
+
+                                        <!-- Secenek 3: Bulut Senkronizasyonu (OneDrive / Google Drive) -->
+                                        <label class="flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer transition select-none"
+                                               :class="backupConfig.destination_type === 'cloud_sync' 
+                                                  ? (isDarkMode ? 'bg-indigo-500/10 border-indigo-500 text-indigo-300' : 'bg-indigo-50 border-indigo-500 text-indigo-900') 
+                                                  : (isDarkMode ? 'bg-slate-900/50 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-600')">
+                                            <input type="radio" v-model="backupConfig.destination_type" value="cloud_sync" @change="saveBackupSettings" class="mt-0.5 accent-indigo-600">
+                                            <div class="min-w-0">
+                                                <div class="text-[11px] font-bold">Bulut Senkron (OneDrive)</div>
+                                                <div class="text-[9.5px] opacity-75">OneDrive / Google Drive yolu</div>
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    <!-- Ozel Yol Giris Alani (Harici disk veya Bulut secildiginde) -->
+                                    <div v-if="backupConfig.destination_type === 'custom' || backupConfig.destination_type === 'cloud_sync'" class="space-y-1 pt-1">
+                                        <label class="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
+                                            <span>{{ backupConfig.destination_type === 'cloud_sync' ? 'Bulut Senkronizasyon Klasör Yolu:' : 'Harici Harddisk / Klasör Yolu:' }}</span>
+                                            <span class="text-[9.5px] text-slate-500">Klasör yoksa otomatik oluşturulur</span>
+                                        </label>
+                                        <div class="flex items-center gap-2">
+                                            <input type="text" v-model="backupConfig.custom_destination_path"
+                                                   :placeholder="backupConfig.destination_type === 'cloud_sync' ? 'Örn: C:\\Users\\Kullanici\\OneDrive\\TexFlow_Yedekler' : 'Örn: D:\\TexFlow_Yedekler veya E:\\Yedekler'"
+                                                   class="flex-1 px-3 py-1.5 rounded-xl border text-xs bg-slate-900 border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono">
+                                            <button type="button" @click="saveBackupSettings" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition">
+                                                Kaydet
+                                            </button>
+                                        </div>
+                                        <p class="text-[10px] text-slate-400 italic">
+                                            {{ backupConfig.destination_type === 'cloud_sync' 
+                                                ? 'TexFlow her yedek aldığında zip arşivini doğrudan bu klasöre kopyalar; Windows veya OneDrive bunu otomatik olarak bulutunuza yükler.' 
+                                                : 'Yedekler bilgisayarınızdaki ana klasöre ek olarak belirttiğiniz harici diske veya klasöre anında yedeklenir.' }}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="pt-3 border-t flex items-center justify-between" :class="isDarkMode ? 'border-slate-800' : 'border-slate-100'">

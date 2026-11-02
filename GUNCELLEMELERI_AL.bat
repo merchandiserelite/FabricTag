@@ -2,7 +2,7 @@
 title TexFlow - Guvenli Surum Guncelleme
 color 0B
 echo =======================================================
-echo    TEXFLOW - GUVENLI SURUM GUNCELLEME (SIRKET ICIN)
+echo    TEXFLOW - GUVENLI SURUM GUNCELLEME
 echo =======================================================
 echo.
 cd /d "%~dp0"
@@ -15,9 +15,14 @@ if exist "data\texflow.db" (
 )
 
 echo.
-echo [2/4] GitHub'dan guncel kodlar cekiliyor...
-git fetch origin texflow
-git pull origin texflow
+echo [2/4] GitHub baglantisi kontrol ediliyor ve guncellemeler cekiliyor...
+git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+git fetch origin --prune
+
+:: Yerel dosya cakismalarini onlemek icin stasla ve texflow dalina sifirla
+git stash >nul 2>&1
+git checkout texflow >nul 2>&1
+git reset --hard origin/texflow
 
 if %ERRORLEVEL% EQU 0 (
     echo.
@@ -25,13 +30,14 @@ if %ERRORLEVEL% EQU 0 (
     python -m pip install -r requirements.txt --quiet
     echo.
     echo =======================================================
-    echo [BASARILI] Kodlar basariyla guncellendi!
+    echo [BASARILI] Kodlar basariyla en guncel surume yuklendi!
     echo Sirket veritabaniniz (data\texflow.db) KORUNDU ve etkilenmedi.
     echo =======================================================
 ) else (
     echo.
     echo =======================================================
-    echo [UYARI] Git cekme sirasinda cakisma olustu.
+    echo [UYARI] Guncelleme sirasinda bir baglanti sorunu yasandi.
+    echo Internet baglantinizi kontrol edin.
     echo Yedeginiz data\backups klasorunde guvendedir.
     echo =======================================================
 )

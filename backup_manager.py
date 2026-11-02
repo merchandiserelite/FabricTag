@@ -26,7 +26,9 @@ DEFAULT_CONFIG = {
     "times": ["13:00", "17:00"],
     "retention_count": 30,
     "include_uploads": True,
-    "last_backup_time": None
+    "last_backup_time": None,
+    "destination_type": "default",      # "default" (Yerel data/backups), "custom" (Harddisk/Harici disk), "cloud_sync" (OneDrive/Google Drive)
+    "custom_destination_path": ""       # Hedef klasor yolu (orn: D:\TexFlow_Yedekler veya C:\Users\...\OneDrive\TexFlow_Yedekler)
 }
 
 def get_backup_config() -> Dict[str, Any]:
@@ -144,6 +146,20 @@ def create_full_backup(backup_type: str = "manual", note: str = "") -> Dict[str,
         cfg = get_backup_config()
         cfg["last_backup_time"] = display_time
         save_backup_config(cfg)
+
+        # Ikinci Hedefe (Ozel Sabit Disk Klasoru veya Bulut Senkronizasyon Klasorune) Otomatik Kopyalama
+        custom_dest = str(cfg.get("custom_destination_path", "")).strip()
+        custom_copied = False
+        if custom_dest:
+            try:
+                dest_dir = Path(custom_dest)
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                dest_file = dest_dir / zip_filename
+                shutil.copy2(zip_path, dest_file)
+                custom_copied = True
+                print(f"[Yedekleme] Ek kopya basariyla aktarildi: {dest_file}")
+            except Exception as ce:
+                print(f"[Yedekleme] Uyari: Ek hedefe kopyalanamadi ({custom_dest}): {ce}")
 
         # Enforce retention policy for automatic backups
         clean_old_backups(cfg.get("retention_count", 30))

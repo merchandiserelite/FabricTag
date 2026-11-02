@@ -7688,7 +7688,9 @@ def api_save_backup_config(cfg: Dict[str, Any], user: Dict[str, Any] = Depends(r
         "times": sorted(list(set(clean_times))),
         "retention_count": max(1, min(100, int(cfg.get("retention_count", 30)))),
         "include_uploads": bool(cfg.get("include_uploads", True)),
-        "last_backup_time": backup_manager.get_backup_config().get("last_backup_time")
+        "last_backup_time": backup_manager.get_backup_config().get("last_backup_time"),
+        "destination_type": str(cfg.get("destination_type", "default")),
+        "custom_destination_path": str(cfg.get("custom_destination_path", "")).strip()
     }
     backup_manager.save_backup_config(clean_cfg)
     return {"status": "success", "message": "Yedekleme ayarları kaydedildi.", "config": clean_cfg}
