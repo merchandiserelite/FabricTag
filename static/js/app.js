@@ -29751,15 +29751,27 @@ window.__texflowApp = createApp({
         };
 
         const exportSamplesExcel = async () => {
-            const selected = selectedSampleIds.value;
-            if (!selected || selected.length === 0) {
-                showToast("Lütfen Excel'e aktarmak için tablodan en az bir numune seçiniz.", "warning");
+            let targetIds = [];
+            let isOnlySelected = false;
+            if (selectedSampleIds.value && selectedSampleIds.value.length > 0) {
+                targetIds = selectedSampleIds.value.slice();
+                isOnlySelected = true;
+            } else if (filteredSamples.value && filteredSamples.value.length > 0) {
+                targetIds = filteredSamples.value.map(s => s.id).filter(Boolean);
+            } else if (samples.value && samples.value.length > 0) {
+                targetIds = samples.value.map(s => s.id).filter(Boolean);
+            }
+
+            if (!targetIds || targetIds.length === 0) {
+                showToast("Excel'e aktarılacak numune kaydı bulunamadı.", "warning");
                 return;
             }
             try {
-                showToast(`Seçili ${selected.length} numune Excel formatında hazırlanıyor...`, 'info');
+                showToast(isOnlySelected 
+                    ? `Seçili ${targetIds.length} numune Excel formatında hazırlanıyor...` 
+                    : `Ekrandaki ${targetIds.length} numune Excel formatında hazırlanıyor...`, 'info');
                 const token = localStorage.getItem('token') || '';
-                const idsParam = selected.join(',');
+                const idsParam = targetIds.join(',');
                 const url = `/api/samples/export-excel?ids=${encodeURIComponent(idsParam)}&token=${encodeURIComponent(token)}`;
 
                 const res = await fetch(url, {
@@ -29784,7 +29796,9 @@ window.__texflowApp = createApp({
                 a.click();
                 document.body.removeChild(a);
                 window.URL.revokeObjectURL(blobUrl);
-                showToast('Seçili numuneler Excel olarak başarıyla indirildi.', 'success');
+                showToast(isOnlySelected 
+                    ? `Seçili ${targetIds.length} numune Excel olarak başarıyla indirildi.` 
+                    : `Ekrandaki ${targetIds.length} numune Excel olarak başarıyla indirildi.`, 'success');
             } catch (err) {
                 console.error('Numune Excel aktarım hatası:', err);
                 showToast('Excel Aktarım Hatası: ' + (err.message || 'Bilinmeyen hata'), 'error');
