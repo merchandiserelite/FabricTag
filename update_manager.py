@@ -22,7 +22,7 @@ DATA_DIR = BASE_DIR / "data"
 CONFIG_FILE = DATA_DIR / "system_config.json"
 
 DEFAULT_SYSTEM_CONFIG = {
-    "version": "v2.9.2",
+    "version": "v2.9.3",
     "channel": "dev",                 # "stable" (main branch for clients) or "dev" (texflow branch for developer)
     "remote_repo": "https://github.com/merchandiserelite/FabricTag.git",
     "auto_check_on_startup": True,

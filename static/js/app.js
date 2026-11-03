@@ -29797,7 +29797,7 @@ window.__texflowApp = createApp({
 
         // ----------------- OTOMATİK SİSTEM GÜNCELLEME (UPDATE MANAGER) -----------------
 
-        const systemVersion = ref('v2.9.2');
+        const systemVersion = ref('v2.9.3');
 
         const systemUpdateInfo = ref({
 

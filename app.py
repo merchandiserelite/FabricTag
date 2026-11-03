@@ -27693,7 +27693,7 @@ def api_get_system_version(user: Dict[str, Any] = Depends(require_user)):
 
 
 
-        "version": cfg.get("version", "v2.9.2"),
+        "version": cfg.get("version", "v2.9.3"),
 
 
 
