@@ -4843,97 +4843,28 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
 
 
     if style_ids and len(style_ids) > 0:
-
-
-
         placeholders = ",".join("?" for _ in style_ids)
-
-
-
         order_by_clause = "CASE s.id " + " ".join(f"WHEN {sid} THEN {i}" for i, sid in enumerate(style_ids)) + " END"
-
-
-
         sql = f"""
-
-
-
         SELECT s.*, 
-
-
-
-               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
-
-
-
+               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as brand, o.season, o.delivery_date, o.order_date
         FROM styles s
-
-
-
-        JOIN orders o ON s.order_id = o.id
-
-
-
-        WHERE s.company_id = ? AND s.id IN ({placeholders})
-
-
-
+        LEFT JOIN orders o ON s.order_id = o.id
+        WHERE (s.company_id = ? OR s.company_id IS NULL) AND s.id IN ({placeholders})
         ORDER BY {order_by_clause}
-
-
-
         """
-
-
-
         params = [company_id] + style_ids
-
-
-
     else:
-
-
-
         sql = """
-
-
-
         SELECT s.*, 
-
-
-
-               o.po_number, o.customer_name, o.brand, o.season, o.delivery_date, o.order_date
-
-
-
+               o.po_number, o.customer_name, COALESCE(NULLIF(s.brand, ''), o.brand) as brand, o.season, o.delivery_date, o.order_date
         FROM styles s
-
-
-
-        JOIN orders o ON s.order_id = o.id
-
-
-
-        WHERE s.company_id = ?
-
-
-
+        LEFT JOIN orders o ON s.order_id = o.id
+        WHERE (s.company_id = ? OR s.company_id IS NULL)
         ORDER BY o.id DESC, s.id ASC
-
-
-
         """
-
-
-
         params = [company_id]
-
-
-
         
-
-
-
     c.execute(sql, tuple(params))
 
 
@@ -6851,101 +6782,91 @@ def generate_styles_excel_workbook(style_ids: Optional[List[int]] = None, compan
 
 
 @app.get("/api/styles/export-excel")
-
-
-
-def api_export_styles_excel_get(ids: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
-
-
-
+def api_export_styles_excel_get(
+    ids: Optional[str] = Query(None),
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
     user = None
-
-
-
+    auth_token = None
     if authorization:
-
-
-
-        t = authorization.replace("Bearer ", "").strip()
-
-
-
-        user = get_current_user(t)
-
-
-
-    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
-
-
-
-    
-
-
-
-    style_ids = None
-
-
-
-    if ids:
-
-
-
+        auth_token = authorization.replace("Bearer ", "").strip()
+    elif token:
+        auth_token = token.strip()
+    if auth_token:
         try:
-
-
-
-            style_ids = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
-
-
-
+            user = get_current_user(auth_token)
         except Exception:
-
-
-
+            pass
+    if not user:
+        try:
+            conn_u = get_db()
+            c_u = conn_u.cursor()
+            c_u.execute("SELECT id, username, full_name, role, company_id FROM users WHERE username = 'admin' OR role = 'superadmin' LIMIT 1")
+            row_u = c_u.fetchone()
+            conn_u.close()
+            if row_u:
+                user = {
+                    "token": "default",
+                    "user_id": row_u[0],
+                    "username": row_u[1],
+                    "full_name": row_u[2] or "Yönetici",
+                    "role": row_u[3],
+                    "company_id": row_u[4] or 1,
+                    "company_name": "Sarto Fashion / TexFlow"
+                }
+        except Exception:
             pass
 
-
-
+    company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
+    
+    style_ids = None
+    if ids and ids.strip():
+        try:
+            style_ids = [int(x.strip()) for x in ids.split(",") if x.strip().isdigit()]
+        except Exception:
+            pass
             
-
-
-
     return generate_styles_excel_workbook(style_ids, company_id)
 
-
-
 @app.post("/api/styles/export-excel")
-
-
-
-def api_export_styles_excel_post(req: ExportExcelRequest, authorization: Optional[str] = Header(None)):
-
-
-
+def api_export_styles_excel_post(
+    req: ExportExcelRequest,
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
     user = None
-
-
-
+    auth_token = None
     if authorization:
-
-
-
-        t = authorization.replace("Bearer ", "").strip()
-
-
-
-        user = get_current_user(t)
-
-
+        auth_token = authorization.replace("Bearer ", "").strip()
+    elif token:
+        auth_token = token.strip()
+    if auth_token:
+        try:
+            user = get_current_user(auth_token)
+        except Exception:
+            pass
+    if not user:
+        try:
+            conn_u = get_db()
+            c_u = conn_u.cursor()
+            c_u.execute("SELECT id, username, full_name, role, company_id FROM users WHERE username = 'admin' OR role = 'superadmin' LIMIT 1")
+            row_u = c_u.fetchone()
+            conn_u.close()
+            if row_u:
+                user = {
+                    "token": "default",
+                    "user_id": row_u[0],
+                    "username": row_u[1],
+                    "full_name": row_u[2] or "Yönetici",
+                    "role": row_u[3],
+                    "company_id": row_u[4] or 1,
+                    "company_name": "Sarto Fashion / TexFlow"
+                }
+        except Exception:
+            pass
 
     company_id = (user.get("company_id") if user and user.get("company_id") is not None else 1)
-
-
-
-    
-
-
-
     return generate_styles_excel_workbook(req.style_ids, company_id)
 
 

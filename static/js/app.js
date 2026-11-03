@@ -4477,15 +4477,11 @@ window.__texflowApp = createApp({
         // İŞLEM AŞAMASI VEYA YÜKLEME TİKİNE GÖRE SATIR KONTROLLERİ
 
         const isItemShipped = (item) => {
-
             if (!item) return false;
-
             if (item.shipping_sample_sent === 1 || item.shipping_sample_sent === true || item.shipping_sample_sent === '1') return true;
-
             const st = String(item.status || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
-
-            return st.includes('sevk') || st.includes('yükle');
-
+            const ost = String(item.order_status || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+            return st.includes('sevk') || st.includes('yükle') || st.includes('shipped') || ost.includes('sevk') || ost.includes('yükle') || ost.includes('shipped');
         };
 
 
@@ -14198,67 +14194,54 @@ window.__texflowApp = createApp({
 
 
 
-        const exportOrdersToExcel = (e) => {
-
+        const exportOrdersToExcel = async () => {
             try {
-
                 const targetList = (filteredStyles.value && filteredStyles.value.length > 0)
-
                     ? filteredStyles.value
-
                     : (styles.value || []);
 
-
-
-                let idsParam = '';
-
-                // Süzgeç uygulanmışsa sadece süzülen modelleri aktar
-
-                if (targetList.length > 0 && targetList.length < (styles.value ? styles.value.length : 0)) {
-
-                    idsParam = '?ids=' + targetList.map(s => s.id).join(',');
-
+                if (!targetList || targetList.length === 0) {
+                    showToast('Ekranda aktarılacak sipariş kaydı bulunamadı.', 'warning');
+                    return;
                 }
 
+                showToast(`Ekranda görünen ${targetList.length} sipariş fotoğraflı Excel formatında hazırlanıyor...`, 'info');
 
+                const styleIds = targetList.map(s => s.id).filter(Boolean);
+                const token = localStorage.getItem('token') || '';
 
-                const exportUrl = '/api/styles/export-excel' + idsParam;
+                const res = await fetch('/api/styles/export-excel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ style_ids: styleIds })
+                });
 
-                if (e && e.currentTarget) {
-
-                    e.currentTarget.href = exportUrl;
-
+                if (!res.ok) {
+                    const errJson = await res.json().catch(() => null);
+                    throw new Error((errJson && errJson.detail) || res.statusText || 'Excel aktarılamadı');
                 }
 
-                showToast('Fotoğraflı Excel dosyası hazırlanıyor ve indiriliyor...', 'info');
+                const blob = await res.blob();
+                const blobUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                const now = new Date();
+                const dateStr = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
+                a.download = `TexFlow_Siparisler_${dateStr}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(blobUrl);
 
+                showToast(`Ekranda görünen ${targetList.length} sipariş başarıyla Excel'e aktarıldı.`, 'success');
             } catch (err) {
-
                 console.error('Excel export error:', err);
-
                 showToast('Excel Aktarım Hatası: ' + (err.message || 'Bilinmeyen hata'), 'error');
-
             }
-
         };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         const logModalOpen = ref(false);
 
@@ -16461,8 +16444,7 @@ window.__texflowApp = createApp({
 
 
         const filteredCuttingStyles = computed(() => {
-
-            const list = (styles.value || []).filter(s => !isItemCancelled(s));
+            const list = (styles.value || []).filter(s => !isItemCancelled(s) && !isItemShipped(s));
 
             const q = (cuttingSearch.value || '').trim().toLowerCase();
 

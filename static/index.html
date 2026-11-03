@@ -3664,23 +3664,14 @@
 
                     <!-- SİPARİŞLERİ EXCELE AKTAR DÜĞMESİ (SADECE ÇARŞAF LİSTESİNDE GÖSTERİLİR) -->
 
-                    <a v-if="activeMenu === 'carsaf_liste'"
-
-                       href="/api/styles/export-excel"
-
-                       download="Siparisler.xlsx"
-
-                       @click="exportOrdersToExcel($event)"
-
-                       class="h-9 flex items-center gap-1.5 border border-theme bg-theme-light text-theme hover:btn-theme hover:text-white text-xs font-bold px-3.5 rounded-xl transition shadow-sm cursor-pointer no-underline select-none"
-
-                       title="Siparişleri fotoğraflarıyla birlikte modern Excel (.xlsx) tablosuna aktarır">
-
+                    <button v-if="activeMenu === 'carsaf_liste'"
+                       type="button"
+                       @click="exportOrdersToExcel"
+                       class="h-9 flex items-center gap-1.5 border border-theme bg-theme-light text-theme hover:btn-theme hover:text-white text-xs font-bold px-3.5 rounded-xl transition shadow-sm cursor-pointer select-none"
+                       title="Ekranda görünen siparişleri fotoğraflarıyla birlikte modern Excel (.xlsx) tablosuna aktarır">
                         <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
-
                         <span class="hidden sm:inline">Excele Aktar</span>
-
-                    </a>
+                    </button>
 
 
 
