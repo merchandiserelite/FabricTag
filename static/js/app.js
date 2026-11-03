@@ -5895,13 +5895,17 @@ window.__texflowApp = createApp({
         // AUTOCOMPLETE & SUGGESTION LISTS (AYNI SÜTUNLARDA ÖNCEKİ VERİLERDEN OTOMATİK TAMAMLAMA)
 
         const distinctCustomers = computed(() => {
-
             const s = new Set();
-
-            (styles.value || []).forEach(x => { if (x.customer_name) s.add(x.customer_name); });
-
-            return Array.from(s).sort();
-
+            (styles.value || []).forEach(x => {
+                if (x.customer_name && String(x.customer_name).trim()) s.add(String(x.customer_name).trim());
+            });
+            (sampleItems.value || []).forEach(x => {
+                if (x.customer_name && String(x.customer_name).trim()) s.add(String(x.customer_name).trim());
+            });
+            (freeCostStudies.value || []).forEach(x => {
+                if (x.customer_name && String(x.customer_name).trim()) s.add(String(x.customer_name).trim());
+            });
+            return Array.from(s).sort((a, b) => a.localeCompare(b, 'tr', { sensitivity: 'base' }));
         });
 
 
@@ -26359,43 +26363,30 @@ window.__texflowApp = createApp({
 
 
         const buildFabricSummaryClean = (fabric) => {
-
             if (!fabric) return '';
-
             const line1 = buildFabricFormattedName(fabric);
-
             const line2 = formatCompositionAbbr(fabric.composition || '');
-
             let widthStr = '';
-
             let weightStr = '';
-
             const cleanW = extractCleanDimension(fabric.width);
-
             if (cleanW) widthStr = `${cleanW} CM`;
-
             const cleanG = extractCleanDimension(fabric.weight);
-
             if (cleanG) weightStr = `${cleanG} GRM2`;
-
-            const line3 = (widthStr && weightStr) ? `${widthStr} • ${weightStr}` : (widthStr || weightStr || '');
-
+            const colorStr = (fabric.color && String(fabric.color).trim())
+                ? (String(fabric.color).toLowerCase().startsWith('renk') ? String(fabric.color).trim() : `Renk: ${String(fabric.color).trim()}`)
+                : '';
+            const dimPart = [widthStr, weightStr].filter(Boolean).join(' • ');
+            const line3 = [colorStr, dimPart].filter(Boolean).join(' • ');
             return [line1, line2, line3].filter(Boolean).join(' • ');
-
         };
 
 
 
         const cleanSampleFabricString = (raw) => {
-
             if (!raw) return '';
-
             return String(raw)
-
-                .replace(/(Kumaşçı|Kumasci|Kalite Adı|Kalite Adi|Kalite|Varyant|Renk|En|Karışım|Karisim|Kumaş|Kumas):\s*/gi, '')
-
+                .replace(/(Kumaşçı|Kumasci|Kalite Adı|Kalite Adi|Kalite|Varyant|En|Karışım|Karisim|Kumaş|Kumas):\s*/gi, '')
                 .trim();
-
         };
 
 
@@ -26427,75 +26418,44 @@ window.__texflowApp = createApp({
 
 
         const getSampleFabricParsed = (sample, slot = 1) => {
-
             if (!sample) return { line1: '', line2: '', line3: '', tooltip: '' };
-
             if (!sample._fabCache) sample._fabCache = {};
-
             const raw = getSampleFabricRaw(sample, slot);
-
             const id = getSampleFabricId(sample, slot);
-
             const fd = getSampleFabricDetail(sample, slot);
-
             const key = `${slot}_${id || ''}_${raw || ''}`;
-
             if (sample._fabCache[key]) return sample._fabCache[key];
 
-
-
             let l1 = '';
-
             let l2 = '';
-
             let l3 = '';
 
-
-
             if (fd) {
-
                 l1 = buildFabricFormattedName(fd);
-
                 if (fd.composition) l2 = formatCompositionAbbr(fd.composition);
-
                 let widthStr = '';
-
                 let weightStr = '';
-
                 const cleanW = extractCleanDimension(fd.width);
-
                 if (cleanW) widthStr = `${cleanW} CM`;
-
                 const cleanG = extractCleanDimension(fd.weight);
-
                 if (cleanG) weightStr = `${cleanG} GRM2`;
-
-                l3 = (widthStr && weightStr) ? `${widthStr} • ${weightStr}` : (widthStr || weightStr || '');
-
+                const colorStr = (fd.color && String(fd.color).trim())
+                    ? (String(fd.color).toLowerCase().startsWith('renk') ? String(fd.color).trim() : `Renk: ${String(fd.color).trim()}`)
+                    : '';
+                const dimPart = [widthStr, weightStr].filter(Boolean).join(' • ');
+                l3 = [colorStr, dimPart].filter(Boolean).join(' • ');
             } else if (raw) {
-
                 const cleaned = cleanSampleFabricString(raw);
-
                 const parts = cleaned.split(/\s*•\s*|\s{3,}/);
-
                 l1 = parts[0] || '';
-
                 l2 = parts.length > 1 ? formatCompositionAbbr(parts[1]) : '';
-
                 l3 = parts.length > 2 ? parts.slice(2).join(' • ') : '';
-
             }
 
-
-
             const tip = [l1, l2, l3].filter(Boolean).join('\n') || raw || '';
-
             const res = { line1: l1, line2: l2, line3: l3, tooltip: tip };
-
             sample._fabCache[key] = res;
-
             return res;
-
         };
 
 
@@ -29756,20 +29716,97 @@ window.__texflowApp = createApp({
 
 
 
-        const exportSamplesExcel = () => {
-
-            const selected = selectedSampleIds.value;
-
-            let url = '/api/samples/export-excel';
-
-            if (selected && selected.length) {
-
-                url += `?ids=${selected.join(',')}`;
-
+        const handleSampleCellKeydown = (event, sample, sIdx, colKey) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const val = event.target ? event.target.value : '';
+                if (val !== undefined) {
+                    updateSampleCell(sample, colKey, val);
+                }
+                const nextRowIdx = sIdx + 1;
+                const nextInput = document.querySelector(`[data-row="${nextRowIdx}"][data-col="${colKey}"]`);
+                if (nextInput) {
+                    nextInput.focus();
+                    if (typeof nextInput.select === 'function') nextInput.select();
+                } else if (nextRowIdx >= (filteredSamplesList.value || []).length) {
+                    addNewSampleRow();
+                    setTimeout(() => {
+                        const newRowInput = document.querySelector(`[data-row="${nextRowIdx}"][data-col="${colKey}"]`);
+                        if (newRowInput) {
+                            newRowInput.focus();
+                            if (typeof newRowInput.select === 'function') newRowInput.select();
+                        }
+                    }, 120);
+                }
+            } else if (event.key === 'Tab' && !event.shiftKey && colKey === 'customer_name') {
+                const currentVal = (event.target.value || '').trim();
+                if (currentVal && distinctCustomers.value && distinctCustomers.value.length > 0) {
+                    const cLower = currentVal.toLowerCase();
+                    const exactOrPrefix = distinctCustomers.value.find(c => c.toLowerCase().startsWith(cLower));
+                    const contains = !exactOrPrefix ? distinctCustomers.value.find(c => c.toLowerCase().includes(cLower)) : null;
+                    const matched = exactOrPrefix || contains;
+                    if (matched) {
+                        event.target.value = matched;
+                        sample.customer_name = matched;
+                        updateSampleCell(sample, 'customer_name', matched);
+                    }
+                }
+                event.preventDefault();
+                const cols = displayedSampleColumns.value || [];
+                const curIdx = cols.findIndex(c => c.key === colKey);
+                if (curIdx !== -1) {
+                    for (let i = curIdx + 1; i < cols.length; i++) {
+                        const targetColKey = cols[i].key;
+                        const rightInput = document.querySelector(`[data-row="${sIdx}"][data-col="${targetColKey}"]`);
+                        if (rightInput) {
+                            rightInput.focus();
+                            if (typeof rightInput.select === 'function') rightInput.select();
+                            return;
+                        }
+                    }
+                }
             }
+        };
 
-            window.open(url, '_blank');
+        const exportSamplesExcel = async () => {
+            const selected = selectedSampleIds.value;
+            if (!selected || selected.length === 0) {
+                showToast("Lütfen Excel'e aktarmak için tablodan en az bir numune seçiniz.", "warning");
+                return;
+            }
+            try {
+                showToast(`Seçili ${selected.length} numune Excel formatında hazırlanıyor...`, 'info');
+                const token = localStorage.getItem('token') || '';
+                const idsParam = selected.join(',');
+                const url = `/api/samples/export-excel?ids=${encodeURIComponent(idsParam)}&token=${encodeURIComponent(token)}`;
 
+                const res = await fetch(url, {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => null);
+                    throw new Error((errData && errData.detail) || res.statusText || 'Excel aktarılamadı');
+                }
+
+                const blob = await res.blob();
+                const blobUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                const now = new Date();
+                const dateStr = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
+                a.download = `TexFlow_Numune_Takip_Listesi_${dateStr}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(blobUrl);
+                showToast('Seçili numuneler Excel olarak başarıyla indirildi.', 'success');
+            } catch (err) {
+                console.error('Numune Excel aktarım hatası:', err);
+                showToast('Excel Aktarım Hatası: ' + (err.message || 'Bilinmeyen hata'), 'error');
+            }
         };
 
 
@@ -30911,6 +30948,7 @@ return {
             printSampleList,
 
             exportSamplesExcel,
+            handleSampleCellKeydown,
 
             samplePrintPageFit,
 

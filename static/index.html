@@ -5126,7 +5126,7 @@
 
                         <div class="overflow-auto custom-scrollbar" @scroll="onCarsafTableScroll" style="height: calc(100vh - 210px); min-height: 350px;">
 
-                            <table style="table-layout: fixed; width: max-content; min-width: 100%; min-height: 100%;" class="text-left text-xs border-collapse master-table">
+                            <table style="table-layout: fixed; width: max-content; min-width: 100%;" class="text-left text-xs border-collapse master-table">
 
                                 
 
@@ -16861,11 +16861,10 @@
                                            :class="isDarkMode ? 'bg-slate-950 border-slate-700 text-white focus:border-theme' : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-theme'">
 
                                     <button v-if="sampleSearchQuery" @click="sampleSearchQuery = ''"
-
-                                            class="absolute right-2 top-2 text-slate-400 hover:text-slate-200">
-
-                                        <i data-lucide="x" class="w-3.5 h-3.5"></i>
-
+                                            class="absolute right-2 top-2 text-black hover:opacity-75 transition cursor-pointer"
+                                            style="color: #000000 !important;"
+                                            title="Aramayı Temizle">
+                                        <i data-lucide="x" class="w-3.5 h-3.5" style="stroke: #000000 !important; color: #000000 !important;"></i>
                                     </button>
 
                                 </div>
@@ -17598,6 +17597,9 @@
 
                                                 <input :value="sample.season"
 
+                                                       :data-row="sIdx"
+                                                       :data-col="col.key"
+                                                       @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                        @change="updateSampleCell(sample, 'season', $event.target.value)"
 
                                                        placeholder="Sezon..."
@@ -17616,6 +17618,9 @@
 
                                                        list="dl-customers"
 
+                                                       :data-row="sIdx"
+                                                       :data-col="col.key"
+                                                       @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                        @change="updateSampleCell(sample, 'customer_name', $event.target.value)"
 
                                                        placeholder="Müşteri..."
@@ -17632,6 +17637,9 @@
 
                                                 <input :value="sample.style_no"
 
+                                                       :data-row="sIdx"
+                                                       :data-col="col.key"
+                                                       @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                        @change="updateSampleCell(sample, 'style_no', $event.target.value)"
 
                                                        placeholder="Model Kodu..."
@@ -17648,6 +17656,9 @@
 
                                                 <input :value="sample.style_name"
 
+                                                       :data-row="sIdx"
+                                                       :data-col="col.key"
+                                                       @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                        @change="updateSampleCell(sample, 'style_name', $event.target.value)"
 
                                                        placeholder="Model Adı..."
@@ -17664,6 +17675,9 @@
 
                                                 <input :value="sample.color_variant"
 
+                                                       :data-row="sIdx"
+                                                       :data-col="col.key"
+                                                       @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                        @change="updateSampleCell(sample, 'color_variant', $event.target.value)"
 
                                                        placeholder="Renk / Varyant..."
@@ -17684,6 +17698,9 @@
 
                                                            data-is-date="true"
 
+                                                           :data-row="sIdx"
+                                                           :data-col="col.key"
+                                                           @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                            :value="sample.request_date"
 
                                                            @change="updateSampleSmartDate(sample, 'request_date', $event)"
@@ -17726,6 +17743,9 @@
 
                                                            data-is-date="true"
 
+                                                           :data-row="sIdx"
+                                                           :data-col="col.key"
+                                                           @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                            :value="sample.delivery_date"
 
                                                            @change="updateSampleSmartDate(sample, 'delivery_date', $event)"
@@ -17768,6 +17788,9 @@
 
                                                 <input :value="sample.quantity_sizes"
 
+                                                       :data-row="sIdx"
+                                                       :data-col="col.key"
+                                                       @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                        @change="updateSampleCell(sample, 'quantity_sizes', $event.target.value)"
 
                                                        placeholder="ör: 36: 1, 38: 2"
@@ -17910,6 +17933,9 @@
 
                                                 <input :value="sample[col.key]"
 
+                                                       :data-row="sIdx"
+                                                       :data-col="col.key"
+                                                       @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                        @change="updateSampleCell(sample, col.key, $event.target.value)"
 
                                                        placeholder="0.00 m / gr"
@@ -17968,6 +17994,9 @@
 
                                                     <input :value="sample.notes"
 
+                                                           :data-row="sIdx"
+                                                           :data-col="col.key"
+                                                           @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
                                                            @change="updateSampleCell(sample, 'notes', $event.target.value)"
 
                                                            placeholder="Not ekle..."
