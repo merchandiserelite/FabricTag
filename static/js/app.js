@@ -25709,6 +25709,7 @@ window.__texflowApp = createApp({
         const samplesLoading = ref(false);
 
         const sampleSearchQuery = ref('');
+        const newlyCreatedSampleId = ref(null);
 
         const sampleActiveFilterCol = ref(null);
 
@@ -27977,78 +27978,59 @@ window.__texflowApp = createApp({
 
 
         const addNewSampleRow = async () => {
-
             try {
-
-                const today = new Date().toLocaleDateString('tr-TR');
-
-                const payload = {
-
-                    sample_type: '1.Proto',
-
-                    season: '',
-
-                    customer_name: '',
-
-                    style_name: '',
-
-                    style_no: '',
-
-                    color_variant: '',
-
-                    request_date: today,
-
-                    delivery_date: '',
-
-                    quantity_sizes: '',
-
-                    fabric_info: '',
-
-                    fabric_info_2: '',
-
-                    fabric_info_3: '',
-
-                    unit_meters: '',
-
-                    unit_meters_2: '',
-
-                    unit_meters_3: '',
-
-                    stage: 'Talep Oluşturuldu',
-
-                    critique: '',
-
-                    notes: ''
-
-                };
-
-                const created = await apiFetch('/api/samples', {
-
-                    method: 'POST',
-
-                    body: JSON.stringify(payload)
-
-                });
-
-                if (created && created.id) {
-
-                    samplesList.value.unshift(created);
-
-                    showToast('Yeni numune satırı eklendi.', 'success');
-
-                    refreshIcons();
-
+                // Eğer arama veya sütun süzgeci aktifse, yeni satırın süzgeç arkasında kalmaması için temizle
+                if (sampleSearchQuery.value || Object.keys(sampleColumnFilters.value || {}).length > 0) {
+                    clearAllSampleFilters();
                 }
 
+                const today = new Date().toLocaleDateString('tr-TR');
+                const payload = {
+                    sample_type: '1.Proto',
+                    season: '',
+                    customer_name: '',
+                    style_name: '',
+                    style_no: '',
+                    color_variant: '',
+                    request_date: today,
+                    delivery_date: '',
+                    quantity_sizes: '',
+                    fabric_info: '',
+                    fabric_info_2: '',
+                    fabric_info_3: '',
+                    unit_meters: '',
+                    unit_meters_2: '',
+                    unit_meters_3: '',
+                    stage: 'Talep Oluşturuldu',
+                    critique: '',
+                    notes: ''
+                };
+                const created = await apiFetch('/api/samples', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                if (created && created.id) {
+                    newlyCreatedSampleId.value = created.id;
+                    samplesList.value.unshift(created);
+                    showToast('Yeni numune satırı eklendi.', 'success');
+                    refreshIcons();
+
+                    setTimeout(() => {
+                        const container = document.querySelector('.numune-table-scroll-container');
+                        if (container) container.scrollTop = 0;
+                        const firstInput = document.querySelector('[data-row="0"][data-col="season"]') ||
+                                           document.querySelector('[data-row="0"][data-col="customer_name"]') ||
+                                           document.querySelector('[data-row="0"] input:not([type="checkbox"])');
+                        if (firstInput) {
+                            firstInput.focus();
+                            if (typeof firstInput.select === 'function') firstInput.select();
+                        }
+                    }, 80);
+                }
             } catch (err) {
-
                 showToast(err.message || 'Numune satırı eklenirken hata oluştu.', 'error');
-
             }
-
         };
-
-
 
         const updateSampleCell = async (sample, field, value) => {
 
@@ -28633,6 +28615,7 @@ window.__texflowApp = createApp({
                 const q = sampleSearchQuery.value.trim().toLowerCase();
 
                 list = list.filter(s => {
+                    if (s.id && s.id === newlyCreatedSampleId.value) return true;
 
                     return (
 
