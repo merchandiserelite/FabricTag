@@ -9016,7 +9016,7 @@ window.__texflowApp = createApp({
 
             activeFilterDropdown.value = null;
 
-            carsafRenderLimit.value = 45;
+            carsafRenderLimit.value = 600;
 
             refreshIcons();
 
@@ -9056,7 +9056,7 @@ window.__texflowApp = createApp({
 
             carsafSearchQuery.value = '';
 
-            carsafRenderLimit.value = 45;
+            carsafRenderLimit.value = 600;
 
             refreshIcons();
 
@@ -9496,7 +9496,7 @@ window.__texflowApp = createApp({
 
         // PROGRESSIVE LAZY ROW RENDERING FOR 400+ ORDERS (Prevents DOM Freezing)
 
-        const carsafRenderLimit = ref(45);
+        const carsafRenderLimit = ref(600);
 
 
 
@@ -9534,7 +9534,7 @@ window.__texflowApp = createApp({
 
                 if (carsafRenderLimit.value < (filteredStyles.value || []).length) {
 
-                    carsafRenderLimit.value += 40;
+                    carsafRenderLimit.value += 300;
 
                 }
 
@@ -9546,7 +9546,7 @@ window.__texflowApp = createApp({
 
         watch([carsafSearchQuery, columnFilters, sortColumn, sortDirection, carsafConsolidateChannels], () => {
 
-            carsafRenderLimit.value = 45;
+            carsafRenderLimit.value = 600;
 
         }, { deep: true });
 
@@ -15523,7 +15523,11 @@ window.__texflowApp = createApp({
 
             if (menuKey === 'carsaf_liste' || menuKey === 'kesimhane' || menuKey === 'yukleme_adetleri' || menuKey === 'ceki_koli') {
 
-                loadStyles();
+                if (!styles.value || styles.value.length === 0) {
+
+                    loadStyles();
+
+                }
 
                 if (menuKey === 'ceki_koli') loadCartonTemplates();
 
@@ -32078,6 +32082,9 @@ return {
 
 });
 
+window.__texflowApp.config.errorHandler = (err, vm, info) => {
+    console.error('[TexFlow Vue Global Error]:', err, info);
+};
 window.__texflowRoot = window.__texflowApp.mount('#app');
 
 
