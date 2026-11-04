@@ -24075,23 +24075,21 @@ window.__texflowApp = createApp({
 
 
 
-        const hasCartonChannel = computed(() => {
-
+        const hasCartonChannel = (carton = null) => {
+            if (carton) {
+                return Boolean(carton.channel && String(carton.channel).trim() !== '');
+            }
             if (!packingData.value || !packingData.value.cartons) return false;
+            return packingData.value.cartons.some(c => c.channel && String(c.channel).trim() !== '');
+        };
 
-            return packingData.value.cartons.some(c => c.channel && c.channel.trim() !== '');
-
-        });
-
-
-
-        const hasCartonGrossWeight = computed(() => {
-
+        const hasCartonGrossWeight = (carton = null) => {
+            if (carton) {
+                return Boolean(carton.gross_weight && String(carton.gross_weight).trim() !== '' && String(carton.gross_weight).trim() !== '0');
+            }
             if (!packingData.value || !packingData.value.cartons) return false;
-
-            return packingData.value.cartons.some(c => c.gross_weight && Number(c.gross_weight) > 0);
-
-        });
+            return packingData.value.cartons.some(c => c.gross_weight && String(c.gross_weight).trim() !== '' && String(c.gross_weight).trim() !== '0');
+        };
 
 
 
