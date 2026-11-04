@@ -27886,49 +27886,31 @@ def api_set_system_channel(payload: Dict[str, Any], user: Dict[str, Any] = Depen
 
 
 def serve_index():
-
-
-
     index_path = STATIC_DIR / "index.html"
-
-
-
     if index_path.exists():
-
-
-
-        return FileResponse(
-
-
-
-            str(index_path),
-
-
-
-            headers={
-
-
-
-                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-
-
-
-                "Pragma": "no-cache",
-
-
-
-                "Expires": "0"
-
-
-
-            }
-
-
-
-        )
-
-
-
+        try:
+            content = index_path.read_text(encoding="utf-8")
+            js_file = STATIC_DIR / "js" / "app.js"
+            if js_file.exists():
+                v_tag = f"?v={int(js_file.stat().st_mtime)}"
+                content = re.sub(r'src="/static/js/app\.js(\?v=[^"]*)?"', f'src="/static/js/app.js{v_tag}"', content)
+            return HTMLResponse(
+                content,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
+        except Exception:
+            return FileResponse(
+                str(index_path),
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
     return HTMLResponse("<h1>TexFlow API is running.</h1>")
 
 
