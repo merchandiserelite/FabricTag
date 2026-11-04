@@ -16768,7 +16768,7 @@ window.__texflowApp = createApp({
 
         const cuttingSlipModels = computed(() => {
 
-            const list = (styles.value || []).filter(s => !isItemCancelled(s));
+            const list = (styles.value || []).filter(s => !isItemCancelled(s) && !isItemShipped(s));
 
             const groups = {};
 
@@ -16776,7 +16776,7 @@ window.__texflowApp = createApp({
 
             for (const s of list) {
 
-                if (isItemCancelled(s)) continue;
+                if (isItemCancelled(s) || isItemShipped(s)) continue;
 
                 const cust = (s.customer_name || 'Bilinmeyen Müşteri').trim();
 
@@ -16944,7 +16944,7 @@ window.__texflowApp = createApp({
 
 
 
-            let filteredStyles = (modelGroup.raw_styles || []).filter(s => !isItemCancelled(s));
+            let filteredStyles = (modelGroup.raw_styles || []).filter(s => !isItemCancelled(s) && !isItemShipped(s));
 
             if (chFilter && !ignoreChannel) {
 

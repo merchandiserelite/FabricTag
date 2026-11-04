@@ -45,6 +45,9 @@ def get_system_config() -> Dict[str, Any]:
             for k, v in DEFAULT_SYSTEM_CONFIG.items():
                 if k not in cfg:
                     cfg[k] = v
+            if cfg.get("version") != DEFAULT_SYSTEM_CONFIG["version"]:
+                cfg["version"] = DEFAULT_SYSTEM_CONFIG["version"]
+                save_system_config(cfg)
             return cfg
     except Exception as e:
         print(f"Error reading system config: {e}")
