@@ -143,7 +143,11 @@ def clean_texflow():
              "can_edit_costs": False, "can_view_dashboard": False, "can_edit_menus": False,
              "can_view_orders": True, "can_view_fabrictag": True,
              "can_manage_users": False, "can_manage_licenses": False
-         }))
+         })),
+        ("superadmin", "superadmin@texflow.internal", "Süper Admin (Full Yetki)", "superadmin",
+         json.dumps({"all": True, "can_manage_users": True, "can_manage_licenses": True, "can_edit_menus": True, "can_view_all_data": True, "can_edit_all_data": True})),
+        ("masterdeveloper", "dev@texflow.internal", "Master Developer (Süper Yönetici)", "masterdeveloper",
+         json.dumps({"all": True, "can_manage_users": True, "can_manage_licenses": True, "can_edit_menus": True, "can_view_all_data": True, "can_edit_all_data": True}))
     ]
 
     pwd_hash = hash_password("123456")
