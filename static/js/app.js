@@ -5890,17 +5890,24 @@ window.__texflowApp = createApp({
 
         // AUTOCOMPLETE & SUGGESTION LISTS (AYNI SÜTUNLARDA ÖNCEKİ VERİLERDEN OTOMATİK TAMAMLAMA)
 
-        const distinctCustomers = computed(() => {
+                const distinctCustomers = computed(() => {
             const s = new Set();
             (styles.value || []).forEach(x => {
                 if (x.customer_name && String(x.customer_name).trim()) s.add(String(x.customer_name).trim());
             });
-            (sampleItems.value || []).forEach(x => {
+            (samplesList.value || []).forEach(x => {
                 if (x.customer_name && String(x.customer_name).trim()) s.add(String(x.customer_name).trim());
             });
             (freeCostStudies.value || []).forEach(x => {
                 if (x.customer_name && String(x.customer_name).trim()) s.add(String(x.customer_name).trim());
             });
+            return Array.from(s).sort((a, b) => a.localeCompare(b, 'tr', { sensitivity: 'base' }));
+        });
+
+        const distinctSeasons = computed(() => {
+            const s = new Set();
+            (styles.value || []).forEach(x => { if (x.season && String(x.season).trim()) s.add(String(x.season).trim()); });
+            (samplesList.value || []).forEach(x => { if (x.season && String(x.season).trim()) s.add(String(x.season).trim()); });
             return Array.from(s).sort((a, b) => a.localeCompare(b, 'tr', { sensitivity: 'base' }));
         });
 
@@ -28024,7 +28031,17 @@ window.__texflowApp = createApp({
 
         const updateSampleCell = async (sample, field, value) => {
 
-            const valStr = value !== undefined && value !== null ? String(value).trim() : '';
+            let valStr = value !== undefined && value !== null ? String(value).trim() : '';
+
+            if (field === 'customer_name' && valStr && distinctCustomers.value && distinctCustomers.value.length > 0) {
+                const cTrim = valStr.toLowerCase();
+                const matched = distinctCustomers.value.find(c => c.toLowerCase() === cTrim) ||
+                                distinctCustomers.value.find(c => c.toLowerCase().startsWith(cTrim)) ||
+                                distinctCustomers.value.find(c => c.toLowerCase().includes(cTrim));
+                if (matched) {
+                    valStr = matched;
+                }
+            }
 
             if (sample[field] === valStr) return;
 
@@ -29705,7 +29722,18 @@ window.__texflowApp = createApp({
         const handleSampleCellKeydown = (event, sample, sIdx, colKey) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                const val = event.target ? event.target.value : '';
+                let val = event.target ? event.target.value : '';
+                if (colKey === 'customer_name' && val && distinctCustomers.value && distinctCustomers.value.length > 0) {
+                    const cTrim = String(val).trim().toLowerCase();
+                    const matched = distinctCustomers.value.find(c => c.toLowerCase() === cTrim) ||
+                                    distinctCustomers.value.find(c => c.toLowerCase().startsWith(cTrim)) ||
+                                    distinctCustomers.value.find(c => c.toLowerCase().includes(cTrim));
+                    if (matched) {
+                        val = matched;
+                        event.target.value = matched;
+                        sample.customer_name = matched;
+                    }
+                }
                 if (val !== undefined) {
                     updateSampleCell(sample, colKey, val);
                 }
@@ -30680,6 +30708,7 @@ return {
             updateManualSize,
 
             distinctCustomers,
+            distinctSeasons,
 
             distinctBrands,
 

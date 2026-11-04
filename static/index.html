@@ -3449,6 +3449,16 @@
         <!-- Main Content Area -->
 
         <main class="flex-1 flex flex-col min-w-0 h-full md:h-screen overflow-hidden" :class="isDarkMode ? 'bg-slate-950' : 'bg-slate-100'">
+        <!-- GLOBAL SHARED AUTOCOMPLETE DATALISTS (ACCESSIBLE TO ALL VIEWS: ÇARŞAF, NUMUNE, MODAL, ETC.) -->
+        <datalist id="dl-customers"><option v-for="c in distinctCustomers" :key="c" :value="c"></option></datalist>
+        <datalist id="dl-brands"><option v-for="b in distinctBrands" :key="b" :value="b"></option></datalist>
+        <datalist id="dl-channels"><option v-for="ch in distinctChannels" :key="ch" :value="ch"></option></datalist>
+        <datalist id="dl-pos"><option v-for="p in distinctPos" :key="p" :value="p"></option></datalist>
+        <datalist id="dl-styles"><option v-for="s in distinctStyles" :key="s" :value="s"></option></datalist>
+        <datalist id="dl-descriptions"><option v-for="d in distinctDescriptions" :key="d" :value="d"></option></datalist>
+        <datalist id="dl-colors"><option v-for="cl in distinctColors" :key="cl" :value="cl"></option></datalist>
+        <datalist id="dl-seasons"><option v-for="sea in distinctSeasons" :key="sea" :value="sea"></option></datalist>
+
 
 
 
@@ -17591,7 +17601,7 @@
                                                        :data-row="sIdx"
                                                        :data-col="col.key"
                                                        @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
-                                                       @change="updateSampleCell(sample, 'season', $event.target.value)"
+                                                       @change="updateSampleCell(sample, 'season', $event.target.value)" list="dl-seasons"
 
                                                        placeholder="Sezon..."
 
@@ -17631,7 +17641,7 @@
                                                        :data-row="sIdx"
                                                        :data-col="col.key"
                                                        @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
-                                                       @change="updateSampleCell(sample, 'style_no', $event.target.value)"
+                                                       @change="updateSampleCell(sample, 'style_no', $event.target.value)" list="dl-styles"
 
                                                        placeholder="Model Kodu..."
 
@@ -17669,7 +17679,7 @@
                                                        :data-row="sIdx"
                                                        :data-col="col.key"
                                                        @keydown="handleSampleCellKeydown($event, sample, sIdx, col.key)"
-                                                       @change="updateSampleCell(sample, 'color_variant', $event.target.value)"
+                                                       @change="updateSampleCell(sample, 'color_variant', $event.target.value)" list="dl-colors"
 
                                                        placeholder="Renk / Varyant..."
 
