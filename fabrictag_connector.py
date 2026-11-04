@@ -30,13 +30,30 @@ class FabricTagConnector:
     def is_connected() -> bool:
         return FABRICTAG_DB_PATH.exists()
 
-    @staticmethod
-    def get_connection():
+    @classmethod
+    def get_connection(cls):
         if not FABRICTAG_DB_PATH.exists():
             return None
         conn = sqlite3.connect(str(FABRICTAG_DB_PATH))
         conn.row_factory = sqlite3.Row
+        cls._ensure_columns(conn)
         return conn
+
+    @staticmethod
+    def _ensure_columns(conn):
+        try:
+            c = conn.cursor()
+            c.execute("PRAGMA table_info(fabrics)")
+            cols = {row[1] for row in c.fetchall()}
+            if "received_meters" not in cols:
+                c.execute("ALTER TABLE fabrics ADD COLUMN received_meters TEXT")
+            if "received_date" not in cols:
+                c.execute("ALTER TABLE fabrics ADD COLUMN received_date TEXT")
+            if "received_batches_json" not in cols:
+                c.execute("ALTER TABLE fabrics ADD COLUMN received_batches_json TEXT")
+            conn.commit()
+        except Exception:
+            pass
 
     @classmethod
     def search_fabrics(cls, query: str = "", limit: int = 500) -> List[Dict[str, Any]]:
