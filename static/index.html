@@ -1774,6 +1774,40 @@
 
             }
 
+            .carton-size-table th.col-asorti,
+
+            .carton-size-table td.col-asorti {
+
+                width: var(--carton-col-asorti-w, 16%) !important;
+
+                max-width: var(--carton-col-asorti-w, 16%) !important;
+
+                text-align: center !important;
+
+                padding: 2px !important;
+
+                box-sizing: border-box !important;
+
+            }
+
+            .carton-size-table th.col-lot,
+
+            .carton-size-table td.col-lot {
+
+                width: var(--carton-col-lot-w, 7%) !important;
+
+                max-width: var(--carton-col-lot-w, 7%) !important;
+
+                text-align: center !important;
+
+                padding: 2px !important;
+
+                white-space: nowrap !important;
+
+                box-sizing: border-box !important;
+
+            }
+
             .carton-size-table th.col-size,
 
             .carton-size-table td.col-size {
@@ -12455,13 +12489,19 @@
 
                                             <td class="p-3 font-mono font-semibold" :class="isDarkMode ? 'text-slate-300' : 'text-slate-700'">
 
-                                                {{ c.items && c.items[0] ? c.items[0].model : '-' }}
+                                                <div>{{ c.items && c.items[0] ? c.items[0].model : '-' }}</div>
 
                                                 <span v-if="c.items && c.items.length > 1" class="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-400 font-sans ml-1">
 
                                                     +{{ c.items.length - 1 }} Ürün
 
                                                 </span>
+
+                                                <div v-if="c.asorti" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30 mt-1 whitespace-pre-line leading-tight">
+
+                                                    {{ c.asorti }} (Lot: {{ c.lot_qty }} ad)
+
+                                                </div>
 
                                             </td>
 
@@ -15683,13 +15723,17 @@
 
                                                     <colgroup>
 
-                                                        <col :style="{ width: (printColStyleW || 16) + '%' }">
+                                                        <col :style="{ width: (hasCartonLot(pair[0]) ? 16 : (printColStyleW || 16)) + '%' }">
 
-                                                        <col :style="{ width: (printColColorW || 14) + '%' }">
+                                                        <col :style="{ width: (hasCartonLot(pair[0]) ? 14 : (printColColorW || 14)) + '%' }">
+
+                                                        <col v-if="hasCartonLot(pair[0])" :style="{ width: '16%' }">
 
                                                         <col v-for="sz in getCartonSizeHeaders(pair[0])" :key="'col-0-'+sz" :style="{ width: getCartonSizeColWidth(pair[0]) }">
 
-                                                        <col :style="{ width: (printColTotalW || 10) + '%' }">
+                                                        <col v-if="hasCartonLot(pair[0])" :style="{ width: '7%' }">
+
+                                                        <col :style="{ width: (hasCartonLot(pair[0]) ? 10 : (printColTotalW || 10)) + '%' }">
 
                                                     </colgroup>
 
@@ -15701,7 +15745,7 @@
 
                                                             :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
 
-                                                            <th class="col-style p-1 text-left relative group/col" :style="{ width: printColStyleW + '%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                            <th class="col-style p-1 text-left relative group/col" :style="{ width: (hasCartonLot(pair[0]) ? '16%' : printColStyleW + '%') }" :class="[printShowGridLines ? 'border-r border-black' : '']">
 
                                                                 Style
 
@@ -15713,7 +15757,7 @@
 
                                                             </th>
 
-                                                            <th class="col-color p-1 text-left relative group/col" :style="{ width: printColColorW + '%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                            <th class="col-color p-1 text-left relative group/col" :style="{ width: (hasCartonLot(pair[0]) ? '14%' : printColColorW + '%') }" :class="[printShowGridLines ? 'border-r border-black' : '']">
 
                                                                 Colour
 
@@ -15722,6 +15766,12 @@
                                                                      @mousedown="startCartonColResize($event, 'col_color')"
 
                                                                      title="Renk (Colour) genişliğini tutup kaydırın"></div>
+
+                                                            </th>
+
+                                                            <th v-if="hasCartonLot(pair[0])" class="col-asorti p-1 text-center font-black uppercase text-[11px]" :style="{ width: '16%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+
+                                                                Asorti
 
                                                             </th>
 
@@ -15737,7 +15787,13 @@
 
                                                             </th>
 
-                                                            <th class="col-total p-1 font-black relative group/col" :style="{ width: printColTotalW + '%' }">
+                                                            <th v-if="hasCartonLot(pair[0])" class="col-lot p-1 text-center font-black uppercase text-[11px]" :style="{ width: '7%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+
+                                                                LOT
+
+                                                            </th>
+
+                                                            <th class="col-total p-1 font-black relative group/col" :style="{ width: (hasCartonLot(pair[0]) ? '10%' : printColTotalW + '%') }">
 
                                                                 <div class="carton-col-resizer-left no-print"
 
@@ -15767,6 +15823,8 @@
 
                                                             <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].color : '-' }}</td>
 
+                                                            <td v-if="hasCartonLot(pair[0])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[0], 0) }}</td>
+
                                                             <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-0-'+sz"
 
                                                                 class="col-size p-0.5 font-mono font-black"
@@ -15778,6 +15836,8 @@
                                                                 {{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes ? pair[0].items[0].sizes[sz] : '', pair[0]) }}
 
                                                             </td>
+
+                                                            <td v-if="hasCartonLot(pair[0])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('2up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[0], 0) }}</td>
 
                                                             <td class="col-total p-1 font-mono font-black"
 
@@ -15807,6 +15867,8 @@
 
                                                             <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].color : '' }}</td>
 
+                                                            <td v-if="hasCartonLot(pair[0])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[0], 1) }}</td>
+
                                                             <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-1-'+sz"
 
                                                                 class="col-size p-0.5 font-mono font-black"
@@ -15818,6 +15880,8 @@
                                                                 {{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes ? pair[0].items[1].sizes[sz] : '', pair[0]) }}
 
                                                             </td>
+
+                                                            <td v-if="hasCartonLot(pair[0])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('2up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[0], 1) }}</td>
 
                                                             <td class="col-total p-1 font-mono font-black"
 
@@ -16001,13 +16065,17 @@
 
                                                     <colgroup>
 
-                                                        <col :style="{ width: (printColStyleW || 16) + '%' }">
+                                                        <col :style="{ width: (hasCartonLot(pair[1]) ? 16 : (printColStyleW || 16)) + '%' }">
 
-                                                        <col :style="{ width: (printColColorW || 14) + '%' }">
+                                                        <col :style="{ width: (hasCartonLot(pair[1]) ? 14 : (printColColorW || 14)) + '%' }">
+
+                                                        <col v-if="hasCartonLot(pair[1])" :style="{ width: '16%' }">
 
                                                         <col v-for="sz in getCartonSizeHeaders(pair[1])" :key="'col-1-'+sz" :style="{ width: getCartonSizeColWidth(pair[1]) }">
 
-                                                        <col :style="{ width: (printColTotalW || 10) + '%' }">
+                                                        <col v-if="hasCartonLot(pair[1])" :style="{ width: '7%' }">
+
+                                                        <col :style="{ width: (hasCartonLot(pair[1]) ? 10 : (printColTotalW || 10)) + '%' }">
 
                                                     </colgroup>
 
@@ -16019,7 +16087,7 @@
 
                                                             :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
 
-                                                            <th class="col-style p-1 text-left relative group/col" :style="{ width: printColStyleW + '%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                            <th class="col-style p-1 text-left relative group/col" :style="{ width: (hasCartonLot(pair[1]) ? '16%' : printColStyleW + '%') }" :class="[printShowGridLines ? 'border-r border-black' : '']">
 
                                                                 Style
 
@@ -16031,7 +16099,7 @@
 
                                                             </th>
 
-                                                            <th class="col-color p-1 text-left relative group/col" :style="{ width: printColColorW + '%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                            <th class="col-color p-1 text-left relative group/col" :style="{ width: (hasCartonLot(pair[1]) ? '14%' : printColColorW + '%') }" :class="[printShowGridLines ? 'border-r border-black' : '']">
 
                                                                 Colour
 
@@ -16040,6 +16108,12 @@
                                                                      @mousedown="startCartonColResize($event, 'col_color')"
 
                                                                      title="Renk (Colour) genişliğini tutup kaydırın"></div>
+
+                                                            </th>
+
+                                                            <th v-if="hasCartonLot(pair[1])" class="col-asorti p-1 text-center font-black uppercase text-[11px]" :style="{ width: '16%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+
+                                                                Asorti
 
                                                             </th>
 
@@ -16055,7 +16129,13 @@
 
                                                             </th>
 
-                                                            <th class="col-total p-1 font-black relative group/col" :style="{ width: printColTotalW + '%' }">
+                                                            <th v-if="hasCartonLot(pair[1])" class="col-lot p-1 text-center font-black uppercase text-[11px]" :style="{ width: '7%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+
+                                                                LOT
+
+                                                            </th>
+
+                                                            <th class="col-total p-1 font-black relative group/col" :style="{ width: (hasCartonLot(pair[1]) ? '10%' : printColTotalW + '%') }">
 
                                                                 <div class="carton-col-resizer-left no-print"
 
@@ -16085,6 +16165,8 @@
 
                                                             <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].color : '-' }}</td>
 
+                                                            <td v-if="hasCartonLot(pair[1])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[1], 0) }}</td>
+
                                                             <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-0-'+sz"
 
                                                                 class="col-size p-0.5 font-mono font-black"
@@ -16096,6 +16178,8 @@
                                                                 {{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes ? pair[1].items[0].sizes[sz] : '', pair[1]) }}
 
                                                             </td>
+
+                                                            <td v-if="hasCartonLot(pair[1])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('2up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[1], 0) }}</td>
 
                                                             <td class="col-total p-1 font-mono font-black"
 
@@ -16125,6 +16209,8 @@
 
                                                             <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].color : '' }}</td>
 
+                                                            <td v-if="hasCartonLot(pair[1])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[1], 1) }}</td>
+
                                                             <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-1-'+sz"
 
                                                                 class="col-size p-0.5 font-mono font-black"
@@ -16136,6 +16222,8 @@
                                                                 {{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes ? pair[1].items[1].sizes[sz] : '', pair[1]) }}
 
                                                             </td>
+
+                                                            <td v-if="hasCartonLot(pair[1])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('2up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[1], 1) }}</td>
 
                                                             <td class="col-total p-1 font-mono font-black"
 
@@ -16485,13 +16573,17 @@
 
                                                 <colgroup>
 
-                                                    <col :style="{ width: (printColStyleW || 16) + '%' }">
+                                                    <col :style="{ width: (hasCartonLot(c) ? 16 : (printColStyleW || 16)) + '%' }">
 
-                                                    <col :style="{ width: (printColColorW || 14) + '%' }">
+                                                    <col :style="{ width: (hasCartonLot(c) ? 14 : (printColColorW || 14)) + '%' }">
+
+                                                    <col v-if="hasCartonLot(c)" :style="{ width: '16%' }">
 
                                                     <col v-for="sz in getCartonSizeHeaders(c)" :key="'col-single-'+sz" :style="{ width: getCartonSizeColWidth(c) }">
 
-                                                    <col :style="{ width: (printColTotalW || 10) + '%' }">
+                                                    <col v-if="hasCartonLot(c)" :style="{ width: '7%' }">
+
+                                                    <col :style="{ width: (hasCartonLot(c) ? 10 : (printColTotalW || 10)) + '%' }">
 
                                                 </colgroup>
 
@@ -16503,7 +16595,7 @@
 
                                                         :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
 
-                                                        <th class="col-style p-2 text-left relative group/col" :style="{ width: printColStyleW + '%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                        <th class="col-style p-2 text-left relative group/col" :style="{ width: (hasCartonLot(c) ? '16%' : printColStyleW + '%') }" :class="[printShowGridLines ? 'border-r border-black' : '']">
 
                                                             Style
 
@@ -16515,7 +16607,7 @@
 
                                                         </th>
 
-                                                        <th class="col-color p-2 text-left relative group/col" :style="{ width: printColColorW + '%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                        <th class="col-color p-2 text-left relative group/col" :style="{ width: (hasCartonLot(c) ? '14%' : printColColorW + '%') }" :class="[printShowGridLines ? 'border-r border-black' : '']">
 
                                                             Colour
 
@@ -16524,6 +16616,12 @@
                                                                  @mousedown="startCartonColResize($event, 'col_color')"
 
                                                                  title="Renk (Colour) genişliğini tutup kaydırın"></div>
+
+                                                        </th>
+
+                                                        <th v-if="hasCartonLot(c)" class="col-asorti p-2 text-center font-black uppercase text-xs" :style="{ width: '16%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+
+                                                            Asorti
 
                                                         </th>
 
@@ -16539,7 +16637,13 @@
 
                                                         </th>
 
-                                                        <th class="col-total p-2 font-black relative group/col" :style="{ width: printColTotalW + '%' }">
+                                                        <th v-if="hasCartonLot(c)" class="col-lot p-2 text-center font-black uppercase text-xs" :style="{ width: '7%' }" :class="[printShowGridLines ? 'border-r border-black' : '']">
+
+                                                            LOT
+
+                                                        </th>
+
+                                                        <th class="col-total p-2 font-black relative group/col" :style="{ width: (hasCartonLot(c) ? '10%' : printColTotalW + '%') }">
 
                                                             <div class="carton-col-resizer-left no-print"
 
@@ -16567,6 +16671,8 @@
 
                                                         <td class="col-color p-2 text-left truncate" :style="{ fontSize: getCartonFontPx(13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
 
+                                                        <td v-if="hasCartonLot(c)" class="col-asorti p-2 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(c, 0) }}</td>
+
                                                         <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-0-'+sz"
 
                                                             class="col-size p-1 font-mono font-black"
@@ -16578,6 +16684,8 @@
                                                             {{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes ? c.items[0].sizes[sz] : '', c) }}
 
                                                         </td>
+
+                                                        <td v-if="hasCartonLot(c)" class="col-lot p-2 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('1up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(c, 0) }}</td>
 
                                                         <td class="col-total p-2 font-mono font-black"
 
@@ -16607,6 +16715,8 @@
 
                                                         <td class="col-color p-2 text-left truncate" :style="{ fontSize: getCartonFontPx(13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[1] ? c.items[1].color : '' }}</td>
 
+                                                        <td v-if="hasCartonLot(c)" class="col-asorti p-2 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(c, 1) }}</td>
+
                                                         <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-1-'+sz"
 
                                                             class="col-size p-1 font-mono font-black"
@@ -16618,6 +16728,8 @@
                                                             {{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes ? c.items[1].sizes[sz] : '', c) }}
 
                                                         </td>
+
+                                                        <td v-if="hasCartonLot(c)" class="col-lot p-2 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('1up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(c, 1) }}</td>
 
                                                         <td class="col-total p-2 font-mono font-black"
 

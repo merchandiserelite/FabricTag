@@ -2120,6 +2120,54 @@ Critical Rules:
         channels_set = set()
 
         if is_vertical_block:
+            prev_headers_upper = [str(c or "").strip().upper() for c in rows[header_idx - 1]] if header_idx > 0 else []
+
+            # 1. Total column detection
+            total_col_idx = -1
+            for c_idx, h in enumerate(headers_upper):
+                if any(k in h for k in ["TOPLAM", "TOTAL"]):
+                    total_col_idx = c_idx
+                    break
+            if total_col_idx == -1 and prev_headers_upper:
+                for c_idx, h in enumerate(prev_headers_upper):
+                    if any(k in h for k in ["TOPLAM", "TOTAL"]):
+                        total_col_idx = c_idx
+                        break
+
+            # 2. Asorti / Lot description column detection
+            asorti_col_idx = -1
+            for c_idx, h in enumerate(headers_upper):
+                if "ASORT" in h:
+                    asorti_col_idx = c_idx
+                    break
+            if asorti_col_idx == -1 and size_cols:
+                min_sz_idx = min(size_cols.values())
+                for c_idx in range(2, min_sz_idx):
+                    for test_r in rows[header_idx+1:min(len(rows), header_idx+25)]:
+                        if len(test_r) > c_idx and test_r[c_idx]:
+                            val = str(test_r[c_idx]).upper()
+                            if "ASORT" in val or "LOT" in val:
+                                asorti_col_idx = c_idx
+                                break
+                    if asorti_col_idx != -1:
+                        break
+
+            # 3. Lot quantity column detection
+            lot_col_idx = -1
+            for c_idx, h in enumerate(headers_upper):
+                if h == "LOT" or "ICINDEKI" in h.replace("?", "I") or "???NDEK?" in h:
+                    lot_col_idx = c_idx
+                    break
+            if lot_col_idx == -1 and prev_headers_upper:
+                for c_idx, h in enumerate(prev_headers_upper):
+                    if h == "LOT" or "ICINDEKI" in h.replace("?", "I") or "???NDEK?" in h:
+                        lot_col_idx = c_idx
+                        break
+            if lot_col_idx == -1 and size_cols and total_col_idx != -1:
+                max_sz_idx = max(size_cols.values())
+                if total_col_idx > max_sz_idx + 1:
+                    lot_col_idx = max_sz_idx + 1
+
             cur_color = ""
             cur_channel = ""
             
@@ -2134,7 +2182,7 @@ Critical Rules:
                 if 'TOPLAM' in val1.upper():
                     continue
                     
-                if not detected_style and val1 and not any(k in val1.upper() for k in ['KOLİ', 'STYLE', 'TOPLAM']):
+                if not detected_style and val1 and not any(k in val1.upper() for k in ['KOL?', 'STYLE', 'TOPLAM']):
                     detected_style = val1
                     continue
                     
@@ -2146,10 +2194,34 @@ Critical Rules:
                     koli_num = None
                     
                 if is_koli:
-                    if val1 and not any(k in val1.upper() for k in ['KOLİ', 'STYLE', 'TOPLAM']):
+                    if val1 and not any(k in val1.upper() for k in ['KOL?', 'STYLE', 'TOPLAM']):
                         cur_color = val1
                     if val2 and any(k in val2.upper() for k in ['WEBSHOP', 'SHOPS', 'WHOLESALE', 'STOCK', 'MOSCOW']):
                         cur_channel = val2
+
+                    # Check for asorti / lot description in this row
+                    asorti_val = ""
+                    if asorti_col_idx != -1 and len(r) > asorti_col_idx and r[asorti_col_idx]:
+                        raw_asorti = str(r[asorti_col_idx]).strip()
+                        raw_asorti_clean = re.sub(r'[ 	]+', ' ', raw_asorti).strip()
+                        if raw_asorti_clean and not any(k in raw_asorti_clean.upper() for k in ['TOPLAM', 'TOTAL', 'KOL?', 'STYLE']):
+                            asorti_val = raw_asorti_clean
+
+                    # Check for lot quantity in this row
+                    row_lot_qty = 0
+                    if lot_col_idx != -1 and len(r) > lot_col_idx and r[lot_col_idx] is not None:
+                        try:
+                            row_lot_qty = int(float(r[lot_col_idx]))
+                        except:
+                            row_lot_qty = 0
+
+                    # Check for total quantity in this row
+                    row_total_qty = 0
+                    if total_col_idx != -1 and len(r) > total_col_idx and r[total_col_idx] is not None:
+                        try:
+                            row_total_qty = int(float(r[total_col_idx]))
+                        except:
+                            row_total_qty = 0
                         
                     row_sizes = {}
                     for sz, cidx in size_cols.items():
@@ -2159,13 +2231,21 @@ Critical Rules:
                                 if v > 0: row_sizes[sz] = v
                             except: pass
                                 
-                    tot_qty = sum(row_sizes.values())
-                    if tot_qty == 0 and len(r) > 11 and r[11] is not None:
-                        try: tot_qty = int(float(r[11]))
-                        except: pass
+                    sum_sizes = sum(row_sizes.values())
+                    if asorti_val and row_total_qty > 0:
+                        tot_qty = row_total_qty
+                        if not row_lot_qty:
+                            row_lot_qty = sum_sizes
+                    elif row_total_qty > 0:
+                        tot_qty = row_total_qty
+                    else:
+                        tot_qty = sum_sizes
                         
                     if tot_qty == 0:
                         continue
+
+                    num_lots = (tot_qty // row_lot_qty) if (row_lot_qty and row_lot_qty > 0 and tot_qty >= row_lot_qty) else 1
+                    actual_sizes = {sz: v * num_lots for sz, v in row_sizes.items()} if asorti_val else dict(row_sizes)
                         
                     model_name = detected_style or "MODEL"
                     model_set.add(model_name)
@@ -2179,12 +2259,19 @@ Critical Rules:
                         'channel': cur_channel,
                         'customer': detected_customer,
                         'brand': detected_brand,
-                        'sizes': row_sizes,
+                        'asorti': asorti_val,
+                        'lot_desc': asorti_val,
+                        'has_lot': bool(asorti_val),
+                        'lot_qty': row_lot_qty if asorti_val else 0,
+                        'lot_sizes': dict(row_sizes),
+                        'display_sizes': dict(row_sizes) if asorti_val else actual_sizes,
+                        'sizes': actual_sizes,
                         'total_qty': tot_qty,
                         'gross_weight': 0.0,
                         'net_weight': 0.0,
                         'measurements': '60X40X30'
                     })
+
         else:
             col_map = {}
             for c_idx, h in enumerate(headers):
@@ -2199,6 +2286,10 @@ Critical Rules:
                     col_map['customer'] = c_idx
                 elif 'grup say' in h_norm or 'group count' in h_norm:
                     col_map['group_count'] = c_idx
+                elif 'asorti' in h_norm or 'lot_desc' in h_norm:
+                    col_map['asorti'] = c_idx
+                elif h_norm == 'lot' or 'koli icindeki' in h_norm.replace('?', 'i').replace('?', 'u'):
+                    col_map['lot_qty'] = c_idx
                 elif 'grup' in h_norm or 'group' in h_norm:
                     col_map['group'] = c_idx
                 elif 'toplam' in h_norm or 'total' in h_norm:
@@ -2254,7 +2345,25 @@ Critical Rules:
                         except: pass
 
                 calc_tot = sum(row_sizes.values())
-                if tot_num == 0 and calc_tot > 0: tot_num = calc_tot
+                asorti_val = ""
+                if 'asorti' in col_map and len(r) > col_map['asorti'] and r[col_map['asorti']]:
+                    raw_asorti = str(r[col_map['asorti']]).strip()
+                    raw_asorti_clean = re.sub(r'[ 	]+', ' ', raw_asorti).strip()
+                    if raw_asorti_clean and not any(k in raw_asorti_clean.upper() for k in ['TOPLAM', 'TOTAL', 'KOL?', 'STYLE']):
+                        asorti_val = raw_asorti_clean
+
+                row_lot_qty = 0
+                if 'lot_qty' in col_map and len(r) > col_map['lot_qty'] and r[col_map['lot_qty']] is not None:
+                    try: row_lot_qty = int(float(r[col_map['lot_qty']]))
+                    except: row_lot_qty = 0
+
+                if asorti_val and tot_num > 0:
+                    if not row_lot_qty: row_lot_qty = calc_tot
+                elif tot_num == 0 and calc_tot > 0:
+                    tot_num = calc_tot
+
+                num_lots = (tot_num // row_lot_qty) if (row_lot_qty and row_lot_qty > 0 and tot_num >= row_lot_qty) else 1
+                actual_sizes = {sz: v * num_lots for sz, v in row_sizes.items()} if asorti_val else dict(row_sizes)
 
                 chan_u = channel_val.upper().strip()
                 is_stock_row = ('STOCK' in chan_u and 'AVT' in chan_u) or chan_u in ['AVT STOCK', 'STOCK AVT', 'STOCK', 'AVT-STOCK', 'STOCK-AVT']
@@ -2299,7 +2408,13 @@ Critical Rules:
                     'channel': channel_val or '',
                     'customer': cust_val,
                     'brand': detected_brand,
-                    'sizes': row_sizes,
+                    'asorti': asorti_val,
+                    'lot_desc': asorti_val,
+                    'has_lot': bool(asorti_val),
+                    'lot_qty': row_lot_qty if asorti_val else 0,
+                    'lot_sizes': dict(row_sizes),
+                    'display_sizes': dict(row_sizes) if asorti_val else actual_sizes,
+                    'sizes': actual_sizes,
                     'total_qty': tot_num,
                     'group_count': group_cnt,
                     'unit_weight': unit_gr,
@@ -2337,10 +2452,21 @@ Critical Rules:
                 cur_carton['items'].append({
                     'model': mod,
                     'color': col,
-                    'sizes': sizes,
+                    'asorti': item.get('asorti') or '',
+                    'lot_desc': item.get('lot_desc') or '',
+                    'has_lot': item.get('has_lot') or False,
+                    'lot_qty': item.get('lot_qty') or 0,
+                    'lot_sizes': item.get('lot_sizes') or dict(sizes),
+                    'sizes': item.get('display_sizes') or dict(sizes),
+                    'actual_sizes': dict(sizes),
                     'total_qty': qty
                 })
                 cur_carton['total_qty'] += qty
+                if item.get('has_lot'):
+                    cur_carton['has_lot'] = True
+                    cur_carton['asorti'] = item.get('asorti') or ''
+                    cur_carton['lot_qty'] = item.get('lot_qty') or 0
+                    cur_carton['lot_sizes'] = item.get('lot_sizes') or dict(sizes)
                 for sz, v in sizes.items():
                     cur_carton['sizes'][sz] = cur_carton['sizes'].get(sz, 0) + v
                 if gw > 0:
@@ -2361,6 +2487,11 @@ Critical Rules:
                     'model': mod,
                     'customer': item.get('customer') or detected_customer,
                     'brand': item.get('brand') or detected_brand or '',
+                    'asorti': item.get('asorti') or '',
+                    'lot_desc': item.get('lot_desc') or '',
+                    'has_lot': item.get('has_lot') or False,
+                    'lot_qty': item.get('lot_qty') or 0,
+                    'lot_sizes': item.get('lot_sizes') or dict(sizes),
                     'group_count': grp_cnt,
                     'gross_weight': calc_gw,
                     'net_weight': item.get('net_weight') or 0.0,
@@ -2372,7 +2503,13 @@ Critical Rules:
                     'items': [{
                         'model': mod,
                         'color': col,
-                        'sizes': sizes,
+                        'asorti': item.get('asorti') or '',
+                        'lot_desc': item.get('lot_desc') or '',
+                        'has_lot': item.get('has_lot') or False,
+                        'lot_qty': item.get('lot_qty') or 0,
+                        'lot_sizes': item.get('lot_sizes') or dict(sizes),
+                        'sizes': item.get('display_sizes') or dict(sizes),
+                        'actual_sizes': dict(sizes),
                         'total_qty': qty
                     }]
                 }

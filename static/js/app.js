@@ -23768,55 +23768,38 @@ window.__texflowApp = createApp({
 
 
         const getCartonSizeColWidth = (carton = null) => {
-
             const headers = getCartonSizeHeaders(carton);
-
             const count = (headers && headers.length) ? headers.length : 6;
-
-            const styleW = carton?.layout?.col_style_w !== undefined ? carton.layout.col_style_w : (printColStyleW.value || 16);
-
-            const colorW = carton?.layout?.col_color_w !== undefined ? carton.layout.col_color_w : (printColColorW.value || 14);
-
-            const totalW = carton?.layout?.col_total_w !== undefined ? carton.layout.col_total_w : (printColTotalW.value || 10);
-
-            const rem = Math.max(20, 100 - (Number(styleW) + Number(colorW) + Number(totalW)));
-
+            const isLot = hasCartonLot(carton);
+            const styleW = isLot ? 16 : (carton?.layout?.col_style_w !== undefined ? carton.layout.col_style_w : (printColStyleW.value || 16));
+            const colorW = isLot ? 14 : (carton?.layout?.col_color_w !== undefined ? carton.layout.col_color_w : (printColColorW.value || 14));
+            const asortiW = isLot ? 16 : 0;
+            const lotW = isLot ? 7 : 0;
+            const totalW = isLot ? 10 : (carton?.layout?.col_total_w !== undefined ? carton.layout.col_total_w : (printColTotalW.value || 10));
+            const rem = Math.max(15, 100 - (Number(styleW) + Number(colorW) + Number(asortiW) + Number(lotW) + Number(totalW)));
             const w = rem / count;
-
             return `${w.toFixed(2)}%`;
-
         };
 
-
-
         const getCartonTableContainerStyle = (carton = null) => {
-
             const headers = getCartonSizeHeaders(carton);
-
             const count = (headers && headers.length) ? headers.length : 6;
-
-            const styleW = carton?.layout?.col_style_w !== undefined ? carton.layout.col_style_w : (printColStyleW.value || 16);
-
-            const colorW = carton?.layout?.col_color_w !== undefined ? carton.layout.col_color_w : (printColColorW.value || 14);
-
-            const totalW = carton?.layout?.col_total_w !== undefined ? carton.layout.col_total_w : (printColTotalW.value || 10);
-
-            const rem = Math.max(20, 100 - (Number(styleW) + Number(colorW) + Number(totalW)));
-
+            const isLot = hasCartonLot(carton);
+            const styleW = isLot ? 16 : (carton?.layout?.col_style_w !== undefined ? carton.layout.col_style_w : (printColStyleW.value || 16));
+            const colorW = isLot ? 14 : (carton?.layout?.col_color_w !== undefined ? carton.layout.col_color_w : (printColColorW.value || 14));
+            const asortiW = isLot ? 16 : 0;
+            const lotW = isLot ? 7 : 0;
+            const totalW = isLot ? 10 : (carton?.layout?.col_total_w !== undefined ? carton.layout.col_total_w : (printColTotalW.value || 10));
+            const rem = Math.max(15, 100 - (Number(styleW) + Number(colorW) + Number(asortiW) + Number(lotW) + Number(totalW)));
             const sizeColW = (rem / count).toFixed(2);
-
             return {
-
                 '--carton-col-style-w': `${styleW}%`,
-
                 '--carton-col-color-w': `${colorW}%`,
-
+                '--carton-col-asorti-w': `${asortiW}%`,
+                '--carton-col-lot-w': `${lotW}%`,
                 '--carton-col-total-w': `${totalW}%`,
-
                 '--carton-col-size-w': `${sizeColW}%`
-
             };
-
         };
 
 
@@ -24089,6 +24072,46 @@ window.__texflowApp = createApp({
             }
             if (!packingData.value || !packingData.value.cartons) return false;
             return packingData.value.cartons.some(c => c.gross_weight && String(c.gross_weight).trim() !== '' && String(c.gross_weight).trim() !== '0');
+        };
+
+        const hasCartonLot = (carton = null) => {
+            if (carton) {
+                if (carton.has_lot) return true;
+                if (carton.asorti && String(carton.asorti).trim() !== '') return true;
+                if (carton.items && carton.items.some(it => it.has_lot || (it.asorti && String(it.asorti).trim() !== ''))) return true;
+                return false;
+            }
+            if (!packingData.value || !packingData.value.cartons) return false;
+            return packingData.value.cartons.some(c => hasCartonLot(c));
+        };
+
+        const getCartonAsorti = (carton = null, itemIndex = 0) => {
+            if (!carton) return '';
+            if (carton.items && carton.items[itemIndex]) {
+                return carton.items[itemIndex].asorti || carton.items[itemIndex].lot_desc || (itemIndex === 0 ? (carton.asorti || '') : '');
+            }
+            return itemIndex === 0 ? (carton.asorti || '') : '';
+        };
+
+        const getCartonLotQty = (carton = null, itemIndex = 0) => {
+            if (!carton) return '';
+            if (carton.items && carton.items[itemIndex]) {
+                const q = carton.items[itemIndex].lot_qty || (itemIndex === 0 ? carton.lot_qty : '');
+                return q || '';
+            }
+            return itemIndex === 0 ? (carton.lot_qty || '') : '';
+        };
+
+        const getCartonItemSizeQty = (carton, itemIndex, sz) => {
+            if (!carton || !carton.items || !carton.items[itemIndex]) return '';
+            const item = carton.items[itemIndex];
+            if (item.lot_sizes && item.lot_sizes[sz] !== undefined) {
+                return item.lot_sizes[sz];
+            }
+            if (item.sizes && item.sizes[sz] !== undefined) {
+                return item.sizes[sz];
+            }
+            return '';
         };
 
 
@@ -31894,6 +31917,14 @@ return {
             hasCartonChannel,
 
             hasCartonGrossWeight,
+
+            hasCartonLot,
+
+            getCartonAsorti,
+
+            getCartonLotQty,
+
+            getCartonItemSizeQty,
 
             isSolvLayout,
 
