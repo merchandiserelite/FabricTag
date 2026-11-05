@@ -6,6 +6,7 @@ Comprehensive Multi-tenant, RBAC, Dynamic Menu, Audit Logs, and Master Productio
 import sqlite3
 import json
 import os
+import re
 import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -629,7 +630,12 @@ def get_carton_templates(company_id: int = 1, customer_name: Optional[str] = Non
     conn = get_db()
     cursor = conn.cursor()
     if customer_name and customer_name.strip():
-        c_clean = customer_name.strip()
+        c_clean = re.sub(r'^packing_\d+_', '', customer_name.strip(), flags=re.IGNORECASE).strip()
+        kw = f"%{c_clean}%"
+        if "anna" in c_clean.lower():
+            kw = "%Anna%"
+        elif "solv" in c_clean.lower():
+            kw = "%SOLV%"
         cursor.execute("""
             SELECT id, company_id, customer_name, template_name, paper_size, orientation,
                    width_mm, height_mm, items_per_page, border_style, border_width,
@@ -640,11 +646,12 @@ def get_carton_templates(company_id: int = 1, customer_name: Optional[str] = Non
                 CASE 
                     WHEN LOWER(customer_name) = LOWER(?) THEN 0
                     WHEN LOWER(customer_name) LIKE LOWER(?) THEN 1
-                    WHEN customer_name = 'Standart / Genel' THEN 2
-                    ELSE 3
+                    WHEN LOWER(customer_name) LIKE LOWER(?) THEN 2
+                    WHEN customer_name = 'Standart / Genel' THEN 3
+                    ELSE 4
                 END,
                 is_default DESC, id ASC
-        """, (company_id, c_clean, f"%{c_clean}%"))
+        """, (company_id, c_clean, f"%{c_clean}%", kw))
     else:
         cursor.execute("""
             SELECT id, company_id, customer_name, template_name, paper_size, orientation,

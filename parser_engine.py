@@ -1971,12 +1971,24 @@ Critical Rules:
 
         # Check filename first
         fname = os.path.basename(file_path)
-        m_fn = re.match(r'^([A-Za-z0-9\s_-]+?)(?:\s+(?:KOL[İI]|CEK[İI]|ŞABLON|SABLON|USTU|ÜSTÜ|LABEL|CARTON))', fname, re.IGNORECASE)
+        clean_fname = re.sub(r'^packing_\d+_', '', fname, flags=re.IGNORECASE)
+        m_fn = re.match(r'^([A-Za-z0-9\s_-]+?)(?:\s+(?:KOL[İI]|CEK[İI]|ŞABLON|SABLON|USTU|ÜSTÜ|LABEL|CARTON))', clean_fname, re.IGNORECASE)
         if m_fn:
             candidate_fn_cust = m_fn.group(1).strip()
             if candidate_fn_cust and len(candidate_fn_cust) >= 2:
                 detected_customer = candidate_fn_cust
                 detected_brand = candidate_fn_cust
+        
+        # Specific brand overrides from filename
+        cf_lower = clean_fname.lower()
+        if 'anna' in cf_lower and ('van' in cf_lower or 'toor' in cf_lower or 'blue' in cf_lower):
+            detected_customer = "Anna van Toor B.V."
+            if not detected_brand or 'packing' in detected_brand.lower():
+                detected_brand = "Anna van Toor B.V."
+        elif 'solv' in cf_lower:
+            detected_customer = "SOLV"
+            if not detected_brand or 'packing' in detected_brand.lower():
+                detected_brand = "SOLV"
 
         # Scan rows in selected sheet
         for r in rows[:15]:
@@ -1998,7 +2010,7 @@ Critical Rules:
                     if b_val: detected_brand = b_val
                 if not detected_style and re.match(r'^\d{2}[A-Za-z]\d{2}-[\w\d]+$', s_val):
                     detected_style = s_val
-                if 'anna' in s_val.lower() and 'van' in s_val.lower():
+                if 'anna' in s_val.lower() and ('van' in s_val.lower() or 'toor' in s_val.lower()):
                     detected_customer = "Anna van Toor B.V."
 
         # If customer still not detected, scan other sheets for customer headers/multiline blocks
@@ -2070,7 +2082,7 @@ Critical Rules:
 
         # Dynamic size detection: Detect whatever size headers are in the Excel file
         meta_kw = [
-            'koli', 'carton', 'box', 'ctn', 'no', 'sira', 'row', 'asorti',
+            'koli', 'carton', 'box', 'ctn', 'no', 'sira', 'row', 'asorti', 'asortı', 'lot', 'lots',
             'style', 'model', 'artikel', 'art',
             'renk', 'color', 'colour',
             'shop', 'kanal', 'channel', 'store', 'magaza', 'dukkan',
@@ -2111,8 +2123,11 @@ Critical Rules:
                 continue
 
             # Any remaining short string token that doesn't conflict with key terms
-            if len(s) <= 8 and not any(k in s_l for k in ['koli', 'toplam', 'total', 'model', 'style', 'color', 'renk', 'shop', 'brand', 'adet', 'kg', 'net', 'brut']):
+            if len(s) <= 8 and not any(k in s_l for k in ['koli', 'toplam', 'total', 'model', 'style', 'color', 'renk', 'shop', 'brand', 'adet', 'kg', 'net', 'brut', 'lot', 'asorti', 'asortı']):
                 size_cols[s_u] = c_idx
+
+        # Filter out any non-size tokens from size_cols
+        size_cols = {k: v for k, v in size_cols.items() if k.upper() not in ['LOT', 'TOTAL', 'TOPLAM', 'ASORTI', 'ASORTİ', 'ASORTI-']}
 
         raw_items = []
         model_set = set()

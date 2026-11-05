@@ -23929,67 +23929,40 @@ window.__texflowApp = createApp({
 
 
         const getCartonSizeHeaders = (carton = null) => {
-
+            let res = [];
             // 1. If carton has detected_sizes list
-
             if (carton && Array.isArray(carton.detected_sizes) && carton.detected_sizes.length > 0) {
-
-                return carton.detected_sizes;
-
+                res = carton.detected_sizes;
             }
-
             // 2. If packingData has detected_sizes list
-
-            if (packingData.value && Array.isArray(packingData.value.detected_sizes) && packingData.value.detected_sizes.length > 0) {
-
-                return packingData.value.detected_sizes;
-
+            else if (packingData.value && Array.isArray(packingData.value.detected_sizes) && packingData.value.detected_sizes.length > 0) {
+                res = packingData.value.detected_sizes;
             }
-
             // 3. If carton has sizes object keys
-
-            if (carton && carton.sizes && typeof carton.sizes === 'object') {
-
+            else if (carton && carton.sizes && typeof carton.sizes === 'object') {
                 const keys = Object.keys(carton.sizes);
-
-                if (keys.length > 0) return keys;
-
+                if (keys.length > 0) res = keys;
             }
-
             // 4. If carton has items with sizes
-
-            if (carton && Array.isArray(carton.items) && carton.items.length > 0) {
-
+            else if (carton && Array.isArray(carton.items) && carton.items.length > 0) {
                 const szSet = new Set();
-
                 carton.items.forEach(it => {
-
                     if (it && it.sizes && typeof it.sizes === 'object') {
-
                         Object.keys(it.sizes).forEach(k => szSet.add(k));
-
                     }
-
                 });
-
-                if (szSet.size > 0) return Array.from(szSet);
-
+                if (szSet.size > 0) res = Array.from(szSet);
             }
-
             // 5. If packingData has size_summary keys
-
-            if (packingData.value && packingData.value.size_summary && typeof packingData.value.size_summary === 'object') {
-
+            else if (packingData.value && packingData.value.size_summary && typeof packingData.value.size_summary === 'object') {
                 const keys = Object.keys(packingData.value.size_summary);
-
-                if (keys.length > 0) return keys;
-
+                if (keys.length > 0) res = keys;
             }
-
-            // 6. Fallback default
-
-            return ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-
+            if (!res || res.length === 0) {
+                res = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+            }
+            // ALWAYS filter out metadata tokens: LOT, TOTAL, TOPLAM, ASORTI
+            return res.filter(sz => !['LOT', 'TOTAL', 'TOPLAM', 'ASORTI', 'ASORTİ', 'ASORTI-'].includes(String(sz).trim().toUpperCase()));
         };
 
 
@@ -24245,56 +24218,72 @@ window.__texflowApp = createApp({
 
 
         const loadCartonTemplates = async (preferCustomer = null) => {
-
             try {
-
                 let url = '/api/carton-templates';
-
                 if (preferCustomer) {
-
                     url += `?customer=${encodeURIComponent(preferCustomer)}`;
-
                 }
-
                 const res = await apiFetch(url);
-
                 if (res && res.templates) {
-
                     cartonTemplatesList.value = res.templates;
-
                     if (cartonTemplatesList.value.length > 0) {
-
                         let matched = null;
+                        const currentActiveId = activeCartonTemplate.value ? activeCartonTemplate.value.id : null;
 
                         if (preferCustomer) {
+                            const cLower = String(preferCustomer).toLowerCase()
+                                .replace(/^packing_\d+_/, '')
+                                .replace(/[_\-\.]/g, ' ')
+                                .trim();
 
-                            const cLower = preferCustomer.toLowerCase();
+                            // 1. Exact or partial customer_name / template_name match
+                            matched = cartonTemplatesList.value.find(t => {
+                                const tCust = String(t.customer_name || '').toLowerCase().trim();
+                                const tName = String(t.template_name || '').toLowerCase().trim();
+                                return (tCust && (tCust.includes(cLower) || cLower.includes(tCust))) ||
+                                       (tName && (tName.includes(cLower) || cLower.includes(tName)));
+                            });
 
-                            matched = cartonTemplatesList.value.find(t => 
-
-                                t.customer_name && t.customer_name.toLowerCase().includes(cLower)
-
-                            );
-
+                            // 2. Keyword fallback for Anna Van Toor / Solv
+                            if (!matched) {
+                                if ((cLower.includes('anna') && cLower.includes('van')) || cLower.includes('toor') || cLower.includes('anna blue')) {
+                                    matched = cartonTemplatesList.value.find(t => {
+                                        const full = `${t.customer_name || ''} ${t.template_name || ''}`.toLowerCase();
+                                        return full.includes('anna') && (full.includes('van') || full.includes('toor'));
+                                    });
+                                } else if (cLower.includes('solv')) {
+                                    matched = cartonTemplatesList.value.find(t => {
+                                        const full = `${t.customer_name || ''} ${t.template_name || ''}`.toLowerCase();
+                                        return full.includes('solv');
+                                    });
+                                }
+                            }
                         }
 
-                        activeCartonTemplate.value = matched || cartonTemplatesList.value[0];
+                        // 3. User already selected an active template in UI -> KEEP IT!
+                        // "istersen aktif seçili üzerinden çeki listesi sisteme yüklediğimizde o şekilde koli üstlerini düzenlesin"
+                        if (!matched && currentActiveId) {
+                            const existing = cartonTemplatesList.value.find(t => t.id === currentActiveId);
+                            if (existing) {
+                                matched = existing;
+                            }
+                        }
 
-                        applyTemplateToPrintConfig(activeCartonTemplate.value);
+                        // 4. Fallback to default or first template
+                        if (!matched) {
+                            matched = cartonTemplatesList.value.find(t => t.is_default) || cartonTemplatesList.value[0];
+                        }
 
+                        if (matched) {
+                            activeCartonTemplate.value = matched;
+                            applyTemplateToPrintConfig(matched);
+                        }
                     }
-
                 }
-
             } catch (err) {
-
                 console.error("Carton templates load error:", err);
-
             }
-
         };
-
-
 
         const selectCartonTemplate = (tpl) => {
 
