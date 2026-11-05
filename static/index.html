@@ -15231,36 +15231,21 @@
 
                                                     </tr>
 
-                                                    <tr v-if="c.items && c.items.length > 1" class="font-semibold"
-
+                                                    <tr v-for="(it, itIdx) in (c.items ? c.items.slice(1) : [])" :key="'sz-r6-extra-'+itIdx" class="font-semibold"
                                                         :style="{ height: getCartonTableRowHeightPx('6up') + 'px' }"
-
                                                         :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
-
-                                                        <td class="col-style p-0.5 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(9) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items[1].model }}</td>
-
-                                                        <td class="col-color p-0.5 text-left truncate" :style="{ fontSize: getCartonFontPx(8) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items[1].color }}</td>
-
-                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-r6-1-'+sz"
-
+                                                        <td class="col-style p-0.5 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(9) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ it.model }}</td>
+                                                        <td class="col-color p-0.5 text-left truncate" :style="{ fontSize: getCartonFontPx(8) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ it.color }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-r6-extra-'+itIdx+'-'+sz"
                                                             class="col-size p-0.5 font-mono font-black"
-
                                                             :style="{ width: getCartonSizeColWidth(c), fontSize: getCartonSizeFontSizePx('6up', true) + 'px' }"
-
                                                             :class="[printShowGridLines ? 'border-r border-black' : '']">
-
-                                                            {{ formatCartonSizeQty(c.items[1].sizes ? c.items[1].sizes[sz] : '', c) }}
-
+                                                            {{ formatCartonSizeQty(it.sizes ? it.sizes[sz] : '', c) }}
                                                         </td>
-
                                                         <td class="col-total p-0.5 font-mono font-black"
-
                                                             :style="{ fontSize: (getCartonSizeFontSizePx('6up', true) + 1) + 'px' }">
-
-                                                            {{ formatCartonSizeQty(c.items[1].total_qty, c) }}
-
+                                                            {{ formatCartonSizeQty(it.total_qty, c) }}
                                                         </td>
-
                                                     </tr>
 
                                                 </tbody>
@@ -15525,36 +15510,21 @@
 
                                                     </tr>
 
-                                                    <tr v-if="c.items && c.items.length > 1" class="font-semibold"
-
+                                                    <tr v-for="(it, itIdx) in (c.items ? c.items.slice(1) : [])" :key="'sz-r4-extra-'+itIdx" class="font-semibold"
                                                         :style="{ height: getCartonTableRowHeightPx('4up') + 'px' }"
-
                                                         :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
-
-                                                        <td class="col-style p-1 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(11) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items[1].model }}</td>
-
-                                                        <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(10) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items[1].color }}</td>
-
-                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-r4-1-'+sz"
-
+                                                        <td class="col-style p-1 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(11) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ it.model }}</td>
+                                                        <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(10) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ it.color }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-r4-extra-'+itIdx+'-'+sz"
                                                             class="col-size p-0.5 font-mono font-black"
-
                                                             :style="{ width: getCartonSizeColWidth(c), fontSize: getCartonSizeFontSizePx('4up', true) + 'px' }"
-
                                                             :class="[printShowGridLines ? 'border-r border-black' : '']">
-
-                                                            {{ formatCartonSizeQty(c.items[1].sizes ? c.items[1].sizes[sz] : '', c) }}
-
+                                                            {{ formatCartonSizeQty(it.sizes ? it.sizes[sz] : '', c) }}
                                                         </td>
-
                                                         <td class="col-total p-1 font-mono font-black"
-
                                                             :style="{ fontSize: (getCartonSizeFontSizePx('4up', true) + 1) + 'px' }">
-
-                                                            {{ formatCartonSizeQty(c.items[1].total_qty, c) }}
-
+                                                            {{ formatCartonSizeQty(it.total_qty, c) }}
                                                         </td>
-
                                                     </tr>
 
                                                 </tbody>
@@ -15811,95 +15781,33 @@
 
                                                     <tbody>
 
-                                                        <!-- 1. Ürün Satırı -->
+                                                        <tr v-for="(rowItem, rIdx) in getCartonTableRows(pair[0])"
+                                                                :key="'sz-r0-item-'+rIdx"
+                                                                class="font-semibold"
+                                                                :style="{ height: getCartonTableRowHeightPx('2up', null, null, pair[0]) + 'px' }"
+                                                                :class="[
+                                                                    printShowGridLines ? 'border-b border-black' : 'border-b border-transparent',
+                                                                    {'opacity-20': !rowItem}
+                                                                ]">
+                                                                <td class="col-style p-1 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(getCartonItemsCount(pair[0]) >= 3 ? 11 : 13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ rowItem ? rowItem.model : '' }}</td>
+                                                                <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(getCartonItemsCount(pair[0]) >= 3 ? 10 : 12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ rowItem ? rowItem.color : '' }}</td>
+                                                                <td v-if="hasCartonLot(pair[0])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[0], rIdx) }}</td>
+                                                                <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-'+rIdx+'-'+sz"
+                                                                    class="col-size p-0.5 font-mono font-black"
+                                                                    :style="{ width: getCartonSizeColWidth(pair[0]), fontSize: getCartonSizeFontSizePx('2up', true, null, pair[0]) + 'px' }"
+                                                                    :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                                    {{ formatCartonSizeQty(rowItem && rowItem.sizes ? rowItem.sizes[sz] : '', pair[0]) }}
+                                                                </td>
+                                                                <td v-if="hasCartonLot(pair[0])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: getCartonSizeFontSizePx('2up', true, null, pair[0]) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[0], rIdx) }}</td>
+                                                                <td class="col-total p-1 font-mono font-black"
+                                                                    :style="{ fontSize: (getCartonSizeFontSizePx('2up', true, null, pair[0]) + 1) + 'px' }">
+                                                                    {{ rowItem ? formatCartonSizeQty(rowItem.total_qty, pair[0]) : '' }}
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
 
-                                                        <tr class="font-semibold"
-
-                                                            :style="{ height: getCartonTableRowHeightPx('2up') + 'px' }"
-
-                                                            :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
-
-                                                            <td class="col-style p-1 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].model : '-' }}</td>
-
-                                                            <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[0] ? pair[0].items[0].color : '-' }}</td>
-
-                                                            <td v-if="hasCartonLot(pair[0])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[0], 0) }}</td>
-
-                                                            <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-0-'+sz"
-
-                                                                class="col-size p-0.5 font-mono font-black"
-
-                                                                :style="{ width: getCartonSizeColWidth(pair[0]), fontSize: getCartonSizeFontSizePx('2up', true) + 'px' }"
-
-                                                                :class="[printShowGridLines ? 'border-r border-black' : '']">
-
-                                                                {{ formatCartonSizeQty(pair[0].items && pair[0].items[0] && pair[0].items[0].sizes ? pair[0].items[0].sizes[sz] : '', pair[0]) }}
-
-                                                            </td>
-
-                                                            <td v-if="hasCartonLot(pair[0])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('2up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[0], 0) }}</td>
-
-                                                            <td class="col-total p-1 font-mono font-black"
-
-                                                                :style="{ fontSize: (getCartonSizeFontSizePx('2up', true) + 2) + 'px' }">
-
-                                                                {{ pair[0].items && pair[0].items[0] ? formatCartonSizeQty(pair[0].items[0].total_qty, pair[0]) : '' }}
-
-                                                            </td>
-
-                                                        </tr>
-
-                                                        <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
-
-                                                        <tr class="font-semibold"
-
-                                                            :style="{ height: getCartonTableRowHeightPx('2up') + 'px' }"
-
-                                                            :class="[
-
-                                                                printShowGridLines ? 'border-b border-black' : 'border-b border-transparent',
-
-                                                                {'opacity-20': !pair[0].items || pair[0].items.length < 2}
-
-                                                            ]">
-
-                                                            <td class="col-style p-1 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].model : '' }}</td>
-
-                                                            <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[0].items && pair[0].items[1] ? pair[0].items[1].color : '' }}</td>
-
-                                                            <td v-if="hasCartonLot(pair[0])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[0], 1) }}</td>
-
-                                                            <td v-for="sz in getCartonSizeHeaders(pair[0])" :key="'sz-r0-1-'+sz"
-
-                                                                class="col-size p-0.5 font-mono font-black"
-
-                                                                :style="{ width: getCartonSizeColWidth(pair[0]), fontSize: getCartonSizeFontSizePx('2up', true) + 'px' }"
-
-                                                                :class="[printShowGridLines ? 'border-r border-black' : '']">
-
-                                                                {{ formatCartonSizeQty(pair[0].items && pair[0].items[1] && pair[0].items[1].sizes ? pair[0].items[1].sizes[sz] : '', pair[0]) }}
-
-                                                            </td>
-
-                                                            <td v-if="hasCartonLot(pair[0])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('2up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[0], 1) }}</td>
-
-                                                            <td class="col-total p-1 font-mono font-black"
-
-                                                                :style="{ fontSize: (getCartonSizeFontSizePx('2up', true) + 2) + 'px' }">
-
-                                                                {{ pair[0].items && pair[0].items[1] ? formatCartonSizeQty(pair[0].items[1].total_qty, pair[0]) : '' }}
-
-                                                            </td>
-
-                                                        </tr>
-
-                                                    </tbody>
-
-                                                </table>
-
-
-
-                                                <!-- Tablo Köşe Tutamağı -->
+                                                    <!-- Tablo Köşe Tutamağı -->
 
                                                 <div class="carton-table-corner-handle no-print"
 
@@ -16153,95 +16061,33 @@
 
                                                     <tbody>
 
-                                                        <!-- 1. Ürün Satırı -->
+                                                        <tr v-for="(rowItem, rIdx) in getCartonTableRows(pair[1])"
+                                                                :key="'sz-r1-item-'+rIdx"
+                                                                class="font-semibold"
+                                                                :style="{ height: getCartonTableRowHeightPx('2up', null, null, pair[1]) + 'px' }"
+                                                                :class="[
+                                                                    printShowGridLines ? 'border-b border-black' : 'border-b border-transparent',
+                                                                    {'opacity-20': !rowItem}
+                                                                ]">
+                                                                <td class="col-style p-1 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(getCartonItemsCount(pair[1]) >= 3 ? 11 : 13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ rowItem ? rowItem.model : '' }}</td>
+                                                                <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(getCartonItemsCount(pair[1]) >= 3 ? 10 : 12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ rowItem ? rowItem.color : '' }}</td>
+                                                                <td v-if="hasCartonLot(pair[1])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[1], rIdx) }}</td>
+                                                                <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-'+rIdx+'-'+sz"
+                                                                    class="col-size p-0.5 font-mono font-black"
+                                                                    :style="{ width: getCartonSizeColWidth(pair[1]), fontSize: getCartonSizeFontSizePx('2up', true, null, pair[1]) + 'px' }"
+                                                                    :class="[printShowGridLines ? 'border-r border-black' : '']">
+                                                                    {{ formatCartonSizeQty(rowItem && rowItem.sizes ? rowItem.sizes[sz] : '', pair[1]) }}
+                                                                </td>
+                                                                <td v-if="hasCartonLot(pair[1])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: getCartonSizeFontSizePx('2up', true, null, pair[1]) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[1], rIdx) }}</td>
+                                                                <td class="col-total p-1 font-mono font-black"
+                                                                    :style="{ fontSize: (getCartonSizeFontSizePx('2up', true, null, pair[1]) + 1) + 'px' }">
+                                                                    {{ rowItem ? formatCartonSizeQty(rowItem.total_qty, pair[1]) : '' }}
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
 
-                                                        <tr class="font-semibold"
-
-                                                            :style="{ height: getCartonTableRowHeightPx('2up') + 'px' }"
-
-                                                            :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
-
-                                                            <td class="col-style p-1 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].model : '-' }}</td>
-
-                                                            <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[0] ? pair[1].items[0].color : '-' }}</td>
-
-                                                            <td v-if="hasCartonLot(pair[1])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[1], 0) }}</td>
-
-                                                            <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-0-'+sz"
-
-                                                                class="col-size p-0.5 font-mono font-black"
-
-                                                                :style="{ width: getCartonSizeColWidth(pair[1]), fontSize: getCartonSizeFontSizePx('2up', true) + 'px' }"
-
-                                                                :class="[printShowGridLines ? 'border-r border-black' : '']">
-
-                                                                {{ formatCartonSizeQty(pair[1].items && pair[1].items[0] && pair[1].items[0].sizes ? pair[1].items[0].sizes[sz] : '', pair[1]) }}
-
-                                                            </td>
-
-                                                            <td v-if="hasCartonLot(pair[1])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('2up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[1], 0) }}</td>
-
-                                                            <td class="col-total p-1 font-mono font-black"
-
-                                                                :style="{ fontSize: (getCartonSizeFontSizePx('2up', true) + 2) + 'px' }">
-
-                                                                {{ pair[1].items && pair[1].items[0] ? formatCartonSizeQty(pair[1].items[0].total_qty, pair[1]) : '' }}
-
-                                                            </td>
-
-                                                        </tr>
-
-                                                        <!-- 2. Ürün Satırı ("x2" Çoklu Varyant Desteği) -->
-
-                                                        <tr class="font-semibold"
-
-                                                            :style="{ height: getCartonTableRowHeightPx('2up') + 'px' }"
-
-                                                            :class="[
-
-                                                                printShowGridLines ? 'border-b border-black' : 'border-b border-transparent',
-
-                                                                {'opacity-20': !pair[1].items || pair[1].items.length < 2}
-
-                                                            ]">
-
-                                                            <td class="col-style p-1 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].model : '' }}</td>
-
-                                                            <td class="col-color p-1 text-left truncate" :style="{ fontSize: getCartonFontPx(12) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ pair[1].items && pair[1].items[1] ? pair[1].items[1].color : '' }}</td>
-
-                                                            <td v-if="hasCartonLot(pair[1])" class="col-asorti p-1 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(pair[1], 1) }}</td>
-
-                                                            <td v-for="sz in getCartonSizeHeaders(pair[1])" :key="'sz-r1-1-'+sz"
-
-                                                                class="col-size p-0.5 font-mono font-black"
-
-                                                                :style="{ width: getCartonSizeColWidth(pair[1]), fontSize: getCartonSizeFontSizePx('2up', true) + 'px' }"
-
-                                                                :class="[printShowGridLines ? 'border-r border-black' : '']">
-
-                                                                {{ formatCartonSizeQty(pair[1].items && pair[1].items[1] && pair[1].items[1].sizes ? pair[1].items[1].sizes[sz] : '', pair[1]) }}
-
-                                                            </td>
-
-                                                            <td v-if="hasCartonLot(pair[1])" class="col-lot p-1 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('2up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(pair[1], 1) }}</td>
-
-                                                            <td class="col-total p-1 font-mono font-black"
-
-                                                                :style="{ fontSize: (getCartonSizeFontSizePx('2up', true) + 2) + 'px' }">
-
-                                                                {{ pair[1].items && pair[1].items[1] ? formatCartonSizeQty(pair[1].items[1].total_qty, pair[1]) : '' }}
-
-                                                            </td>
-
-                                                        </tr>
-
-                                                    </tbody>
-
-                                                </table>
-
-
-
-                                                <!-- Tablo Köşe Tutamağı -->
+                                                    <!-- Tablo Köşe Tutamağı -->
 
                                                 <div class="carton-table-corner-handle no-print"
 
@@ -16661,91 +16507,31 @@
 
                                                 <tbody>
 
-                                                    <tr class="font-semibold"
-
-                                                        :style="{ height: getCartonTableRowHeightPx('1up') + 'px' }"
-
-                                                        :class="[printShowGridLines ? 'border-b border-black' : 'border-b border-transparent']">
-
-                                                        <td class="col-style p-2 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(14) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[0] ? c.items[0].model : '-' }}</td>
-
-                                                        <td class="col-color p-2 text-left truncate" :style="{ fontSize: getCartonFontPx(13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[0] ? c.items[0].color : '-' }}</td>
-
-                                                        <td v-if="hasCartonLot(c)" class="col-asorti p-2 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(c, 0) }}</td>
-
-                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-0-'+sz"
-
-                                                            class="col-size p-1 font-mono font-black"
-
-                                                            :style="{ width: getCartonSizeColWidth(c), fontSize: getCartonSizeFontSizePx('1up', true) + 'px' }"
-
-                                                            :class="[printShowGridLines ? 'border-r border-black' : '']">
-
-                                                            {{ formatCartonSizeQty(c.items && c.items[0] && c.items[0].sizes ? c.items[0].sizes[sz] : '', c) }}
-
-                                                        </td>
-
-                                                        <td v-if="hasCartonLot(c)" class="col-lot p-2 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('1up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(c, 0) }}</td>
-
-                                                        <td class="col-total p-2 font-mono font-black"
-
-                                                            :style="{ fontSize: (getCartonSizeFontSizePx('1up', true) + 2) + 'px' }">
-
-                                                            {{ c.items && c.items[0] ? formatCartonSizeQty(c.items[0].total_qty, c) : '' }}
-
-                                                        </td>
-
-                                                    </tr>
-
-                                                    <!-- 2. Ürün Satırı -->
-
-                                                    <tr class="font-semibold"
-
-                                                        :style="{ height: getCartonTableRowHeightPx('1up') + 'px' }"
-
+                                                    <tr v-for="(rowItem, rIdx) in getCartonTableRows(c)"
+                                                        :key="'sz-rc-item-'+rIdx"
+                                                        class="font-semibold"
+                                                        :style="{ height: getCartonTableRowHeightPx('1up', null, null, c) + 'px' }"
                                                         :class="[
-
                                                             printShowGridLines ? 'border-b border-black' : 'border-b border-transparent',
-
-                                                            {'opacity-20': !c.items || c.items.length < 2}
-
+                                                            {'opacity-20': !rowItem}
                                                         ]">
-
-                                                        <td class="col-style p-2 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(14) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[1] ? c.items[1].model : '' }}</td>
-
-                                                        <td class="col-color p-2 text-left truncate" :style="{ fontSize: getCartonFontPx(13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ c.items && c.items[1] ? c.items[1].color : '' }}</td>
-
-                                                        <td v-if="hasCartonLot(c)" class="col-asorti p-2 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(c, 1) }}</td>
-
-                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-1-'+sz"
-
+                                                        <td class="col-style p-2 text-left font-mono font-bold truncate" :style="{ fontSize: getCartonFontPx(getCartonItemsCount(c) >= 3 ? 12 : 14) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ rowItem ? rowItem.model : '' }}</td>
+                                                        <td class="col-color p-2 text-left truncate" :style="{ fontSize: getCartonFontPx(getCartonItemsCount(c) >= 3 ? 11 : 13) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ rowItem ? rowItem.color : '' }}</td>
+                                                        <td v-if="hasCartonLot(c)" class="col-asorti p-2 text-center font-bold text-xs whitespace-pre-line leading-tight" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonAsorti(c, rIdx) }}</td>
+                                                        <td v-for="sz in getCartonSizeHeaders(c)" :key="'sz-rc-'+rIdx+'-'+sz"
                                                             class="col-size p-1 font-mono font-black"
-
-                                                            :style="{ width: getCartonSizeColWidth(c), fontSize: getCartonSizeFontSizePx('1up', true) + 'px' }"
-
+                                                            :style="{ width: getCartonSizeColWidth(c), fontSize: getCartonSizeFontSizePx('1up', true, null, c) + 'px' }"
                                                             :class="[printShowGridLines ? 'border-r border-black' : '']">
-
-                                                            {{ formatCartonSizeQty(c.items && c.items[1] && c.items[1].sizes ? c.items[1].sizes[sz] : '', c) }}
-
+                                                            {{ formatCartonSizeQty(rowItem && rowItem.sizes ? rowItem.sizes[sz] : '', c) }}
                                                         </td>
-
-                                                        <td v-if="hasCartonLot(c)" class="col-lot p-2 text-center font-mono font-black" :style="{ fontSize: (getCartonSizeFontSizePx('1up', true)) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(c, 1) }}</td>
-
+                                                        <td v-if="hasCartonLot(c)" class="col-lot p-2 text-center font-mono font-black" :style="{ fontSize: getCartonSizeFontSizePx('1up', true, null, c) + 'px' }" :class="[printShowGridLines ? 'border-r border-black' : '']">{{ getCartonLotQty(c, rIdx) }}</td>
                                                         <td class="col-total p-2 font-mono font-black"
-
-                                                            :style="{ fontSize: (getCartonSizeFontSizePx('1up', true) + 2) + 'px' }">
-
-                                                            {{ c.items && c.items[1] ? formatCartonSizeQty(c.items[1].total_qty, c) : '' }}
-
+                                                            :style="{ fontSize: (getCartonSizeFontSizePx('1up', true, null, c) + 2) + 'px' }">
+                                                            {{ rowItem ? formatCartonSizeQty(rowItem.total_qty, c) : '' }}
                                                         </td>
-
                                                     </tr>
-
                                                 </tbody>
-
                                             </table>
-
-
 
                                             <!-- Tablo Köşe Tutamağı -->
 

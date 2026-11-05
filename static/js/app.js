@@ -23804,46 +23804,63 @@ window.__texflowApp = createApp({
 
 
 
-        const getCartonTableRowHeightPx = (layout = '2up', customScale = null, customRowHeight = null) => {
-
+        const getCartonTableRowHeightPx = (layout = '2up', customScale = null, customRowHeight = null, carton = null) => {
             let baseH = 34;
-
             if (layout === '6up') baseH = 22;
-
             else if (layout === '4up') baseH = 28;
-
             else if (layout === '1up') baseH = 44;
 
+            const count = carton && carton.items ? carton.items.length : 1;
+            if (count >= 4) {
+                baseH = Math.round(baseH * 0.62);
+            } else if (count === 3) {
+                baseH = Math.round(baseH * 0.75);
+            }
+
             const scale = Number(customScale !== null && customScale !== undefined ? customScale : (printTableScale.value || 1.3));
-
             const fontScale = Number(printFontScale.value || 1.15);
-
             const rh = customRowHeight || printTableRowHeight.value;
-
             const hFactor = rh === 'xlarge' ? 1.35 : (rh === 'large' ? 1.15 : 1.0);
+            return Math.max(16, Math.round(baseH * scale * hFactor * Math.max(1.0, (fontScale - 1.0) * 0.4 + 1.0)));
+        };
 
-            return Math.round(baseH * scale * hFactor * Math.max(1.0, (fontScale - 1.0) * 0.4 + 1.0));
+        const getCartonTableRows = (carton, minRows = 2) => {
+            if (!carton || !carton.items || carton.items.length === 0) {
+                return minRows === 1 ? [null] : [null, null];
+            }
+            if (carton.items.length < minRows) {
+                const rows = [...carton.items];
+                while (rows.length < minRows) {
+                    rows.push(null);
+                }
+                return rows;
+            }
+            return carton.items;
+        };
 
+        const getCartonItemsCount = (carton) => {
+            if (!carton || !carton.items) return 1;
+            return carton.items.length;
         };
 
 
 
-        const getCartonSizeFontSizePx = (layout = '2up', isQty = false, customScale = null) => {
-
+        const getCartonSizeFontSizePx = (layout = '2up', isQty = false, customScale = null, carton = null) => {
             let base = isQty ? 16 : 13;
-
             if (layout === '6up') base = isQty ? 11 : 9;
-
             else if (layout === '4up') base = isQty ? 14 : 11;
-
             else if (layout === '1up') base = isQty ? 20 : 16;
 
+            const count = carton && carton.items ? carton.items.length : 1;
+            if (count >= 4) {
+                base = Math.max(8, base - 3);
+            } else if (count === 3) {
+                base = Math.max(9, base - 2);
+            }
+
             const tableScale = Number(customScale !== null && customScale !== undefined ? customScale : (printTableScale.value || 1.3));
-
             const fontScale = Number(printFontScale.value || 1.15);
-
             return Math.round(base * tableScale * fontScale);
-
         };
 
 
@@ -32031,6 +32048,8 @@ return {
             getCartonTableContainerStyle,
 
             getCartonTableRowHeightPx,
+            getCartonTableRows,
+            getCartonItemsCount,
 
             getCartonSizeFontSizePx,
 
