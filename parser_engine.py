@@ -1977,18 +1977,26 @@ Critical Rules:
             candidate_fn_cust = m_fn.group(1).strip()
             if candidate_fn_cust and len(candidate_fn_cust) >= 2:
                 detected_customer = candidate_fn_cust
-                detected_brand = candidate_fn_cust
-        
-        # Specific brand overrides from filename
+
+        def extract_avt_brand(text):
+            if not text: return None
+            m = re.search(r'ANNA\s+VAN\s+TOOR\s*(.*)', str(text), re.IGNORECASE)
+            if not m: return None
+            b = m.group(1).strip()
+            b = re.sub(r'^[^\w\s]+', '', b).strip()
+            b = re.sub(r'(?:INV\+P\.LIST|INV_P\.LIST|ÇEKİ\s*LİSTESİ|CEKI\s*LISTESI|KOLİ\s*ÜSTÜ|KOLI\s*USTU|SS\d+|FW\d+|AW\d+|\+\+|\%\%|__|===|\d+).*', '', b, flags=re.IGNORECASE).strip()
+            b = re.sub(r'[\s_-]+$', '', b).strip()
+            return b.upper() if b else 'ANNA'
+
         cf_lower = clean_fname.lower()
         if 'anna' in cf_lower and ('van' in cf_lower or 'toor' in cf_lower or 'blue' in cf_lower):
             detected_customer = "Anna van Toor B.V."
-            if not detected_brand or 'packing' in detected_brand.lower():
-                detected_brand = "Anna van Toor B.V."
+            fn_brand = extract_avt_brand(clean_fname)
+            if fn_brand and fn_brand != "ANNA VAN TOOR B.V.":
+                detected_brand = fn_brand
         elif 'solv' in cf_lower:
             detected_customer = "SOLV"
-            if not detected_brand or 'packing' in detected_brand.lower():
-                detected_brand = "SOLV"
+            detected_brand = "SOLV"
 
         # Scan rows in selected sheet
         for r in rows[:15]:
@@ -1996,22 +2004,20 @@ Critical Rules:
                 s_val = str(val or '').strip()
                 if not s_val: continue
                 # Match "ANNA VAN TOOR <BRAND>"
-                m_avt = re.search(r'ANNA\s+VAN\s+TOOR\s*(.*)', s_val, re.IGNORECASE)
-                if m_avt:
-                    candidate = m_avt.group(1).strip()
-                    candidate = re.sub(r'^[–\-:\s]+', '', candidate).strip()
-                    candidate = re.sub(r'(?:INV\+P\.LIST|ÇEKİ\s*LİSTESİ|CEKI\s*LISTESI|KOLİ\s*ÜSTÜ|KOLI\s*USTU|SS\d+).*', '', candidate, flags=re.IGNORECASE).strip()
-                    if candidate and not detected_brand:
-                        detected_brand = candidate
+                if 'anna' in s_val.lower() and ('van' in s_val.lower() or 'toor' in s_val.lower()):
+                    detected_customer = "Anna van Toor B.V."
+                    cell_brand = extract_avt_brand(s_val)
+                    if cell_brand:
+                        detected_brand = cell_brand
+
                 # Match "BRAND: <BRAND>" or "BRAND : <BRAND>"
                 m_br = re.search(r'BRAND\s*:\s*([A-Za-z0-9\s\-]+)', s_val, re.IGNORECASE)
                 if m_br and not detected_brand:
                     b_val = m_br.group(1).strip()
-                    if b_val: detected_brand = b_val
+                    if b_val: detected_brand = b_val.upper()
+
                 if not detected_style and re.match(r'^\d{2}[A-Za-z]\d{2}-[\w\d]+$', s_val):
                     detected_style = s_val
-                if 'anna' in s_val.lower() and ('van' in s_val.lower() or 'toor' in s_val.lower()):
-                    detected_customer = "Anna van Toor B.V."
 
         # If customer still not detected, scan other sheets for customer headers/multiline blocks
         if not detected_customer and ext != ".xls":
@@ -2041,7 +2047,10 @@ Critical Rules:
                 pass
 
         if not detected_brand and detected_customer:
-            detected_brand = detected_customer
+            if detected_customer == "Anna van Toor B.V.":
+                detected_brand = "ANNA"
+            else:
+                detected_brand = detected_customer
 
         # 3. Header row detection
         header_idx = -1

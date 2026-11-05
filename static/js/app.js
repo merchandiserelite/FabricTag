@@ -24382,18 +24382,16 @@ window.__texflowApp = createApp({
 
             }
 
-            if (tpl.layout_json && tpl.layout_json.show_brand && tpl.layout_json.brand) {
+            const detectedBrandVal = (packingData.value && packingData.value.brand && String(packingData.value.brand).trim() !== '' && String(packingData.value.brand).trim().toLowerCase() !== 'anna van toor b.v.') ? String(packingData.value.brand).trim() : null;
 
+            if (detectedBrandVal) {
+                printCustomBrand.value = detectedBrandVal.replace(/^BRAND\s*:\s*/i, '').trim();
+            } else if (tpl.layout_json && tpl.layout_json.show_brand && tpl.layout_json.brand) {
                 printCustomBrand.value = String(tpl.layout_json.brand).replace(/^BRAND\s*:\s*/i, '').trim();
-
             } else if (tpl.layout_json && tpl.layout_json.brand && tpl.layout_json.show_brand !== false) {
-
                 printCustomBrand.value = String(tpl.layout_json.brand).replace(/^BRAND\s*:\s*/i, '').trim();
-
             } else {
-
                 printCustomBrand.value = '';
-
             }
 
 
@@ -25692,7 +25690,7 @@ window.__texflowApp = createApp({
 
             if (!isBrandEnabled) return '';
 
-            const raw = (printCustomBrand.value || (carton && carton.brand) || (tpl && tpl.layout_json && tpl.layout_json.brand) || '').trim();
+            const raw = (printCustomBrand.value || (carton && carton.brand) || (packingData.value && packingData.value.brand) || (tpl && tpl.layout_json && tpl.layout_json.brand) || '').trim();
 
             if (!raw) return '';
 
