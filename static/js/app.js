@@ -15544,7 +15544,7 @@ window.__texflowApp = createApp({
 
             if (menuKey === 'numune_takip') {
 
-                loadSamples(true);
+                loadSamples();
 
                 loadSampleOptions();
 
@@ -22741,10 +22741,7 @@ window.__texflowApp = createApp({
 
             loadSampleOptions();
 
-            // Arka planda Numune Takip Listesi verilerini sessizce onceden yukle (Aninda 0ms acilis icin)
-            setTimeout(() => {
-                loadSamples(true).catch(() => {});
-            }, 300);
+            if (activeMenu.value === 'numune_takip') loadSamples();
 
             setInterval(loadCurrencyRates, 15 * 60 * 1000);
 
@@ -27920,11 +27917,9 @@ window.__texflowApp = createApp({
 
         // VERİ YÜKLEME VE YÖNETİM
 
-        const loadSamples = async (silent = false) => {
+        const loadSamples = async () => {
 
-            if (!silent && (!samplesList.value || samplesList.value.length === 0)) {
-                samplesLoading.value = true;
-            }
+            samplesLoading.value = true;
 
             try {
 
@@ -27972,15 +27967,13 @@ window.__texflowApp = createApp({
 
             } catch (err) {
 
-                if (!samplesList.value || samplesList.value.length === 0) {
-                    samplesList.value = [];
-                }
+                samplesList.value = [];
 
             } finally {
 
                 samplesLoading.value = false;
 
-                setTimeout(() => { refreshIcons(); }, 50);
+                refreshIcons();
 
             }
 
@@ -28716,30 +28709,7 @@ window.__texflowApp = createApp({
 
         });
 
-        // NUMUNE PROGRESSIVE/LAZY RENDERING (Kasma ve donmalari onler)
-        const sampleRenderLimit = ref(150);
 
-        const displayedSamplesList = computed(() => {
-            const list = filteredSamplesList.value || [];
-            if (list.length <= sampleRenderLimit.value) {
-                return list;
-            }
-            return list.slice(0, sampleRenderLimit.value);
-        });
-
-        const onSampleTableScroll = (e) => {
-            const el = e.target;
-            if (!el) return;
-            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 350) {
-                if (sampleRenderLimit.value < (filteredSamplesList.value || []).length) {
-                    sampleRenderLimit.value += 100;
-                }
-            }
-        };
-
-        watch([sampleSearchQuery, sampleColumnFilters, sampleSortCol, sampleSortDir], () => {
-            sampleRenderLimit.value = 150;
-        }, { deep: true });
 
         // İSTATİSTİKLER (METRICS)
 
@@ -29824,18 +29794,14 @@ window.__texflowApp = createApp({
             let targetIds = [];
             let isOnlySelected = false;
             const currentList = filteredSamplesList.value || [];
-
             if (selectedSampleIds.value && selectedSampleIds.value.length > 0) {
-                // Secili olanlari daima tablodaki aktif siralama duzenine gore sirala
                 const selectedSet = new Set(selectedSampleIds.value);
                 targetIds = currentList.filter(s => selectedSet.has(s.id)).map(s => s.id);
-                // Eger filtre disinda kalan secili varsa onlari da sona ekle
                 selectedSampleIds.value.forEach(id => {
                     if (!targetIds.includes(id)) targetIds.push(id);
                 });
                 isOnlySelected = true;
             } else if (currentList.length > 0) {
-                // Tabloda o an siralanmis/filtrelenmis ekrandaki tam sira
                 targetIds = currentList.map(s => s.id).filter(Boolean);
             } else if (samplesList.value && samplesList.value.length > 0) {
                 targetIds = samplesList.value.map(s => s.id).filter(Boolean);
@@ -30984,10 +30950,6 @@ return {
             hasActiveSampleFilter,
 
             filteredSamplesList,
-
-            displayedSamplesList,
-            sampleRenderLimit,
-            onSampleTableScroll,
 
             sampleMetrics,
 
