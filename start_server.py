@@ -19,7 +19,7 @@ def kill_port_8000():
             parts = line.strip().split()
             if len(parts) >= 5 and ':8000' in parts[1]:
                 pid = parts[-1]
-                if pid != current_pid:
+                if pid != current_pid and pid != "0":
                     subprocess.run(f'taskkill /F /PID {pid}', shell=True, capture_output=True)
     except Exception:
         pass
@@ -46,5 +46,4 @@ if __name__ == "__main__":
     print(" FabricTag Ready! You can minimize this window.")
     print("-" * 60 + "\n")
     
-    import app
-    uvicorn.run(app.app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, log_level="info")

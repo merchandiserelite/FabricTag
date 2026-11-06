@@ -3634,6 +3634,21 @@ function initApp() {
         btnCheckUpdates.addEventListener("click", () => checkSystemUpdates(true));
     }
 
+    const btnSidebarCheckUpdate = document.getElementById("btn-sidebar-check-update");
+    const iconSidebarUpdateSpin = document.getElementById("icon-sidebar-update-spin");
+    if (btnSidebarCheckUpdate) {
+        btnSidebarCheckUpdate.addEventListener("click", async () => {
+            if (iconSidebarUpdateSpin) iconSidebarUpdateSpin.classList.add("fa-spin");
+            try {
+                await checkSystemUpdates(true);
+            } finally {
+                setTimeout(() => {
+                    if (iconSidebarUpdateSpin) iconSidebarUpdateSpin.classList.remove("fa-spin");
+                }, 400);
+            }
+        });
+    }
+
     // ==========================================
     // CANLI KAMERA & SERİ ÇEKİM ENTEGRASYONU
     // ==========================================
@@ -4433,6 +4448,7 @@ function initApp() {
     }
 
     let dbLoadAbortController = null;
+    window.loadDatabase = loadDatabase;
     function loadDatabase(search = "") {
         if (dbLoadAbortController) {
             try { dbLoadAbortController.abort(); } catch(e) {}
@@ -4448,8 +4464,14 @@ function initApp() {
 
         dbLoadAbortController = new AbortController();
         fetch(url, { signal: dbLoadAbortController.signal })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.json();
+            })
             .then(fabrics => {
+                if (!Array.isArray(fabrics)) {
+                    throw new Error("Sunucudan gecersiz veri alindi.");
+                }
                 dbTableBody.innerHTML = "";
                 if (dbCardsContainer) dbCardsContainer.innerHTML = "";
                 if (selectAllDb) selectAllDb.checked = false;
@@ -4617,7 +4639,10 @@ function initApp() {
                     <tr>
                         <td colspan="10" class="empty-state text-error">
                             <i class="fa-solid fa-triangle-exclamation"></i>
-                            <p>Veritabanı listelenirken bir hata oluştu.</p>
+                            <p>Sunucuya bağlanılamadı. Lütfen sunucunun açık olduğundan emin olun.</p>
+                            <button type="button" onclick="window.loadDatabase && window.loadDatabase()" style="margin-top: 10px; padding: 6px 16px; border-radius: 8px; background: #6366f1; color: #fff; font-weight: 600; font-size: 13px; border: none; cursor: pointer;">
+                                <i class="fa-solid fa-rotate-right"></i> Yeniden Dene
+                            </button>
                         </td>
                     </tr>
                 `;
@@ -4826,17 +4851,44 @@ function initApp() {
     }
     
     let searchTimeout = null;
-    dbSearch.addEventListener("input", (e) => {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-            loadDatabase(e.target.value.trim());
-        }, 300);
-    });
+    const dbSearchClear = document.getElementById("db-search-clear");
+    function updateSearchClearBtn() {
+        if (!dbSearchClear) return;
+        if (dbSearch && dbSearch.value.trim().length > 0) {
+            dbSearchClear.style.display = "flex";
+        } else {
+            dbSearchClear.style.display = "none";
+        }
+    }
+
+    if (dbSearch) {
+        dbSearch.addEventListener("input", (e) => {
+            updateSearchClearBtn();
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                loadDatabase(e.target.value.trim());
+            }, 250);
+        });
+    }
+
+    if (dbSearchClear) {
+        dbSearchClear.addEventListener("click", () => {
+            if (dbSearch) {
+                dbSearch.value = "";
+                dbSearch.focus();
+                updateSearchClearBtn();
+                loadDatabase("");
+            }
+        });
+    }
     
-    btnRefreshDb.addEventListener("click", () => {
-        dbSearch.value = "";
-        loadDatabase();
-    });
+    if (btnRefreshDb) {
+        btnRefreshDb.addEventListener("click", () => {
+            if (dbSearch) dbSearch.value = "";
+            updateSearchClearBtn();
+            loadDatabase();
+        });
+    }
 
     // ==========================================
     // EXCEL (.XLSX) & YEDEKLEME MERKEZİ MODAL

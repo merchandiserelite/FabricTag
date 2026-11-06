@@ -143,6 +143,15 @@
                 <span class="status-dot red" id="status-dot"></span>
                 <span class="status-text" id="status-text">Gemini API Bagli Degil</span>
             </div>
+
+            <!-- Güncellemeleri Denetle & Sürüm Kutusu (TexFlow Stili) -->
+            <div class="sidebar-update-check" style="margin-top: 10px; padding: 9px 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.2s ease;" id="btn-sidebar-check-update" title="GitHub üzerinden yeni sürüm denetimi yap">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; color: #e2e8f0;">
+                    <i class="fa-solid fa-arrows-rotate" id="icon-sidebar-update-spin"></i>
+                    <span>Güncellemeleri Denetle</span>
+                </div>
+                <span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(79, 70, 229, 0.35); color: #a5b4fc; font-family: monospace; font-weight: bold;">v4.3.4</span>
+            </div>
         </aside>
 
         <!-- Main Content Area -->
@@ -394,7 +403,10 @@
                     <div class="table-actions">
                         <div class="search-bar">
                             <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                            <input type="text" id="db-search" data-i18n-placeholder="search_placeholder" placeholder="Ic kod, firma, kalite veya desen ara..." class="uppercase-input">
+                            <input type="text" id="db-search" data-i18n-placeholder="search_placeholder" placeholder="İç kod, firma, kalite, desen veya renk ara..." class="uppercase-input">
+                            <span id="db-search-clear" class="search-clear-btn" style="display: none;" title="Aramayı Temizle">
+                                <i class="fa-solid fa-xmark"></i>
+                            </span>
                         </div>
                         <div class="batch-action-bar">
                             <!-- Dual View Mode Switcher -->

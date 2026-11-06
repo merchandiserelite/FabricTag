@@ -67,17 +67,21 @@ os.makedirs(LOGOS_DIR, exist_ok=True)
 os.makedirs(BACKUPS_DIR, exist_ok=True)
 
 ngrok_tunnel_url = None
+_ngrok_attempted = False
 
 def get_ngrok_url():
-    global ngrok_tunnel_url
+    global ngrok_tunnel_url, _ngrok_attempted
     if ngrok_tunnel_url:
         return ngrok_tunnel_url
+    if _ngrok_attempted:
+        return None
+    _ngrok_attempted = True
     
     # 1. Try reading from already running local ngrok instance on 4040
     try:
         import urllib.request
         import json
-        with urllib.request.urlopen("http://127.0.0.1:4040/api/tunnels", timeout=2) as resp:
+        with urllib.request.urlopen("http://127.0.0.1:4040/api/tunnels", timeout=0.5) as resp:
             data = json.loads(resp.read().decode())
             tunnels = data.get("tunnels", [])
             for t in tunnels:
@@ -88,19 +92,21 @@ def get_ngrok_url():
     except Exception:
         pass
 
-    # 2. Try pyngrok connect
+    # 2. Try pyngrok connect only if ngrok binary exists
     try:
-        tunnels = ngrok.get_tunnels()
-        if tunnels:
-            ngrok_tunnel_url = tunnels[0].public_url
+        if shutil.which("ngrok"):
+            tunnels = ngrok.get_tunnels()
+            if tunnels:
+                ngrok_tunnel_url = tunnels[0].public_url
+                return ngrok_tunnel_url
+            tunnel = ngrok.connect(8000, bind_tls=True)
+            ngrok_tunnel_url = tunnel.public_url
+            logger.info(f"Ngrok Tunnel Started: {ngrok_tunnel_url}")
             return ngrok_tunnel_url
-        tunnel = ngrok.connect(8000, bind_tls=True)
-        ngrok_tunnel_url = tunnel.public_url
-        logger.info(f"Ngrok Tunnel Started: {ngrok_tunnel_url}")
-        return ngrok_tunnel_url
     except Exception as e:
         logger.info(f"Ngrok info: {e}")
         return None
+    return None
 
 class SettingsRequest(BaseModel):
     class Config:
@@ -313,7 +319,7 @@ def auto_backup_worker():
 # Startup Hook
 @app.on_event("startup")
 def startup_event():
-    get_ngrok_url()
+    threading.Thread(target=get_ngrok_url, daemon=True).start()
     t = threading.Thread(target=auto_backup_worker, daemon=True)
     t.start()
     try:
