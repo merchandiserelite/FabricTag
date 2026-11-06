@@ -29823,13 +29823,22 @@ window.__texflowApp = createApp({
         const exportSamplesExcel = async () => {
             let targetIds = [];
             let isOnlySelected = false;
+            const currentList = filteredSamplesList.value || [];
+
             if (selectedSampleIds.value && selectedSampleIds.value.length > 0) {
-                targetIds = selectedSampleIds.value.slice();
+                // Secili olanlari daima tablodaki aktif siralama duzenine gore sirala
+                const selectedSet = new Set(selectedSampleIds.value);
+                targetIds = currentList.filter(s => selectedSet.has(s.id)).map(s => s.id);
+                // Eger filtre disinda kalan secili varsa onlari da sona ekle
+                selectedSampleIds.value.forEach(id => {
+                    if (!targetIds.includes(id)) targetIds.push(id);
+                });
                 isOnlySelected = true;
-            } else if (filteredSamples.value && filteredSamples.value.length > 0) {
-                targetIds = filteredSamples.value.map(s => s.id).filter(Boolean);
-            } else if (samples.value && samples.value.length > 0) {
-                targetIds = samples.value.map(s => s.id).filter(Boolean);
+            } else if (currentList.length > 0) {
+                // Tabloda o an siralanmis/filtrelenmis ekrandaki tam sira
+                targetIds = currentList.map(s => s.id).filter(Boolean);
+            } else if (samplesList.value && samplesList.value.length > 0) {
+                targetIds = samplesList.value.map(s => s.id).filter(Boolean);
             }
 
             if (!targetIds || targetIds.length === 0) {

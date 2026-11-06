@@ -24618,9 +24618,11 @@ def api_export_samples_excel(
         query = f"SELECT {sql_cols} FROM sample_items WHERE (company_id = ? OR company_id IS NULL) AND id IN ({placeholders})"
         params = [company_id] + list(id_list)
 
-    query += " ORDER BY display_order ASC, id DESC"
     c.execute(query, params)
-    rows = c.fetchall()
+    rows_raw = c.fetchall()
+    # Numune Takip tablosundaki aktif siralama duzenini (gelen id_list siralamasini) birebir koru
+    row_map = {r[0]: r for r in rows_raw}
+    rows = [row_map[i] for i in id_list if i in row_map]
 
 
 
