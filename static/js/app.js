@@ -15544,7 +15544,7 @@ window.__texflowApp = createApp({
 
             if (menuKey === 'numune_takip') {
 
-                loadSamples();
+                loadSamples(true);
 
                 loadSampleOptions();
 
@@ -22741,7 +22741,10 @@ window.__texflowApp = createApp({
 
             loadSampleOptions();
 
-            if (activeMenu.value === 'numune_takip') loadSamples();
+            // Arka planda Numune Takip Listesi verilerini sessizce onceden yukle (Aninda 0ms acilis icin)
+            setTimeout(() => {
+                loadSamples(true).catch(() => {});
+            }, 300);
 
             setInterval(loadCurrencyRates, 15 * 60 * 1000);
 
@@ -27917,9 +27920,11 @@ window.__texflowApp = createApp({
 
         // VERİ YÜKLEME VE YÖNETİM
 
-        const loadSamples = async () => {
+        const loadSamples = async (silent = false) => {
 
-            samplesLoading.value = true;
+            if (!silent && (!samplesList.value || samplesList.value.length === 0)) {
+                samplesLoading.value = true;
+            }
 
             try {
 
@@ -27967,13 +27972,15 @@ window.__texflowApp = createApp({
 
             } catch (err) {
 
-                samplesList.value = [];
+                if (!samplesList.value || samplesList.value.length === 0) {
+                    samplesList.value = [];
+                }
 
             } finally {
 
                 samplesLoading.value = false;
 
-                refreshIcons();
+                setTimeout(() => { refreshIcons(); }, 50);
 
             }
 
@@ -28709,7 +28716,30 @@ window.__texflowApp = createApp({
 
         });
 
+        // NUMUNE PROGRESSIVE/LAZY RENDERING (Kasma ve donmalari onler)
+        const sampleRenderLimit = ref(150);
 
+        const displayedSamplesList = computed(() => {
+            const list = filteredSamplesList.value || [];
+            if (list.length <= sampleRenderLimit.value) {
+                return list;
+            }
+            return list.slice(0, sampleRenderLimit.value);
+        });
+
+        const onSampleTableScroll = (e) => {
+            const el = e.target;
+            if (!el) return;
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 350) {
+                if (sampleRenderLimit.value < (filteredSamplesList.value || []).length) {
+                    sampleRenderLimit.value += 100;
+                }
+            }
+        };
+
+        watch([sampleSearchQuery, sampleColumnFilters, sampleSortCol, sampleSortDir], () => {
+            sampleRenderLimit.value = 150;
+        }, { deep: true });
 
         // İSTATİSTİKLER (METRICS)
 
@@ -30945,6 +30975,10 @@ return {
             hasActiveSampleFilter,
 
             filteredSamplesList,
+
+            displayedSamplesList,
+            sampleRenderLimit,
+            onSampleTableScroll,
 
             sampleMetrics,
 

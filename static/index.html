@@ -678,37 +678,19 @@
 
         #carsaf-budget-modal tbody tr,
 
-        #kumas-siparis-print-modal tbody tr {
+        #kumas-siparis-print-modal tbody tr,
+
+        .numune-table-scroll-container tbody tr {
 
             content-visibility: auto;
 
-            contain-intrinsic-size: 1px 38px;
+            contain-intrinsic-size: 1px 40px;
 
         }
-
-
-
-        /* NUMUNE TAKİP VE MASTER TABLO DONANIM HIZLANDIRMASI (PÜRÜZSÜZ EŞZAMANLI KAYDIRMA) */
 
         .numune-table-scroll-container {
 
-            will-change: scroll-position;
-
-            transform: translateZ(0);
-
             -webkit-overflow-scrolling: touch;
-
-        }
-
-        .numune-table-scroll-container .master-table {
-
-            transform: translateZ(0);
-
-        }
-
-        .numune-table-scroll-container thead {
-
-            transform: translateZ(0);
 
         }
 
@@ -16667,7 +16649,7 @@
 
                 <!-- ======================================================== -->
 
-                <section v-if="activeMenu === 'numune_takip'" class="space-y-4 w-full">
+                <section v-show="activeMenu === 'numune_takip'" class="space-y-4 w-full">
 
                     
 
@@ -16893,7 +16875,7 @@
                         
 
                         <div class="overflow-auto custom-scrollbar numune-table-scroll-container"
-
+                             @scroll.passive="onSampleTableScroll"
                              style="height: calc(100vh - 215px); min-height: 350px;">
 
                             <table style="table-layout: fixed; width: max-content; min-width: 100%;" class="text-left text-xs border-collapse master-table">
@@ -17278,7 +17260,7 @@
 
 
 
-                                    <tr v-for="(sample, sIdx) in filteredSamplesList" :key="sample.id"
+                                    <tr v-for="(sample, sIdx) in displayedSamplesList" :key="sample.id"
 
                                         @dragover="onSampleRowDragOver($event)"
 
